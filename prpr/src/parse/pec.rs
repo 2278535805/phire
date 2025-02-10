@@ -3,8 +3,7 @@ crate::tl_file!("parser" ptl);
 use super::{process_lines, RPE_TWEEN_MAP};
 use crate::{
     core::{
-        Anim, AnimFloat, AnimVector, BpmList, Chart, ChartExtra, ChartSettings, JudgeLine, JudgeLineCache, JudgeLineKind, Keyframe, Note, NoteKind,
-        Object, TweenId, EPS,
+        Anim, AnimFloat, AnimFloat64, AnimVector, BpmList, Chart, ChartExtra, ChartSettings, JudgeLine, JudgeLineCache, JudgeLineKind, Keyframe, Note, NoteKind, Object, TweenId, EPS
     },
     ext::NotNanExt,
     judge::{HitSound, JudgeStatus},
@@ -15,6 +14,7 @@ use tracing::warn;
 
 trait Take {
     fn take_f32(&mut self) -> Result<f32>;
+    fn take_f64(&mut self) -> Result<f64>;
     fn take_usize(&mut self) -> Result<usize>;
     fn take_tween(&mut self) -> Result<TweenId>;
     fn take_time(&mut self, r: &mut BpmList) -> Result<f32>;
@@ -26,6 +26,13 @@ impl<'a, T: Iterator<Item = &'a str>> Take for T {
             .ok_or_else(|| ptl!(err "unexpected-eol"))
             .and_then(|it| -> Result<f32> { Ok(it.parse()?) })
             .with_context(|| ptl!("expected-f32"))
+    }
+
+    fn take_f64(&mut self) -> Result<f64> {
+        self.next()
+            .ok_or_else(|| ptl!(err "unexpected-eol"))
+            .and_then(|it| -> Result<f64> { Ok(it.parse()?) })
+            .with_context(|| ptl!("expected-f64"))
     }
 
     fn take_usize(&mut self) -> Result<usize> {
@@ -74,7 +81,7 @@ impl PECEvent {
 
 #[derive(Default)]
 struct PECJudgeLine {
-    speed_events: Vec<(f32, f32)>,
+    speed_events: Vec<(f32, f64)>,
     alpha_events: Vec<PECEvent>,
     move_events: (Vec<PECEvent>, Vec<PECEvent>),
     rotate_events: Vec<PECEvent>,
@@ -119,22 +126,22 @@ fn parse_events(mut events: Vec<PECEvent>, id: usize, desc: &str) -> Result<Anim
     Ok(AnimFloat::new(kfs))
 }
 
-fn parse_speed_events(mut pec: Vec<(f32, f32)>, max_time: f32) -> AnimFloat {
+fn parse_speed_events(mut pec: Vec<(f32, f64)>, max_time: f32) -> AnimFloat64 {
     if pec[0].0 >= EPS {
         pec.insert(0, (0., 0.));
     }
     let mut kfs = Vec::new();
-    let mut height = 0.0;
-    let mut last_time = 0.0;
-    let mut last_speed = 0.0;
+    let mut height: f64 = 0.0;
+    let mut last_time: f32 = 0.0;
+    let mut last_speed: f64 = 0.0;
     for (time, speed) in pec {
-        height += (time - last_time) * last_speed;
+        height += (time - last_time) as f64 * last_speed;
         kfs.push(Keyframe::new(time, height, 2));
         last_time = time;
         last_speed = speed;
     }
-    kfs.push(Keyframe::new(max_time, height + (max_time - last_time) * last_speed, 0));
-    AnimFloat::new(kfs)
+    kfs.push(Keyframe::new(max_time, height + (max_time - last_time) as f64 * last_speed, 0));
+    AnimFloat64::new(kfs)
 }
 
 fn parse_judge_line(mut pec: PECJudgeLine, id: usize, max_time: f32) -> Result<JudgeLine> {
@@ -304,7 +311,7 @@ pub fn parse_pec(source: &str, extra: ChartExtra) -> Result<Chart> {
                     let time = it.take_time(r)?;
                     match cs[1] {
                         'v' => {
-                            line.speed_events.push((time, it.take_f32()? / 5.85));
+                            line.speed_events.push((time, it.take_f64()? / 5.85));
                         }
                         'p' => {
                             let x = it.take_f32()?;

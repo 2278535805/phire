@@ -3,8 +3,7 @@ crate::tl_file!("parser" ptl);
 use super::process_lines;
 use crate::{
     core::{
-        Anim, AnimFloat, AnimVector, BpmList, Chart, ChartExtra, ChartSettings, JudgeLine, JudgeLineCache, JudgeLineKind, Keyframe, Note, NoteKind,
-        Object, HEIGHT_RATIO,
+        Anim, AnimFloat, AnimFloat64, AnimVector, BpmList, Chart, ChartExtra, ChartSettings, JudgeLine, JudgeLineCache, JudgeLineKind, Keyframe, Note, NoteKind, Object, HEIGHT_RATIO
     },
     ext::NotNanExt,
     judge::{HitSound, JudgeStatus},
@@ -32,7 +31,7 @@ struct PgrEvent {
 struct PgrSpeedEvent {
     pub start_time: f32,
     pub end_time: f32,
-    pub value: f32,
+    pub value: f64,
 }
 
 #[derive(Deserialize)]
@@ -93,31 +92,31 @@ macro_rules! validate_events {
     };
 }
 
-fn parse_speed_events(r: f32, mut pgr: Vec<PgrSpeedEvent>, max_time: f32) -> Result<(AnimFloat, AnimFloat)> {
+fn parse_speed_events(r: f32, mut pgr: Vec<PgrSpeedEvent>, max_time: f32) -> Result<(AnimFloat64, AnimFloat64)> {
     validate_events!(pgr);
     //assert_eq!(pgr[0].start_time, 0.0);
     if pgr[0].start_time != 0. { pgr[0].start_time = 0. }
     let mut kfs = Vec::new();
-    let mut pos = 0.;
+    let mut pos: f64 = 0.;
     kfs.extend(pgr[..pgr.len().saturating_sub(1)].iter().map(|it| {
         let from_pos = pos;
-        pos += (it.end_time - it.start_time) * r * it.value;
+        pos += (it.end_time - it.start_time) as f64 * r as f64 * it.value;
         //println!("{}\t{}\tpos:{}", it.start_time * r, it.value, from_pos);
         Keyframe::new(it.start_time * r, from_pos, 2)
     }));
     let last = pgr.last().unwrap();
     kfs.push(Keyframe::new(last.start_time * r, pos, 2));
-    kfs.push(Keyframe::new(max_time, pos + (max_time - last.start_time * r) * last.value, 0));
+    kfs.push(Keyframe::new(max_time, pos + (max_time - last.start_time * r) as f64 * last.value, 0));
     //println!("—————————分割线——————————");
     for kf in &mut kfs {
-        kf.value /= HEIGHT_RATIO;
+        kf.value /= HEIGHT_RATIO as f64;
         //println!("kf:{}\t{}", kf.time, kf.value)
     }
     Ok((
-        AnimFloat::new(pgr.iter().map(
+        AnimFloat64::new(pgr.iter().map(
             |it| Keyframe::new(it.start_time * r, it.value, 0)
         ).collect()), 
-        AnimFloat::new(kfs)
+        AnimFloat64::new(kfs)
     ))
 }
 
@@ -192,7 +191,7 @@ fn parse_move_events_fv1(r: f32, mut pgr: Vec<PgrEvent>) -> Result<AnimVector> {
     Ok(AnimVector(AnimFloat::new(kf1), AnimFloat::new(kf2)))
 }
 
-fn parse_notes(r: f32, mut pgr: Vec<PgrNote>, _speed: &mut AnimFloat, height: &mut AnimFloat, above: bool) -> Result<Vec<Note>> {
+fn parse_notes(r: f32, mut pgr: Vec<PgrNote>, height: &mut AnimFloat64, above: bool) -> Result<Vec<Note>> {
     // is_sorted is unstable...
     if pgr.is_empty() {
         return Ok(Vec::new());
@@ -210,7 +209,7 @@ fn parse_notes(r: f32, mut pgr: Vec<PgrNote>, _speed: &mut AnimFloat, height: &m
                 2 => NoteKind::Drag,
                 3 => {
                     let end_time = (pgr.time + pgr.hold_time) * r;
-                    let end_height = height + (pgr.hold_time * pgr.speed * r / HEIGHT_RATIO);
+                    let end_height = height + (pgr.hold_time * pgr.speed * r / HEIGHT_RATIO) as f64;
                     let end_speed = pgr.speed;
                     NoteKind::Hold { end_time, end_height, end_speed }
                 }
@@ -246,8 +245,8 @@ fn parse_notes(r: f32, mut pgr: Vec<PgrNote>, _speed: &mut AnimFloat, height: &m
 fn parse_judge_line(pgr: PgrJudgeLine, max_time: f32, format_version: u32) -> Result<JudgeLine> {
     let r = 60. / 32. / pgr.bpm;
     let (mut speed, mut height) = parse_speed_events(r, pgr.speed_events, max_time).context("Failed to parse speed events")?;
-    let notes_above = parse_notes(r, pgr.notes_above, &mut speed, &mut height, true).context("Failed to parse notes above")?;
-    let mut notes_below = parse_notes(r, pgr.notes_below, &mut speed, &mut height, false).context("Failed to parse notes below")?;
+    let notes_above = parse_notes(r, pgr.notes_above, &mut height, true).context("Failed to parse notes above")?;
+    let mut notes_below = parse_notes(r, pgr.notes_below, &mut height, false).context("Failed to parse notes below")?;
     let mut notes = notes_above;
     notes.append(&mut notes_below);
     let cache = JudgeLineCache::new(&mut notes);

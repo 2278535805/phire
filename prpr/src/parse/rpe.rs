@@ -3,9 +3,7 @@ crate::tl_file!("parser" ptl);
 use super::{process_lines, RPE_TWEEN_MAP};
 use crate::{
     core::{
-        Anim, AnimFloat, AnimVector, BezierTween, BpmList, Chart, ChartExtra, ChartSettings, ClampedTween, CtrlObject, GifFrames, HitSoundMap,
-        JudgeLine, JudgeLineCache, JudgeLineKind, Keyframe, Note, NoteKind, Object, StaticTween, Triple, TweenFunction, Tweenable, UIElement, EPS,
-        HEIGHT_RATIO,
+        Anim, AnimFloat, AnimFloat64, AnimVector, BezierTween, BpmList, Chart, ChartExtra, ChartSettings, ClampedTween, CtrlObject, GifFrames, HitSoundMap, JudgeLine, JudgeLineCache, JudgeLineKind, Keyframe, Note, NoteKind, Object, StaticTween, Triple, TweenFunction, Tweenable, UIElement, EPS, HEIGHT_RATIO
     },
     ext::{NotNanExt, SafeTexture},
     fs::FileSystem,
@@ -21,7 +19,7 @@ use tracing::debug;
 
 pub const RPE_WIDTH: f32 = 1350.;
 pub const RPE_HEIGHT: f32 = 900.;
-const SPEED_RATIO: f32 = 10. / 45. / HEIGHT_RATIO;
+const SPEED_RATIO: f64 = 10. / 45. / HEIGHT_RATIO as f64;
 
 #[derive(Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -71,8 +69,8 @@ struct RPECtrlEvent {
 struct RPESpeedEvent {
     start_time: Triple,
     end_time: Triple,
-    start: f32,
-    end: f32,
+    start: f64,
+    end: f64,
 }
 
 #[derive(Deserialize)]
@@ -211,11 +209,11 @@ fn parse_events<T: Tweenable, V: Clone + Into<T>>(
     Ok(Anim::new(kfs))
 }
 
-fn parse_speed_events(r: &mut BpmList, rpe: &[RPEEventLayer], max_time: f32) -> Result<AnimFloat> {
+fn parse_speed_events(r: &mut BpmList, rpe: &[RPEEventLayer], max_time: f32) -> Result<AnimFloat64> {
     let rpe: Vec<_> = rpe.iter().filter_map(|it| it.speed_events.as_ref()).collect();
     if rpe.is_empty() {
         // TODO or is it?
-        return Ok(AnimFloat::default());
+        return Ok(AnimFloat64::default());
     };
     let anis: Vec<_> = rpe
         .into_iter()
@@ -225,14 +223,14 @@ fn parse_speed_events(r: &mut BpmList, rpe: &[RPEEventLayer], max_time: f32) -> 
                 kfs.push(Keyframe::new(r.time(&e.start_time), e.start, 2));
                 kfs.push(Keyframe::new(r.time(&e.end_time), e.end, 0));
             }
-            AnimFloat::new(kfs)
+            AnimFloat64::new(kfs)
         })
         .collect();
     let mut pts: Vec<_> = anis.iter().flat_map(|it| it.keyframes.iter().map(|it| it.time.not_nan())).collect();
     pts.push(max_time.not_nan());
     pts.sort();
     pts.dedup();
-    let mut sani = AnimFloat::chain(anis);
+    let mut sani = AnimFloat64::chain(anis);
     sani.map_value(|v| v * SPEED_RATIO);
     for i in 0..(pts.len() - 1) {
         let now_time = *pts[i];
@@ -242,7 +240,7 @@ fn parse_speed_events(r: &mut BpmList, rpe: &[RPEEventLayer], max_time: f32) -> 
         sani.set_time(end_time - 1e-4);
         let end_speed = sani.now();
         if speed.signum() * end_speed.signum() < 0. {
-            pts.push(f32::tween(&now_time, &end_time, speed / (speed - end_speed)).not_nan());
+            pts.push(f32::tween(&now_time, &end_time, (speed / (speed - end_speed)) as f32).not_nan());
         }
     }
     pts.sort();
@@ -258,25 +256,25 @@ fn parse_speed_events(r: &mut BpmList, rpe: &[RPEEventLayer], max_time: f32) -> 
         // using end_time causes Hold tween (x |-> 0) to be recognized as Linear tween (x |-> x)
         sani.set_time(end_time - 1e-4);
         let end_speed = sani.now();
-        kfs.push(if (speed - end_speed).abs() < EPS {
+        kfs.push(if (speed - end_speed).abs() < EPS as f64 {
             Keyframe::new(now_time, height, 2)
         } else if speed.abs() > end_speed.abs() {
             Keyframe {
                 time: now_time,
                 value: height,
-                tween: Rc::new(ClampedTween::new(7 /*quadOut*/, 0.0..(1. - end_speed / speed))),
+                tween: Rc::new(ClampedTween::new(7 /*quadOut*/, 0.0..(1. - end_speed / speed) as f32)),
             }
         } else {
             Keyframe {
                 time: now_time,
                 value: height,
-                tween: Rc::new(ClampedTween::new(6 /*quadIn*/, (speed / end_speed)..1.)),
+                tween: Rc::new(ClampedTween::new(6 /*quadIn*/, (speed / end_speed) as f32..1.)),
             }
         });
-        height += (speed + end_speed) * (end_time - now_time) / 2.;
+        height += (speed + end_speed) * (end_time - now_time) as f64 / 2.;
     }
     kfs.push(Keyframe::new(max_time, height, 0));
-    Ok(AnimFloat::new(kfs))
+    Ok(AnimFloat64::new(kfs))
 }
 
 fn parse_gif_events<V: Clone + Into<f32>>(r: &mut BpmList, rpe: &[RPEEvent<V>], bezier_map: &BezierMap, gif: &GifFrames) -> Result<Anim<f32>> {
@@ -323,7 +321,7 @@ async fn parse_notes(
     r: &mut BpmList,
     rpe: Vec<RPENote>,
     fs: &mut dyn FileSystem,
-    height: &mut AnimFloat,
+    height: &mut AnimFloat64,
     hitsounds: &mut HitSoundMap,
 ) -> Result<Vec<Note>> {
     let mut notes = Vec::new();

@@ -19,7 +19,7 @@ const BAD_TIME: f32 = 0.5;
 #[derive(Clone, Debug)]
 pub enum NoteKind {
     Click,
-    Hold { end_time: f32, end_height: f32, end_speed: f32 },
+    Hold { end_time: f32, end_height: f64, end_speed: f32 },
     Flick,
     Drag,
 }
@@ -40,7 +40,7 @@ pub struct Note {
     pub kind: NoteKind,
     pub hitsound: HitSound,
     pub time: f32,
-    pub height: f32,
+    pub height: f64,
     pub speed: f32,
 
     pub above: bool,
@@ -56,7 +56,7 @@ unsafe impl Send for Note {}
 pub struct RenderConfig<'a> {
     pub settings: &'a ChartSettings,
     pub ctrl_obj: &'a mut CtrlObject,
-    pub line_height: f32,
+    pub line_height: f64,
     pub appear_before: f32,
     pub invisible_time: f32,
     pub draw_below: bool,
@@ -156,7 +156,7 @@ impl Note {
         // && self.ctrl_obj.is_default()
     }
 
-    pub fn update(&mut self, res: &mut Resource, parent_rot: f32, parent_tr: &Matrix, ctrl_obj: &mut CtrlObject, line_height: f32, bpm_list: &mut BpmList, index: usize) {
+    pub fn update(&mut self, res: &mut Resource, parent_rot: f32, parent_tr: &Matrix, ctrl_obj: &mut CtrlObject, line_height: f64, bpm_list: &mut BpmList, index: usize) {
         self.object.set_time(res.time);
         //let mut _immediate_particle = false;
         let color = if let JudgeStatus::Hold(perfect, ref mut at, ..) = self.judge {
@@ -197,8 +197,8 @@ impl Note {
         // && self.ctrl_obj.dead()
     }
 
-    fn init_ctrl_obj(&self, ctrl_obj: &mut CtrlObject, line_height: f32) {
-        ctrl_obj.set_height((self.height - line_height + self.object.translation.1.now() / self.speed) * RPE_HEIGHT / 2.);
+    fn init_ctrl_obj(&self, ctrl_obj: &mut CtrlObject, line_height: f64) {
+        ctrl_obj.set_height(((self.height - line_height) as f32 + self.object.translation.1.now() / self.speed) * RPE_HEIGHT / 2.);
     }
 
     pub fn now_transform(&self, res: &Resource, ctrl_obj: &CtrlObject, base: f32, incline_sin: f32) -> Matrix {
@@ -232,14 +232,14 @@ impl Note {
         self.init_ctrl_obj(ctrl_obj, config.line_height);
         let spd = self.speed * ctrl_obj.y.now_opt().unwrap_or(1.);
 
-        let line_height = config.line_height / res.aspect_ratio * spd;
-        let height = self.height / res.aspect_ratio * spd;
-        let base = height - line_height;
+        let line_height = config.line_height / res.aspect_ratio as f64 * spd as f64;
+        let height = self.height / res.aspect_ratio as f64 * spd as f64;
+        let base = (height - line_height) as f32;
 
         if res.config.aggressive && matches!(res.chart_format, ChartFormat::Pec) && matches!(self.kind, NoteKind::Hold { .. }) {
             let h = if self.time <= res.time { line_height } else { height };
             let bottom = h - line_height;
-            if bottom - line_height > 2. / res.config.chart_ratio {
+            if bottom - line_height > 2. / res.config.chart_ratio as f64 {
                 return;
             }
         }
@@ -250,7 +250,7 @@ impl Note {
             match self.kind {
                 NoteKind::Hold { end_time: _,  end_height, end_speed } => {
                     let end_spd = end_speed * ctrl_obj.y.now_opt().unwrap_or(1.);
-                    let end_height = end_height / res.aspect_ratio * end_spd;
+                    let end_height = end_height / res.aspect_ratio as f64 * end_spd as f64;
                     end_height - line_height
                 }
                 _ => {
@@ -338,20 +338,20 @@ impl Note {
                         }
                     }
 
-                    let end_height = end_height / res.aspect_ratio * spd;
+                    let end_height = end_height / res.aspect_ratio as f64 * spd as f64;
                     let time = if res.time >= self.time {res.time} else {self.time};
 
                     //let clip = !config.draw_below && config.settings.hold_partial_cover;
                     let clip = false;
 
                     let h = if self.time <= res.time { line_height } else { height };
-                    let bottom = h - line_height; //StartY
+                    let bottom = (h - line_height) as f32; //StartY
                     let top = if matches!(res.chart_format, ChartFormat::Pgr) {
-                        let hold_height = end_height - height;
+                        let hold_height = (end_height - height) as f32;
                         let hold_line_height = (time - self.time) * end_spd / res.aspect_ratio / HEIGHT_RATIO;
                         bottom + hold_height - hold_line_height
                     } else {
-                        end_height - line_height
+                        (end_height - line_height) as f32
                     };
 
                     //let max_hold_height = 3. / res.config.chart_ratio / res.aspect_ratio;

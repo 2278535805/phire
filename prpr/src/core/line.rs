@@ -1,4 +1,4 @@
-use super::{chart::ChartSettings, object::CtrlObject, Anim, AnimFloat, BpmList, Matrix, Note, Object, Point, RenderConfig, Resource, Vector};
+use super::{chart::ChartSettings, object::CtrlObject, Anim, AnimFloat, AnimFloat64, BpmList, Matrix, Note, Object, Point, RenderConfig, Resource, Vector};
 use crate::{
     config::Mods,
     ext::{get_viewport, NotNanExt, SafeTexture},
@@ -94,7 +94,7 @@ pub struct JudgeLineCache {
 
 impl JudgeLineCache {
     pub fn new(notes: &mut Vec<Note>) -> Self {
-        notes.sort_by_key(|it| (it.plain(), !it.above, it.speed.not_nan(), ((it.height + it.object.translation.1.now()) * it.speed).not_nan()));
+        notes.sort_by_key(|it| (it.plain(), !it.above, it.speed.not_nan(), ((it.height + it.object.translation.1.now() as f64) * it.speed as f64).not_nan()));
         let mut res = Self {
             update_order: Vec::new(),
             not_plain_count: 0,
@@ -138,7 +138,7 @@ pub struct JudgeLine {
     pub object: Object,
     pub ctrl_obj: RefCell<CtrlObject>,
     pub kind: JudgeLineKind,
-    pub height: AnimFloat,
+    pub height: AnimFloat64,
     pub incline: AnimFloat,
     pub notes: Vec<Note>,
     pub color: Anim<Color>,
@@ -436,7 +436,7 @@ impl JudgeLine {
                         height.set_time(note.time.min(res.time));
                         height.now()
                     };
-                    if agg && note.height - line_height + note.object.translation.1.now() > height_above / note.speed && matches!(res.chart_format, ChartFormat::Pgr | ChartFormat::Rpe) {
+                    if agg && (note.height - line_height) as f32 + note.object.translation.1.now() > height_above / note.speed && matches!(res.chart_format, ChartFormat::Pgr | ChartFormat::Rpe) {
                         break;
                     }
                     note.render(ui, res, &mut config, bpm_list, line_set_debug_alpha);
@@ -448,7 +448,7 @@ impl JudgeLine {
                         if !note.above || speed != note.speed {
                             break;
                         }
-                        if agg && note.height - config.line_height + note.object.translation.1.now() > limit {
+                        if agg && (note.height - config.line_height) as f32 + note.object.translation.1.now() > limit {
                             break;
                         }
                         note.render(ui, res, &mut config, bpm_list, line_set_debug_alpha);
@@ -460,7 +460,7 @@ impl JudgeLine {
                             height.set_time(note.time.min(res.time));
                             height.now()
                         };
-                        if agg && note.height - line_height + note.object.translation.1.now() > height_below / note.speed && matches!(res.chart_format, ChartFormat::Pgr | ChartFormat::Rpe) {
+                        if agg && (note.height - line_height) as f32 + note.object.translation.1.now() > height_below / note.speed && matches!(res.chart_format, ChartFormat::Pgr | ChartFormat::Rpe) {
                             break;
                         }
                         note.render(ui, res, &mut config, bpm_list, line_set_debug_alpha);
@@ -472,7 +472,7 @@ impl JudgeLine {
                             if speed != note.speed {
                                 break;
                             }
-                            if agg && note.height - config.line_height + note.object.translation.1.now() > limit {
+                            if agg && (note.height - config.line_height) as f32 + note.object.translation.1.now() > limit {
                                 break;
                             }
                             note.render(ui, res, &mut config, bpm_list, line_set_debug_alpha);

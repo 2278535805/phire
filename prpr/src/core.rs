@@ -6,11 +6,14 @@ pub const HEIGHT_RATIO: f32 = 0.83175;
 pub const EPS: f32 = 1e-5;
 
 pub type Point = nalgebra::Point2<f32>;
+pub type Point64 = nalgebra::Point2<f64>;
 pub type Vector = nalgebra::Vector2<f32>;
+pub type Vector64 = nalgebra::Vector2<f64>;
 pub type Matrix = nalgebra::Matrix3<f32>;
+pub type Matrix64 = nalgebra::Matrix3<f64>;
 
 mod anim;
-pub use anim::{Anim, AnimFloat, AnimVector, Keyframe};
+pub use anim::{Anim, AnimFloat, AnimFloat64, AnimVector, Keyframe};
 
 mod chart;
 pub use chart::{Chart, ChartExtra, ChartSettings, HitSoundMap};

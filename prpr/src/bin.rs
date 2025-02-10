@@ -165,6 +165,16 @@ impl BinaryData for f32 {
     }
 }
 
+impl BinaryData for f64 {
+    fn read_binary<R: Read>(r: &mut BinaryReader<R>) -> Result<Self> {
+        Ok(r.0.read_f64::<LE>()?)
+    }
+
+    fn write_binary<W: Write>(&self, w: &mut BinaryWriter<W>) -> Result<()> {
+        Ok(w.0.write_f64::<LE>(*self)?)
+    }
+}
+
 impl BinaryData for String {
     fn read_binary<R: Read>(r: &mut BinaryReader<R>) -> Result<Self> {
         Ok(String::from_utf8(r.array()?)?)
@@ -322,7 +332,7 @@ impl BinaryData for Note {
             1 => NoteKind::Hold {
                 end_time: r.read()?,
                 end_height: r.read()?,
-                end_speed: if r.read()? { r.read::<f32>()? } else { 1. },
+                end_speed: if r.read()? { r.read()? } else { 1. },
             },
             2 => NoteKind::Flick,
             3 => NoteKind::Drag,
@@ -335,7 +345,7 @@ impl BinaryData for Note {
             hitsound,
             time: r.time()?,
             height: r.read()?,
-            speed: if r.read()? { r.read::<f32>()? } else { 1. },
+            speed: if r.read()? { r.read()? } else { 1. },
             above: r.read()?,
             multiple_hint: false,
             fake: r.read()?,
