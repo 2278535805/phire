@@ -2,12 +2,13 @@ use super::{
     chart::ChartSettings, BpmList, CtrlObject, JudgeLine, Matrix, Object, Point, Resource, Vector
 };
 use crate::{
-    core::HEIGHT_RATIO, info::ChartFormat, judge::JudgeStatus, parse::RPE_HEIGHT, ui::Ui
+    core::HEIGHT_RATIO, info::ChartFormat, judge::JudgeStatus, parse::RPE_HEIGHT, scene::GameScene, time::TimeManager, ui::Ui
 };
 
 
 use macroquad::prelude::*;
 use ::rand::{thread_rng, Rng};
+use sasa::Music;
 pub use crate::{
     judge::HitSound,
 };
@@ -196,7 +197,7 @@ impl Note {
         self.object.now_rotation().append_nonuniform_scaling(&scale).append_translation(&tr)
     }
 
-    pub fn render(&self, ui: &mut Ui, res: &mut Resource, config: &mut RenderConfig, bpm_list: &mut BpmList, line_set_debug_alpha: bool, line_id: usize) {
+    pub fn render(&self, tm: &mut TimeManager, music: &mut Music, ui: &mut Ui, res: &mut Resource, config: &mut RenderConfig, bpm_list: &mut BpmList, line_set_debug_alpha: bool, line_id: usize) {
         if matches!(self.judge, JudgeStatus::Judged) && !matches!(self.kind, NoteKind::Hold { .. }) {
             return;
         }
@@ -335,6 +336,11 @@ impl Note {
                         } else {
                             return;
                         }
+                    }
+
+                    if res.time >= self.time {
+                        music.seek_to(end_time).ok();
+                        tm.seek_to(end_time as f64);
                     }
 
                     let end_height = end_height / res.aspect_ratio * spd;

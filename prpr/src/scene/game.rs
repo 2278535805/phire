@@ -1388,7 +1388,7 @@ impl Scene for GameScene {
         if res.config.render_bg_dim && res.config.chart_ratio < 1. {
             draw_rectangle(-1., -h, 2., h * 2., Color::new(0., 0., 0., res.alpha * res.info.background_dim));
         }
-        self.chart.render(ui, res);
+        self.chart.render(&mut self.music, tm, ui, res);
 
         self.gl.quad_gl.render_pass(
             res.chart_target

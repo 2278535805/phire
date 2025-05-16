@@ -632,6 +632,7 @@ struct DebugList {
     watermark: DRectButton,
     roman_btn: DRectButton,
     chinese_btn: DRectButton,
+    skip_hold_btn: DRectButton,
 }
 
 impl DebugList {
@@ -645,6 +646,7 @@ impl DebugList {
             watermark: DRectButton::new(),
             roman_btn: DRectButton::new(),
             chinese_btn: DRectButton::new(),
+            skip_hold_btn: DRectButton::new(),
         }
     }
 
@@ -682,6 +684,10 @@ impl DebugList {
         }
         if self.chinese_btn.touch(touch, t) {
             config.chinese ^= true;
+            return Ok(Some(true));
+        }
+        if self.skip_hold_btn.touch(touch, t) {
+            config.skip_hold ^= true;
             return Ok(Some(true));
         }
         Ok(None)
@@ -745,6 +751,10 @@ impl DebugList {
         item! {
             render_title(ui, c, tl!("item-chinese"), None);
             render_switch(ui, rr, t, c, &mut self.chinese_btn, config.chinese);
+        }
+        item! {
+            render_title(ui, c, "skip-hold", None);
+            render_switch(ui, rr, t, c, &mut self.skip_hold_btn, config.skip_hold);
         }
         (w, h)
     }

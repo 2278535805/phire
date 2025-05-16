@@ -82,6 +82,7 @@ pub struct Config {
     pub hires: bool,
     pub disable_audio: bool,
     pub judge_offset: f32,
+    pub skip_hold: bool,
 
     pub render_line: bool,
     pub render_line_extra: bool,
@@ -151,6 +152,7 @@ impl Default for Config {
             hires: false,
             disable_audio: false,
             judge_offset: 0.,
+            skip_hold: false,
 
             render_line: true,
             render_line_extra: true,

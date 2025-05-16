@@ -1,14 +1,11 @@
 use super::{chart::ChartSettings, object::CtrlObject, Anim, AnimFloat, BpmList, Matrix, Note, Object, Point, RenderConfig, Resource, Vector};
 use crate::{
-    config::Mods,
-    ext::{get_viewport, NotNanExt, SafeTexture},
-    info::ChartFormat,
-    judge::{JudgeStatus, LIMIT_BAD},
-    ui::Ui,
+    config::Mods, ext::{get_viewport, NotNanExt, SafeTexture}, info::ChartFormat, judge::{JudgeStatus, LIMIT_BAD}, time::TimeManager, ui::Ui
 };
 use macroquad::prelude::*;
 use miniquad::{RenderPass, Texture, TextureParams, TextureWrap};
 use nalgebra::Rotation2;
+use sasa::Music;
 use serde::Deserialize;
 use std::cell::RefCell;
 
@@ -236,7 +233,7 @@ impl JudgeLine {
         }
     }
 
-    pub fn render(&self, ui: &mut Ui, res: &mut Resource, lines: &[JudgeLine], bpm_list: &mut BpmList, settings: &ChartSettings, id: usize) {
+    pub fn render(&self, tm: &mut TimeManager, music: &mut Music, ui: &mut Ui, res: &mut Resource, lines: &[JudgeLine], bpm_list: &mut BpmList, settings: &ChartSettings, id: usize) {
         let alpha = self.object.alpha.now_opt().unwrap_or(1.0);
         let color = self.color.now_opt();
         res.with_model(self.now_transform(res, lines), |res| {
@@ -445,7 +442,7 @@ impl JudgeLine {
                     if agg && note_height > height_above / note.speed && matches!(res.chart_format, ChartFormat::Pgr | ChartFormat::Rpe) {
                         break;
                     }
-                    note.render(ui, res, &mut config, bpm_list, line_set_debug_alpha, id);
+                    note.render(tm, music, ui, res, &mut config, bpm_list, line_set_debug_alpha, id);
                 }
                 for index in &self.cache.above_indices {
                     let speed = self.notes[*index].speed;
@@ -460,7 +457,7 @@ impl JudgeLine {
                         if agg && note_height > height_above / speed {
                             break;
                         }
-                        note.render(ui, res, &mut config, bpm_list, line_set_debug_alpha, id);
+                        note.render(tm, music, ui, res, &mut config, bpm_list, line_set_debug_alpha, id);
                     }
                 }
 
@@ -477,7 +474,7 @@ impl JudgeLine {
                         if agg && note_height > -height_below / note.speed && matches!(res.chart_format, ChartFormat::Pgr | ChartFormat::Rpe) {
                             break;
                         }
-                        note.render(ui, res, &mut config, bpm_list, line_set_debug_alpha, id);
+                        note.render(tm, music, ui, res, &mut config, bpm_list, line_set_debug_alpha, id);
                     }
                     for index in &self.cache.below_indices {
                         let speed = self.notes[*index].speed;
@@ -492,7 +489,7 @@ impl JudgeLine {
                             if agg && note_height > -height_below / speed {
                                 break;
                             }
-                            note.render(ui, res, &mut config, bpm_list, line_set_debug_alpha, id);
+                            note.render(tm, music, ui, res, &mut config, bpm_list, line_set_debug_alpha, id);
                         }
                     }
                 });

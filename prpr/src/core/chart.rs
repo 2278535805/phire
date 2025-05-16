@@ -1,9 +1,9 @@
 use super::{BpmList, Effect, JudgeLine, JudgeLineKind, Matrix, Resource, UIElement, Vector, Video};
-use crate::{fs::FileSystem, judge::JudgeStatus, ui::Ui};
+use crate::{fs::FileSystem, judge::JudgeStatus, scene::GameScene, time::TimeManager, ui::Ui};
 use anyhow::{Context, Result};
 use macroquad::prelude::*;
 use tracing::warn;
-use sasa::AudioClip;
+use sasa::{AudioClip, Music};
 use std::{cell::RefCell, collections::HashMap};
 
 #[derive(Default)]
@@ -136,7 +136,7 @@ impl Chart {
         }
     }
 
-    pub fn render(&self, ui: &mut Ui, res: &mut Resource) {
+    pub fn render(&self, music: &mut Music, tm: &mut TimeManager, ui: &mut Ui, res: &mut Resource) {
         res.apply_model_of(&Matrix::identity().append_nonuniform_scaling(&Vector::new(if res.config.flip_x() { -1. } else { 1. }, 1.)), |res| {
             for video in &self.extra.videos {
                 video.render(res);
@@ -145,7 +145,7 @@ impl Chart {
         res.apply_model_of(&Matrix::identity().append_nonuniform_scaling(&Vector::new(if res.config.flip_x() { -1. } else { 1. }, -1.)), |res| {
             let mut guard = self.bpm_list.borrow_mut();
             for id in &self.order {
-                self.lines[*id].render(ui, res, &self.lines, &mut guard, &self.settings, *id);
+                self.lines[*id].render(tm, music, ui, res, &self.lines, &mut guard, &self.settings, *id);
             }
             drop(guard);
             res.note_buffer.borrow_mut().draw_all();
