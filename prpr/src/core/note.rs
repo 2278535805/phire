@@ -338,7 +338,7 @@ impl Note {
                         }
                     }
 
-                    if res.time >= self.time {
+                    if res.time >= self.time && res.time < end_time - 0.11 {
                         music.seek_to(end_time).ok();
                         tm.seek_to(end_time as f64);
                     }
