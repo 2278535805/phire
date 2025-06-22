@@ -2,7 +2,7 @@ use super::{
     chart::ChartSettings, BpmList, CtrlObject, JudgeLine, Matrix, Object, Point, Resource, Vector
 };
 use crate::{
-    core::HEIGHT_RATIO, info::ChartFormat, judge::JudgeStatus, parse::RPE_HEIGHT, ui::Ui
+    core::{HEIGHT_RATIO, TWEEN_FUNCTIONS}, info::ChartFormat, judge::JudgeStatus, parse::RPE_HEIGHT, ui::Ui
 };
 
 
@@ -188,7 +188,7 @@ impl Note {
     pub fn now_transform(&self, res: &Resource, ctrl_obj: &CtrlObject, base: f32, incline_sin: f32) -> Matrix {
         let incline_val = 1. - incline_sin * (base * res.aspect_ratio + self.object.translation.1.now()) * RPE_HEIGHT / 2. / 360.;
         let mut tr = self.object.now_translation(res);
-        tr.x *= incline_val * ctrl_obj.pos.now_opt().unwrap_or(1.);
+        tr.x *= incline_val * ctrl_obj.pos.now_opt().unwrap_or(1.) + TWEEN_FUNCTIONS[24](base);
         tr.y += base;
         let mut scale = self.object.scale.now_with_def(1., 1.);
         scale.x *= ctrl_obj.size.now_opt().unwrap_or(1.);
@@ -219,6 +219,7 @@ impl Note {
         let line_height = config.line_height / res.aspect_ratio * spd;
         let height = self.height / res.aspect_ratio * spd;
         let base = height - line_height;
+        let base = TWEEN_FUNCTIONS[26](base);
 
         if res.config.aggressive && matches!(res.chart_format, ChartFormat::Pec) && matches!(self.kind, NoteKind::Hold { .. }) {
             let h = if self.time <= res.time { line_height } else { height };
@@ -351,6 +352,9 @@ impl Note {
                     } else {
                         end_height - line_height
                     };
+
+                    let bottom = TWEEN_FUNCTIONS[26](bottom);
+                    let top = TWEEN_FUNCTIONS[26](top);
 
                     //let max_hold_height = 3. / res.config.chart_ratio / res.aspect_ratio;
                     //let top = if res.config.aggressive && hold_height - hold_line_height >= max_hold_height { bottom + max_hold_height } else { top };
