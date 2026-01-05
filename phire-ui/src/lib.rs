@@ -28,9 +28,10 @@ use phire::{
     scene::{show_error, show_message},
     time::TimeManager,
     ui::{FontArc, TextPainter},
-    gyro::{GYRO, GyroData},
     Main,
 };
+#[cfg(feature = "play")]
+use phire::gyro::{GYRO, GyroData};
 use scene::MainScene;
 use std::{collections::VecDeque, sync::{mpsc, Mutex}, time::Instant};
 use nalgebra::{UnitQuaternion, Vector3};
@@ -465,7 +466,7 @@ pub unsafe extern "C" fn Java_quad_1native_QuadNative_antiAddictionCallback(
     }
 }
 
-#[cfg(target_os = "android")]
+#[cfg(all(target_os = "android", feature = "play"))]
 #[no_mangle]
 pub unsafe extern "C" fn Java_quad_1native_QuadNative_updateGyroScope(
     env: ndk_sys::JNIEnv,
@@ -480,8 +481,7 @@ pub unsafe extern "C" fn Java_quad_1native_QuadNative_updateGyroScope(
     };
     GYRO.lock().unwrap().update_gyroscope(set_gyro_data);
 }
-
-#[cfg(target_os = "android")]
+#[cfg(all(target_os = "android", feature = "play"))]
 #[no_mangle]
 pub unsafe extern "C" fn Java_quad_1native_QuadNative_updateGravity(
     env: ndk_sys::JNIEnv,

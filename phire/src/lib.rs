@@ -13,6 +13,7 @@ pub mod scene;
 pub mod task;
 pub mod time;
 pub mod ui;
+#[cfg(feature = "play")]
 pub mod gyro;
 
 #[cfg(feature = "log")]

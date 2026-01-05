@@ -343,13 +343,10 @@ pub struct SharedState {
 
     pub icons: [SafeTexture; 8],
 
+    #[cfg(feature = "play")]
     pub gyro_offset: Vec2,
 }
 
-pub const RESTORE_RATE: f32 = 0.005;
-pub const ROT_SCALE_X: f32 = -0.004;
-pub const ROT_SCALE_Y: f32 = 0.004;
-pub const MAX_ROTATE_RATE: f32 = 0.7;
 
 impl SharedState {
     pub async fn new() -> Result<Self> {
@@ -363,6 +360,8 @@ impl SharedState {
             charts_local: Vec::new(),
 
             icons: Resource::load_icons().await?,
+
+            #[cfg(feature = "play")]
             gyro_offset: Vec2::ZERO,
         })
     }

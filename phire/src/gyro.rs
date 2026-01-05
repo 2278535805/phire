@@ -6,6 +6,11 @@ use lazy_static::lazy_static;
 
 use crate::config::Config;
 
+pub const RESTORE_RATE: f32 = 0.005;
+pub const ROT_SCALE_X: f32 = -0.004;
+pub const ROT_SCALE_Y: f32 = 0.004;
+pub const MAX_ROTATE_RATE: f32 = 0.7;
+
 #[derive(Debug, Clone, Copy)]
 pub struct GyroData {
     pub angular_velocity: Vector3<f32>, // 角速度 (rad/s)

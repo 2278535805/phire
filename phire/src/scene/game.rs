@@ -15,13 +15,14 @@ use crate::{
     core::{BadNote, Chart, ChartExtra, Effect, Point, Resource, UIElement, BUFFER_SIZE},
     ext::{draw_text_aligned, draw_text_aligned_opt_width, ease_in_out_quartic, get_latency, parse_time, push_frame_time, screen_aspect, semi_white, validate_combo, RectExt, SafeTexture},
     fs::FileSystem,
-    gyro::GYRO,
     info::{ChartFormat, ChartInfo},
     judge::Judge,
     parse::{parse_extra, parse_pec, parse_phigros, parse_rpe},
     time::TimeManager,
     ui::{RectButton, Ui}
 };
+#[cfg(feature = "play")]
+use crate::gyro::GYRO;
 use anyhow::{bail, Context, Result};
 use concat_string::concat_string;
 use macroquad::{prelude::*, window::InternalGlContext};
@@ -1065,6 +1066,7 @@ impl Scene for GameScene {
             tm.pause();
             self.music.pause()?;
         }
+        #[cfg(feature = "play")]
         if tm.paused() {
             GYRO.lock().unwrap().reset_gyroscope();
         }
@@ -1096,6 +1098,7 @@ impl Scene for GameScene {
                     }
                     tm.now() as f32
                 } else {
+                    #[cfg(feature = "play")]
                     GYRO.lock().unwrap().reset_gyroscope();
                     if self.res.config.enter_animation {
                         self.res.alpha = 1. - (1. - time / Self::BEFORE_TIME).clamp(0., 1.).powi(3);
@@ -1185,7 +1188,10 @@ impl Scene for GameScene {
         if !tm.paused() && (self.res.config.autoplay() || self.pause_rewind.time.is_none()) && self.mode != GameMode::View {
             self.gl.quad_gl.viewport(self.res.camera.viewport);
 
+            #[cfg(feature = "play")]
             let angle = GYRO.lock().unwrap().get_angle(&self.res.config);
+            #[cfg(not(feature = "play"))]
+            let angle = 0.0;
 
             self.judge.update(&mut self.res, &mut self.chart, &mut self.bad_notes, -angle);
             self.gl.quad_gl.viewport(None);
@@ -1410,11 +1416,14 @@ impl Scene for GameScene {
             draw_rectangle(-1., -h, 2., h * 2., Color::new(0., 0., 0., res.alpha * res.info.background_dim));
         }
 
-        let angle = GYRO.lock().unwrap().get_angle(&res.config);
+        #[cfg(feature = "play")]
+        let angle = GYRO.lock().unwrap().get_angle(&res.config).to_degrees();
+        #[cfg(not(feature = "play"))]
+        let angle = 0.;
         set_camera( &Camera2D {
             zoom: chart_zoom,
             viewport: chart_viewport,
-            rotation: angle.to_degrees(),
+            rotation: angle,
             ..Default::default()
         });
         self.gl.quad_gl.render_pass(chart_onto.map(|it| it.render_pass));

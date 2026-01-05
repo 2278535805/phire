@@ -4,7 +4,7 @@ use crate::{
     data::LocalChart,
     dir, get_data, get_data_mut,
     mp::MPPanel,
-    page::{HomePage, NextPage, Page, ResPackItem, SharedState, MAX_ROTATE_RATE, RESTORE_RATE, ROT_SCALE_X, ROT_SCALE_Y},
+    page::{HomePage, NextPage, Page, ResPackItem, SharedState},
     save_data,
     scene::{TEX_BACKGROUND, TEX_BACKGROUND_BLUR, TEX_ICON_BACK},
 };
@@ -17,8 +17,9 @@ use phire::{
     task::Task,
     time::TimeManager,
     ui::{button_hit, RectButton, Ui, UI_AUDIO},
-    gyro::GYRO
 };
+#[cfg(feature = "play")]
+use phire::gyro::{GYRO, MAX_ROTATE_RATE, RESTORE_RATE, ROT_SCALE_X, ROT_SCALE_Y};
 use sasa::{AudioClip, Music};
 use std::{
     any::Any, cell::RefCell, fs::File, io::BufReader, sync::atomic::{AtomicBool, Ordering}, thread_local, time::{Duration, Instant}
@@ -376,22 +377,26 @@ impl Scene for MainScene {
         set_camera(&ui.camera());
         let s = &mut self.state;
         s.update(tm);
-        let gyro = GYRO.lock().unwrap().gyro_data.map(|data| data.angular_velocity).unwrap_or_default();
-        // let rate = mouse_position_local();
-
-        let rx = gyro.x.clamp(-MAX_ROTATE_RATE, MAX_ROTATE_RATE);
-        let ry = gyro.y.clamp(-MAX_ROTATE_RATE, MAX_ROTATE_RATE);
-        let restore_factor = (rx.abs().max(ry.abs())) / MAX_ROTATE_RATE;
-        s.gyro_offset.x += -rx * ROT_SCALE_X;
-        s.gyro_offset.y += -ry * ROT_SCALE_Y;
-        let t = RESTORE_RATE + RESTORE_RATE * restore_factor;
-        s.gyro_offset = s.gyro_offset.lerp(Vec2::ZERO, t);
-
         let mut r = ui.screen_rect();
-        r.x -= (s.gyro_offset.x + MAX_ROTATE_RATE / 2.) * 0.5;
-        r.y -= (s.gyro_offset.y + MAX_ROTATE_RATE / 2.) * 0.5;
-        r.w += MAX_ROTATE_RATE * 0.5;
-        r.h += MAX_ROTATE_RATE * 0.5;
+        
+        #[cfg(feature = "play")]
+        {
+            let gyro = GYRO.lock().unwrap().gyro_data.map(|data| data.angular_velocity).unwrap_or_default();
+            // let rate = mouse_position_local();
+
+            let rx = gyro.x.clamp(-MAX_ROTATE_RATE, MAX_ROTATE_RATE);
+            let ry = gyro.y.clamp(-MAX_ROTATE_RATE, MAX_ROTATE_RATE);
+            let restore_factor = (rx.abs().max(ry.abs())) / MAX_ROTATE_RATE;
+            s.gyro_offset.x += -rx * ROT_SCALE_X;
+            s.gyro_offset.y += -ry * ROT_SCALE_Y;
+            let t = RESTORE_RATE + RESTORE_RATE * restore_factor;
+            s.gyro_offset = s.gyro_offset.lerp(Vec2::ZERO, t);
+
+            r.x -= (s.gyro_offset.x + MAX_ROTATE_RATE / 2.) * 0.5;
+            r.y -= (s.gyro_offset.y + MAX_ROTATE_RATE / 2.) * 0.5;
+            r.w += MAX_ROTATE_RATE * 0.5;
+            r.h += MAX_ROTATE_RATE * 0.5;
+        }
 
         ui.fill_rect(r, (*self.background, r));
         let alpha = match self.pages.len() {

@@ -110,7 +110,9 @@ pub struct Config {
     pub fade: f32,
     pub alpha_tint: bool, // note.alpha <=0.5 blue, note.alpha >0.5 red
 
+    #[cfg(feature = "play")]
     pub rotation_mode: bool,
+    #[cfg(feature = "play")]
     pub rotation_flat_mode: bool,
 
     pub play_start_time: f32,
@@ -192,7 +194,9 @@ impl Default for Config {
             fade: 0.,
             alpha_tint: false,
 
+            #[cfg(feature = "play")]
             rotation_mode: false,
+            #[cfg(feature = "play")]
             rotation_flat_mode: false,
 
             play_start_time: 0.,

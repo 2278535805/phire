@@ -270,7 +270,10 @@ impl Page for HomePage {
         let t = s.t;
         let pad = 0.04;
 
+        #[cfg(feature = "play")]
         let offset = s.gyro_offset;
+        #[cfg(not(feature = "play"))]
+        let offset = Vec2::ZERO;
 
         s.render_fader(ui, |ui, c| {
             let r = Rect::new(offset.x * 0.4 - 0.9, offset.y * 0.4 - ui.top + 0.1, 1.5, 1.5);
