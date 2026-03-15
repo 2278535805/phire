@@ -102,6 +102,7 @@ pub struct Config {
     pub render_ui_bar: bool,
     pub render_bg: bool,
     pub render_bg_dim: bool,
+    pub preserve_framebuffer: bool,
     pub render_extra: bool,
     pub bg_blurriness: f32,
 
@@ -184,6 +185,7 @@ impl Default for Config {
             render_ui_bar: true,
             render_bg: true,
             render_bg_dim: true,
+            preserve_framebuffer: false,
             render_extra: true,
             bg_blurriness: 80.,
 
