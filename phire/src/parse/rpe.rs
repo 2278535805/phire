@@ -508,6 +508,9 @@ async fn parse_judge_line(
             .collect::<Result<_>>()
             .with_context(|| ptl!("type-events-parse-failed", "type" => desc))?;
         let mut res = AnimFloat::chain(anis);
+        if res.is_default() {
+            return Ok(AnimFloat::fixed(0.0));
+        }
         res.map_value(|v| v * factor);
         Ok(res)
     }
