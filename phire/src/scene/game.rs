@@ -1203,7 +1203,6 @@ impl Scene for GameScene {
         } else {
             WHITE
         };
-        self.res.judge_line_color.a *= self.res.alpha;
         self.chart.update(&mut self.res);
         let res = &mut self.res;
         #[cfg(feature = "video")]
@@ -1418,6 +1417,12 @@ impl Scene for GameScene {
             viewport: chart_viewport.map(|(x, y, w, h)| {
                 if res.info.fold_animation && matches!(self.state, State::Starting) {
                     let scale_x = (1. - (1. - time / Self::BEFORE_TIME).clamp(0., 1.).powi(3)).powf(2.0);
+                    let new_w = (w as f32 * scale_x).round() as i32;
+                    let dx = (w - new_w) / 2;
+                    (x + dx, y, new_w, h)
+                } else if res.info.fold_animation && matches!(self.state, State::Ending) {
+                    let t = time - res.track_length - WAIT_TIME;
+                    let scale_x = (1. - (t / (Self::WAIT_AFTER_TIME)).clamp(0., 1.).powi(2)).powf(2.0);
                     let new_w = (w as f32 * scale_x).round() as i32;
                     let dx = (w - new_w) / 2;
                     (x + dx, y, new_w, h)
