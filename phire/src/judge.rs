@@ -795,6 +795,10 @@ impl Judge {
             note.object.set_time(t);
             let line = &chart.lines[line_id];
             let note = &line.notes[id as usize];
+            let mut note_transform = note.object.now(res);
+            if !note.above {
+                note_transform.append_nonuniform_scaling_mut(&Vector::new(1.0, -1.0));
+            }
             let line_tr = line.now_transform(res, &chart.lines);
             self.commit(
                 t,
@@ -819,7 +823,7 @@ impl Judge {
                     } else {
                         res.res_pack.info.fx_perfect()
                     };
-                    res.with_model(line_tr * note.object.now(res), |res| res.emit_at_origin(note.rotation(line), color));
+                    res.with_model(line_tr * note_transform, |res| res.emit_at_origin(note.rotation(line), color));
                     true
                 }
                 Judgement::Good => {
@@ -828,7 +832,7 @@ impl Judge {
                     } else {
                         res.res_pack.info.fx_good()
                     };
-                    res.with_model(line_tr * note.object.now(res), |res| res.emit_at_origin(note.rotation(line), color));
+                    res.with_model(line_tr * note_transform, |res| res.emit_at_origin(note.rotation(line), color));
                     true
                 }
                 Judgement::Bad => {
@@ -837,19 +841,18 @@ impl Judge {
                             time: t,
                             kind: note.kind.clone(),
                             matrix: {
-                                let mut mat = line_tr;
-                                if !note.above {
-                                    mat.append_nonuniform_scaling_mut(&Vector::new(1., -1.));
-                                }
                                 let incline_sin = line.incline.now_opt().map(|it| it.to_radians().sin()).unwrap_or_default();
-                                mat *= note.now_transform(
+                                let mut note_transform = note.now_transform(
                                     res,
                                     &line.ctrl_obj.borrow_mut(),
                                     (note.height - line.height.now()) / res.aspect_ratio * note.speed,
                                     incline_sin,
                                     true, true
                                 );
-                                mat
+                                if !note.above {
+                                    note_transform.append_nonuniform_scaling_mut(&Vector::new(1.0, -1.0));
+                                }
+                                line_tr * note_transform
                             },
                         });
                     }
@@ -921,7 +924,7 @@ impl Judge {
             }
         }
         for (line_id, id) in judgements.into_iter() {
-            let note_transform = {
+            let mut note_transform = {
                 let line = &mut chart.lines[line_id];
                 let note = &mut line.notes[id as usize];
                 let nt = if matches!(note.kind, NoteKind::Hold { .. }) { t } else { note.time };
@@ -931,6 +934,9 @@ impl Judge {
             };
             let line = &chart.lines[line_id];
             let note = &line.notes[id as usize];
+            if !note.above {
+                note_transform.append_nonuniform_scaling_mut(&Vector::new(1.0, -1.0));
+            }
             match note.kind {
                 NoteKind::Click => {
                     let color = if let Some(color) = note.hit_fx_color.now_opt() {
