@@ -947,7 +947,7 @@ impl Judge {
                     self.commit(t, judge_type, line_id as _, id, 0.);
                     if note.time >= res.config.play_start_time && !res.disable_hit_fx {
                         res.with_model(line.now_transform(res, &chart.lines) * note_transform, |res| {
-                            res.emit_at_origin(line.notes[id as usize].rotation(line), color)
+                            res.emit_at_origin(note.rotation(line), color)
                         });
                         if !res.config.all_bad {
                             note.hitsound.play(res)
@@ -966,7 +966,7 @@ impl Judge {
                     self.commit(t, Judgement::Perfect, line_id as _, id, 0.);
                     if note.time >= res.config.play_start_time && !res.disable_hit_fx {
                         res.with_model(line.now_transform(res, &chart.lines) * note_transform, |res| {
-                            res.emit_at_origin(line.notes[id as usize].rotation(line), color)
+                            res.emit_at_origin(note.rotation(line), color)
                         });
                         note.hitsound.play(res)
                     }
