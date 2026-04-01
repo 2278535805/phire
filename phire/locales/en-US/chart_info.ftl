@@ -28,4 +28,8 @@ intro = Introduction
 tags = Tags
 tag-exists = Tag already exists
 
+fold-animation = Fold animation
+line-length = Line length
+hold_particle_interval_ratio = Hold particle interval ratio
+
 illegal-input = Illegal input

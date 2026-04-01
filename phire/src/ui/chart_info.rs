@@ -161,11 +161,6 @@ pub fn render_chart_info(ui: &mut Ui, edit: &mut ChartInfoEdit, width: f32) -> (
             ui.text(tl!("aspect-hint")).pos(0.02, 0.).size(0.35).max_width(len).multiline().draw().h + 0.03
         }));
 
-        ui.dx(0.01);
-        let r = ui.checkbox(tl!("force-aspect-ratio"), &mut info.force_aspect_ratio);
-        dy!(r.h + s);
-        ui.dx(-0.01);
-
         let mut string = format!("{}", info.score_total);
         let mut changed = false;
         let r = ui.input(tl!("score-total"), &mut string, (len, &mut changed));
@@ -181,10 +176,44 @@ pub fn render_chart_info(ui: &mut Ui, edit: &mut ChartInfoEdit, width: f32) -> (
             }
         }
 
+        let mut string = format!("{}", info.line_length);
+        let mut changed = false;
+        let r = ui.input(tl!("line-length"), &mut string, (len, &mut changed));
+        dy!(r.h + s);
+        if changed {
+            match string.parse::<f32>() {
+                Err(_) => {
+                    show_message(tl!("illegal-input")).error();
+                }
+                Ok(value) => {
+                    info.line_length = value;
+                }
+            }
+        }
+
+        let mut string = format!("{}", info.hold_particle_interval_ratio);
+        let mut changed = false;
+        let r = ui.input(tl!("hold-particle-interval-ratio"), &mut string, (len, &mut changed));
+        dy!(r.h + s);
+        if changed {
+            match string.parse::<f32>() {
+                Err(_) => {
+                    show_message(tl!("illegal-input")).error();
+                }
+                Ok(value) => {
+                    info.hold_particle_interval_ratio = value;
+                }
+            }
+        }
+
         ui.dx(0.01);
+        let r = ui.checkbox(tl!("force-aspect-ratio"), &mut info.force_aspect_ratio);
+        dy!(r.h + s);
         let r = ui.checkbox(tl!("hold-partial-cover"), &mut info.hold_partial_cover);
         dy!(r.h + s);
         let r = ui.checkbox(tl!("note-uniform-scale"), &mut info.note_uniform_scale);
+        dy!(r.h + s);
+        let r = ui.checkbox(tl!("fold-animation"), &mut info.fold_animation);
         dy!(r.h + s);
         ui.dx(-0.01);
 
