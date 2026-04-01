@@ -265,7 +265,11 @@ impl JudgeLine {
                             if color.a == 0.0 {
                                 return;
                             }
-                            let len = res.info.line_length;
+                            let len = if res.info.line_length_using_y_axis {
+                                res.info.line_length / res.aspect_ratio
+                            } else {
+                                res.info.line_length
+                            };
                             draw_line(-len, 0., len, 0., 0.0075, color);
                         }
                     }
