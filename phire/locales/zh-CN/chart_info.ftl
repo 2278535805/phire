@@ -30,6 +30,6 @@ tag-exists = 标签已存在
 
 fold-animation = 折叠动画
 line-length = 判定线长度
-hold_particle_interval_ratio = Hold 打击特效间隔倍率
+hold-particle-interval-ratio = Hold 打击特效间隔倍率
 
 illegal-input = 非法输入
