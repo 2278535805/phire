@@ -176,17 +176,31 @@ pub fn render_chart_info(ui: &mut Ui, edit: &mut ChartInfoEdit, width: f32) -> (
             }
         }
 
-        let mut string = format!("{}", info.line_length);
+        ui.dx(0.01);
+        dy!(s);
+        let r = ui.checkbox(tl!("line-reference-y-axis"), &mut info.line_reference_y_axis);
+        dy!(r.h);
+        ui.dx(-0.01);
+
+        let mut string = if let Some(line_length) = info.line_length {
+            format!("{}", line_length)
+        } else {
+            String::new()
+        };
         let mut changed = false;
         let r = ui.input(tl!("line-length"), &mut string, (len, &mut changed));
         dy!(r.h + s);
         if changed {
+            if string.trim().is_empty() {
+                info.line_length = None;
+                return;
+            }
             match string.parse::<f32>() {
                 Err(_) => {
                     show_message(tl!("illegal-input")).error();
                 }
                 Ok(value) => {
-                    info.line_length = value;
+                    info.line_length = Some(value);
                 }
             }
         }

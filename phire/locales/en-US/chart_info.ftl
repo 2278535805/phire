@@ -29,6 +29,7 @@ tags = Tags
 tag-exists = Tag already exists
 
 fold-animation = Fold animation
+line-reference-y-axis = Line reference Y-axis
 line-length = Line length
 hold-particle-interval-ratio = Hold particle interval ratio
 

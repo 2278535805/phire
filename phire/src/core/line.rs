@@ -265,12 +265,17 @@ impl JudgeLine {
                             if color.a == 0.0 {
                                 return;
                             }
-                            let len = if res.info.line_length_using_y_axis {
-                                res.info.line_length / res.aspect_ratio
+                            let len = if res.info.line_reference_y_axis {
+                                res.info.line_length() / res.aspect_ratio
                             } else {
-                                res.info.line_length
+                                res.info.line_length()
                             };
-                            draw_line(-len, 0., len, 0., 0.0075, color);
+                            let thickness = if res.info.line_reference_y_axis {
+                                0.0150 / res.aspect_ratio
+                            } else {
+                                0.0100
+                            };
+                            draw_line(-len, 0., len, 0., thickness, color);
                         }
                     }
                     JudgeLineKind::Texture(texture, _) => {

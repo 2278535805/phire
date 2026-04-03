@@ -29,6 +29,7 @@ tags = 标签
 tag-exists = 标签已存在
 
 fold-animation = 折叠动画
+line-reference-y-axis = 判定线参考Y轴
 line-length = 判定线长度
 hold-particle-interval-ratio = Hold 打击特效间隔倍率
 
