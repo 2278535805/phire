@@ -136,7 +136,7 @@ impl Chart {
         #[cfg(feature = "video")]
         res.apply_model_of(&Matrix::identity().append_nonuniform_scaling(&Vector::new(if res.config.flip_x() { -1. } else { 1. }, 1.)), |res| {
             for video in &self.extra.videos {
-                video.render(res);
+                video.render(res.time, res.aspect_ratio, WHITE);
             }
         });
         res.apply_model_of(&Matrix::identity().append_nonuniform_scaling(&Vector::new(if res.config.flip_x() { -1. } else { 1. }, -1.)), |res| {
