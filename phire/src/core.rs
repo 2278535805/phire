@@ -43,7 +43,7 @@ pub use tween::{easing_from, BezierTween, ClampedTween, StaticTween, TweenFuncti
 #[cfg(feature = "video")]
 mod video;
 #[cfg(feature = "video")]
-pub use video::Video;
+pub use video::{Video, VideoAttach};
 
 pub fn init_assets() {
     if let Ok(mut exe) = std::env::current_exe() {

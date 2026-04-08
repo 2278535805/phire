@@ -1205,14 +1205,6 @@ impl Scene for GameScene {
         };
         self.chart.update(&mut self.res);
         let res = &mut self.res;
-        #[cfg(feature = "video")]
-        if !tm.paused() {
-            for video in &mut self.chart.extra.videos {
-                if let Err(err) = video.update(res.time) {
-                    warn!("video error: {err:?}");
-                }
-            }
-        }
         if res.config.interactive && is_key_pressed(KeyCode::Space) {
             if tm.paused() {
                 if matches!(self.state, State::Playing) {

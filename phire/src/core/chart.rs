@@ -14,7 +14,7 @@ pub struct ChartExtra {
     pub effects: Vec<Effect>,
     pub global_effects: Vec<Effect>,
     #[cfg(feature = "video")]
-    pub videos: Vec<Video>,
+    pub videos: Vec<(super::Video, Option<super::VideoAttach>)>,
 }
 
 #[derive(Default)]
@@ -108,12 +108,6 @@ impl Chart {
         for line in &mut self.lines {
             line.cache.reset(&mut line.notes);
         }
-        #[cfg(feature = "video")]
-        for video in &mut self.extra.videos {
-            if let Err(err) = video.reset() {
-                crate::scene::show_error(err.context(tl!("video-load-failed", "path" => video.video_file.path().to_string_lossy())));
-            }
-        }
     }
 
     pub fn update(&mut self, res: &mut Resource) {
@@ -130,15 +124,28 @@ impl Chart {
         for effect in &mut self.extra.effects {
             effect.update(res);
         }
+        #[cfg(feature = "video")]
+        for (video, _) in &mut self.extra.videos {
+            if let Err(err) = video.update(res.time) {
+                tracing::warn!("video error: {err:?}");
+            }
+        }
     }
 
     pub fn render(&self, ui: &mut Ui, res: &mut Resource) {
         #[cfg(feature = "video")]
-        res.apply_model_of(&Matrix::identity().append_nonuniform_scaling(&Vector::new(if res.config.flip_x() { -1. } else { 1. }, 1.)), |res| {
-            for video in &self.extra.videos {
+        for (video, attach) in &self.extra.videos {
+            if let Some(attach) = attach {
+                let line = &self.lines[attach.line];
+                let color = line.color.now_opt().unwrap_or(res.judge_line_color);
+                let mat = self.lines[attach.line].object.now(res);
+                res.apply_model_of(&mat, |res| {
+                    video.render(res.time, res.aspect_ratio, color);
+                });
+            } else {
                 video.render(res.time, res.aspect_ratio, WHITE);
             }
-        });
+        }
         res.apply_model_of(&Matrix::identity().append_nonuniform_scaling(&Vector::new(if res.config.flip_x() { -1. } else { 1. }, -1.)), |res| {
             let mut guard = self.bpm_list.borrow_mut();
             for id in &self.order {
