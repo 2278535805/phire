@@ -1,7 +1,5 @@
 crate::tl_file!("parser");
 
-#[cfg(feature = "video")]
-use super::Video;
 use super::{BpmList, Effect, JudgeLine, JudgeLineKind, Matrix, Resource, UIElement, Vector};
 use crate::{core::Object, fs::FileSystem, judge::JudgeStatus, ui::Ui};
 use anyhow::{Context, Result};
