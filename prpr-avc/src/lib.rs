@@ -23,7 +23,7 @@ pub use video::*;
 
 use sasa::{AudioClip, Frame};
 
-const AUDIO_DECODING_SAMPLE_RATE: i32 = 44100;
+const AUDIO_DECODING_SAMPLE_RATE: i32 = 48000;
 
 #[repr(transparent)]
 struct OwnedPtr<T>(pub *mut T);
