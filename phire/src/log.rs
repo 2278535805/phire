@@ -2,7 +2,7 @@ use chrono::Utc;
 use colored::Colorize;
 use miniquad::{debug, error, info, trace, warn};
 use tracing::{field::Visit, Level, Subscriber};
-use tracing_subscriber::{prelude::*, Layer};
+use tracing_subscriber::{prelude::*, EnvFilter, Layer};
 
 struct CustomLayer;
 
@@ -72,10 +72,20 @@ where
 }
 
 pub fn register() {
-    tracing_subscriber::registry().with(CustomLayer).init();
+    let filter = if std::env::var("RUST_LOG").is_ok() {
+        EnvFilter::from_default_env()
+    } else {
+        EnvFilter::try_new("hyper=info,rustls=info,debug").unwrap()
+    };
+    tracing_subscriber::registry().with(CustomLayer).with(filter).init();
 }
 
 pub fn register_with_colorize(override_colorize: bool) {
     colored::control::set_override(override_colorize);
-    tracing_subscriber::registry().with(CustomLayer).init();
+    let filter = if std::env::var("RUST_LOG").is_ok() {
+        EnvFilter::from_default_env()
+    } else {
+        EnvFilter::try_new("hyper=info,rustls=info,debug").unwrap()
+    };
+    tracing_subscriber::registry().with(CustomLayer).with(filter).init();
 }
