@@ -47,6 +47,11 @@ fn get_uptime() -> f64 {
     }
 }
 
+#[cfg(target_os = "windows")]
+fn get_uptime() -> f64 {
+    miniquad::native::windows::get_uptime()
+}
+
 #[derive(Debug, Clone)]
 pub enum HitSound {
     None,
@@ -376,7 +381,6 @@ impl Judge {
         };
         let spd = res.config.speed;
 
-        #[cfg(not(target_os = "windows"))]
         let uptime = get_uptime();
 
         let t = res.time;
@@ -470,14 +474,7 @@ impl Judge {
                 it.time = if it.time.is_infinite() {
                     f64::NEG_INFINITY
                 } else {
-                    #[cfg(target_os = "windows")]
-                    {
-                        it.time
-                    }
-                    #[cfg(not(target_os = "windows"))]
-                    {
-                        t as f64 - (uptime - it.time) * spd as f64
-                    }
+                    t as f64 - (uptime - it.time) * spd as f64
                 };
                 it
             })
