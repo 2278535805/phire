@@ -441,7 +441,7 @@ impl Scene for EventScene {
                     if Utc::now() > self.event.time_end {
                         draw(tl!("btn-ended"), semi_black(0.4));
                     } else if Utc::now() < self.event.time_start {
-                        draw(tl!("btn-not-started"), Color::from_hex(0xffe3f2fd));
+                        draw(tl!("btn-not-started"), Color::from_hex_argb(0xffe3f2fd));
                     } else {
                         self.btn_join
                             .render_shadow(ui, r, t, 1.0, |_| semi_white(0.3));

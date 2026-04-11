@@ -95,7 +95,7 @@ web-sys = { version = "0.3", features = [
 	"UrlSearchParams",
 	"Window",
 ] }
-js-sys = "*"
+js-sys = "^0.3.85"
 wasm-bindgen = "*"
 wasm-bindgen-futures = "0.4"
 

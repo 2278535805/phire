@@ -113,7 +113,7 @@ impl User {
     }
 
     pub fn name_color(&self) -> Color {
-        Color::from_hex(if self.badges.iter().any(|it| it == "admin") {
+        Color::from_hex_argb(if self.badges.iter().any(|it| it == "admin") {
             0xff673ab7
         } else if self.badges.iter().any(|it| it == "sponsor") {
             0xffff7043
