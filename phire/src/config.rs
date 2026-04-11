@@ -66,6 +66,8 @@ pub struct Config {
     pub mp_enabled: bool,
     pub mp_address: String,
     pub offline_mode: bool,
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
+    pub fullscreen_mode: bool,
     pub offset: f32,
     pub particle: bool,
     pub player_name: String,
@@ -150,6 +152,8 @@ impl Default for Config {
             mp_enabled: false,
             note_scale: 1.0,
             offline_mode: false,
+            #[cfg(any(target_os = "windows", target_os = "linux"))]
+            fullscreen_mode: false,
             offset: 0.0,
             particle: true,
             player_name: "Guest".to_string(),

@@ -312,9 +312,24 @@ fn show_and_exit(msg: &str) {
         .show();
 }
 
+fn build_global_window_conf() -> Conf {
+    let mut conf = build_conf();
+
+    #[cfg(target_os = "windows")]
+    {
+        conf.fullscreen = dir::root()
+            .ok()
+            .and_then(|r| std::fs::read_to_string(std::path::Path::new(&r).join("data.json")).ok())
+            .and_then(|s| serde_json::from_str::<Data>(&s).ok())
+            .is_some_and(|d| d.config.fullscreen_mode);
+    }
+
+    conf
+}
+
 #[no_mangle]
 pub extern "C" fn quad_main() {
-    macroquad::Window::from_config(build_conf(), async {
+    macroquad::Window::from_config(build_global_window_conf(), async {
         if let Err(err) = the_main().await {
             error!("Error: {:?}", err);
         }

@@ -11,6 +11,7 @@ about = Info
 item-lang = Language
 item-offline = Offline mode
 item-offline-sub = You can't upload playing record in offline mode
+item-fullscreen = Fullscreen
 item-mp = Multiplayer
 item-mp-sub = Enable multiplayer mode
 item-mp-addr = Multiplayer server

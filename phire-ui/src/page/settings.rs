@@ -276,6 +276,8 @@ struct GeneralList {
 
     lang_btn: ChooseButton,
     offline_btn: DRectButton,
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
+    fullscreen_btn: DRectButton,
     mp_btn: DRectButton,
     mp_addr_btn: DRectButton,
     lowq_btn: DRectButton,
@@ -298,6 +300,8 @@ impl GeneralList {
                         .unwrap_or_default(),
                 ),
             offline_btn: DRectButton::new(),
+            #[cfg(any(target_os = "windows", target_os = "linux"))]
+            fullscreen_btn: DRectButton::new(),
             mp_btn: DRectButton::new(),
             mp_addr_btn: DRectButton::new(),
             lowq_btn: DRectButton::new(),
@@ -320,6 +324,12 @@ impl GeneralList {
         }
         if self.offline_btn.touch(touch, t) {
             config.offline_mode ^= true;
+            return Ok(Some(true));
+        }
+        #[cfg(any(target_os = "windows", target_os = "linux"))]
+        if self.fullscreen_btn.touch(touch, t) {
+            config.fullscreen_mode ^= true;
+            macroquad::window::set_fullscreen(config.fullscreen_mode);
             return Ok(Some(true));
         }
         if self.mp_btn.touch(touch, t) {
@@ -389,6 +399,11 @@ impl GeneralList {
         item! {
             render_title(ui, c, tl!("item-offline"), Some(tl!("item-offline-sub")));
             render_switch(ui, rr, t, c, &mut self.offline_btn, config.offline_mode);
+        }
+        #[cfg(any(target_os = "windows", target_os = "linux"))]
+        item! {
+            render_title(ui, c, tl!("item-fullscreen"), None);
+            render_switch(ui, rr, t, c, &mut self.fullscreen_btn, config.fullscreen_mode);
         }
         item! {
             render_title(ui, c, tl!("item-mp"), Some(tl!("item-mp-sub")));

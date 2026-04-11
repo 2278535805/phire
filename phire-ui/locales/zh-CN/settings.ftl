@@ -11,6 +11,7 @@ about = 关于
 item-lang = 语言
 item-offline = 离线模式
 item-offline-sub = 在离线模式下将不能上传成绩
+item-fullscreen = 全屏
 item-mp = 多人游戏
 item-mp-sub = 启用多人游戏
 item-mp-addr = 多人游戏服务器
