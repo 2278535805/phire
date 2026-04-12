@@ -645,7 +645,7 @@ impl Resource {
         }
         let pt = self.world_to_screen(Point::default());
 
-        if self.config.aggressive {
+        if self.config.aggressive_particle {
             let roughly_pos = vec2(round_to_step(pt.x, 0.01), round_to_step(pt.y, 0.01));
             while self.particle_pos_list.front().is_some_and(|it| self.time - it.0 > self.res_pack.info.hit_fx_duration) {
                 self.particle_pos_list.pop_front();

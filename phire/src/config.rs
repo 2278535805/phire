@@ -46,7 +46,9 @@ impl fmt::Display for ChallengeModeColor {
 pub struct Config {
     #[serde(rename = "adjust_time_new")]
     pub auto_tweak_offset: bool,
-    pub aggressive: bool,
+    pub aggressive_chart: bool,
+    pub aggressive_note: bool,
+    pub aggressive_particle: bool,
     pub aspect_ratio: Option<f32>,
     pub audio_buffer_size: Option<u32>,
     #[cfg(target_os = "android")]
@@ -130,9 +132,11 @@ impl Default for Config {
             #[cfg(feature = "play")]
             auto_tweak_offset: true,
             #[cfg(not(feature = "play"))]
-            aggressive: false,
+            aggressive_chart: false,
             #[cfg(feature = "play")]
-            aggressive: true,
+            aggressive_chart: true,
+            aggressive_note: false,
+            aggressive_particle: false,
             aspect_ratio: None,
             audio_buffer_size: None,
             #[cfg(target_os = "android")]

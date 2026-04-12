@@ -452,7 +452,7 @@ impl JudgeLine {
             ];
             let height_above = p[0].y.max(p[1].y.max(p[2].y.max(p[3].y)));
             let height_below = p[0].y.min(p[1].y.min(p[2].y.min(p[3].y)));
-            let agg = res.config.aggressive;
+            let agg = res.config.aggressive_chart;
             let mut height = self.height.clone();
             if res.config.note_scale > 0. && res.config.render_note {
                 for index in &self.cache.above_indices {

@@ -313,7 +313,7 @@ impl Note {
             }
             res.with_model(self.now_transform(res, ctrl_obj, base, config.incline_sin, true, true), |res| {
                 let pt = res.world_to_screen(Point::default());
-                if res.config.aggressive {
+                if res.config.aggressive_note {
                     let roughly_pos = vec2(round_to_step(pt.x, 0.01), round_to_step(pt.y, 0.01));
                     if res.note_pos_list.iter().filter(|it| **it == roughly_pos).count() < 2 {
                         res.note_pos_list.push(roughly_pos);

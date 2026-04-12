@@ -151,7 +151,7 @@ impl Chart {
             }
             drop(guard);
             res.note_buffer.borrow_mut().draw_all();
-            if res.config.aggressive {
+            if res.config.aggressive_note {
                 res.note_pos_list.clear();
             }
             if res.config.sample_count > 1 {

@@ -557,7 +557,9 @@ struct ChartList {
     show_acc_btn: DRectButton,
     dc_pause_btn: DRectButton,
     dhint_btn: DRectButton,
-    opt_btn: DRectButton,
+    aggressive_chart_btn: DRectButton,
+    aggressive_note_btn: DRectButton,
+    aggressive_particle_btn: DRectButton,
     speed_slider: Slider,
     size_slider: Slider,
     render_extra_btn: DRectButton,
@@ -569,7 +571,9 @@ impl ChartList {
             show_acc_btn: DRectButton::new(),
             dc_pause_btn: DRectButton::new(),
             dhint_btn: DRectButton::new(),
-            opt_btn: DRectButton::new(),
+            aggressive_chart_btn: DRectButton::new(),
+            aggressive_note_btn: DRectButton::new(),
+            aggressive_particle_btn: DRectButton::new(),
             speed_slider: Slider::new(0.1..2.0, 0.05),
             size_slider: Slider::new(0.0..5.0, 0.005),
             render_extra_btn: DRectButton::new(),
@@ -595,8 +599,16 @@ impl ChartList {
             config.render_double_hint ^= true;
             return Ok(Some(true));
         }
-        if self.opt_btn.touch(touch, t) {
-            config.aggressive ^= true;
+        if self.aggressive_chart_btn.touch(touch, t) {
+            config.aggressive_chart ^= true;
+            return Ok(Some(true));
+        }
+        if self.aggressive_note_btn.touch(touch, t) {
+            config.aggressive_note ^= true;
+            return Ok(Some(true));
+        }
+        if self.aggressive_particle_btn.touch(touch, t) {
+            config.aggressive_particle ^= true;
             return Ok(Some(true));
         }
         if let wt @ Some(_) = self.speed_slider.touch(touch, t, &mut config.speed) {
@@ -643,8 +655,16 @@ impl ChartList {
             render_switch(ui, rr, t, c, &mut self.dhint_btn, config.render_double_hint);
         }
         item! {
-            render_title(ui, c, tl!("item-opt"), Some(tl!("item-opt-sub")));
-            render_switch(ui, rr, t, c, &mut self.opt_btn, config.aggressive);
+            render_title(ui, c, tl!("item-aggressive-chart"), Some(tl!("item-aggressive-chart-sub")));
+            render_switch(ui, rr, t, c, &mut self.aggressive_chart_btn, config.aggressive_chart);
+        }
+        item! {
+            render_title(ui, c, tl!("item-aggressive-note"), Some(tl!("item-aggressive-note-sub")));
+            render_switch(ui, rr, t, c, &mut self.aggressive_note_btn, config.aggressive_note);
+        }
+        item! {
+            render_title(ui, c, tl!("item-aggressive-particle"), Some(tl!("item-aggressive-particle-sub")));
+            render_switch(ui, rr, t, c, &mut self.aggressive_particle_btn, config.aggressive_particle);
         }
         item! {
             render_title(ui, c, tl!("item-speed"), None);
