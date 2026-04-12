@@ -490,6 +490,7 @@ pub struct Resource {
     pub shake_play_paused: bool,
 
     particle_pos_list: VecDeque<(f32, Vec2)>,
+    pub note_pos_list: Vec<Vec2>,
 }
 
 impl Resource {
@@ -627,7 +628,9 @@ impl Resource {
             #[cfg(feature = "play")]
             shake_play_paused: false,
 
+            // aggressive
             particle_pos_list: VecDeque::new(),
+            note_pos_list: Vec::new(),
         })
     }
 

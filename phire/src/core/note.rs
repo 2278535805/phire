@@ -2,7 +2,7 @@ use super::{
     chart::ChartSettings, BpmList, CtrlObject, JudgeLine, Matrix, Object, Point, Resource, Vector
 };
 use crate::{
-    core::{Anim, HEIGHT_RATIO}, ext::parse_alpha, judge::JudgeStatus, parse::RPE_HEIGHT, ui::Ui
+    core::{Anim, HEIGHT_RATIO}, ext::{parse_alpha, round_to_step}, judge::JudgeStatus, parse::RPE_HEIGHT, ui::Ui
 };
 
 
@@ -312,6 +312,15 @@ impl Note {
                 color.a *= (self.time - res.time).min(0.) / FADEOUT_TIME + 1.;
             }
             res.with_model(self.now_transform(res, ctrl_obj, base, config.incline_sin, true, true), |res| {
+                let pt = res.world_to_screen(Point::default());
+                if res.config.aggressive {
+                    let roughly_pos = vec2(round_to_step(pt.x, 0.01), round_to_step(pt.y, 0.01));
+                    if res.note_pos_list.iter().filter(|it| **it == roughly_pos).count() < 2 {
+                        res.note_pos_list.push(roughly_pos);
+                    } else {
+                        return;
+                    }
+                }
                 draw_center(res, tex, order, scale, color);
             });
         };
