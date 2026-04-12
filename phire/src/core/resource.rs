@@ -2,7 +2,7 @@ use super::{MSRenderTarget, Matrix, Point, NOTE_WIDTH_RATIO_BASE};
 use crate::{
     config::Config,
     core::tween::Tweenable,
-    ext::{create_audio_manger, nalgebra_to_glm, SafeTexture},
+    ext::{SafeTexture, create_audio_manger, nalgebra_to_glm, round_to_step},
     fs::FileSystem,
     info::ChartInfo,
     particle::{AtlasConfig, ColorCurve, Curve, Emitter, EmitterConfig, Interpolation, ParticleShape}
@@ -488,6 +488,8 @@ pub struct Resource {
     pub shake_play_mode_deque: VecDeque<(f64, f32)>, // time, acceleration
     #[cfg(feature = "play")]
     pub shake_play_paused: bool,
+
+    particle_pos_list: VecDeque<(f32, Vec2)>,
 }
 
 impl Resource {
@@ -624,6 +626,8 @@ impl Resource {
             shake_play_mode_deque: VecDeque::new(),
             #[cfg(feature = "play")]
             shake_play_paused: false,
+
+            particle_pos_list: VecDeque::new(),
         })
     }
 
@@ -637,6 +641,20 @@ impl Resource {
             return;
         }
         let pt = self.world_to_screen(Point::default());
+
+        if self.config.aggressive {
+            let roughly_pos = vec2(round_to_step(pt.x, 0.01), round_to_step(pt.y, 0.01));
+            while self.particle_pos_list.front().is_some_and(|it| self.time - it.0 > self.res_pack.info.hit_fx_duration) {
+                self.particle_pos_list.pop_front();
+            }
+            if self.particle_pos_list.iter().filter(|it| it.1 == roughly_pos).count() < 10
+                || self.particle_pos_list.iter().filter(|it| (it.0 - self.time).abs() < self.res_pack.info.hit_fx_duration * 0.1 && it.1 == roughly_pos).count() < 2 {
+                self.particle_pos_list.push_back((self.time, roughly_pos));
+            } else {
+                return;
+            }
+        }
+
         self.emitter.emit_at(
             vec2(if self.config.flip_x() { -pt.x } else { pt.x }, -pt.y),
             if self.res_pack.info.hit_fx_rotate { rotation.to_radians() } else { 0. },
