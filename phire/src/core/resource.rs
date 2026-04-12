@@ -490,7 +490,7 @@ pub struct Resource {
     pub shake_play_paused: bool,
 
     particle_pos_list: VecDeque<(f32, Vec2)>,
-    pub note_pos_list: Vec<Vec2>,
+    pub note_pos_map: HashMap<(i32, i32), u8>,
 }
 
 impl Resource {
@@ -630,7 +630,7 @@ impl Resource {
 
             // aggressive
             particle_pos_list: VecDeque::new(),
-            note_pos_list: Vec::new(),
+            note_pos_map: HashMap::new(),
         })
     }
 

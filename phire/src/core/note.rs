@@ -312,11 +312,12 @@ impl Note {
                 color.a *= (self.time - res.time).min(0.) / FADEOUT_TIME + 1.;
             }
             res.with_model(self.now_transform(res, ctrl_obj, base, config.incline_sin, true, true), |res| {
-                let pt = res.world_to_screen(Point::default());
                 if res.config.aggressive_note {
-                    let roughly_pos = vec2(round_to_step(pt.x, 0.01), round_to_step(pt.y, 0.01));
-                    if res.note_pos_list.iter().filter(|it| **it == roughly_pos).count() < 2 {
-                        res.note_pos_list.push(roughly_pos);
+                    let pt = res.world_to_screen(Point::default());
+                    let roughly_pos = ((pt.x * 200.0) as i32, (pt.y * 200.0) as i32);
+                    let count = res.note_pos_map.entry(roughly_pos).or_insert(0);
+                    if *count < 2 {
+                        *count += 1;
                     } else {
                         return;
                     }
