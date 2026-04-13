@@ -74,12 +74,6 @@ impl Object {
         let translation_to = Matrix::new_translation(&-pt);
         translation_back * rot.to_homogeneous() * translation_to
     }
-
-    pub fn new_translation_wrt_point(translation: Matrix, pt: Vector) -> Matrix {
-        let translation_back = Matrix::new_translation(&pt);
-        let translation_to = Matrix::new_translation(&-pt);
-        translation_back * translation * translation_to
-    }
 }
 
 #[derive(Default, Clone)]
