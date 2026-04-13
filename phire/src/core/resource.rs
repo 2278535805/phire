@@ -2,7 +2,7 @@ use super::{MSRenderTarget, Matrix, Point, NOTE_WIDTH_RATIO_BASE};
 use crate::{
     config::Config,
     core::tween::Tweenable,
-    ext::{SafeTexture, create_audio_manger, nalgebra_to_glm, round_to_step},
+    ext::{SafeTexture, create_audio_manger, nalgebra_to_glm},
     fs::FileSystem,
     info::ChartInfo,
     particle::{AtlasConfig, ColorCurve, Curve, Emitter, EmitterConfig, Interpolation, ParticleShape}
@@ -489,7 +489,7 @@ pub struct Resource {
     #[cfg(feature = "play")]
     pub shake_play_paused: bool,
 
-    particle_pos_list: VecDeque<(f32, Vec2)>,
+    particle_pos_map: HashMap<(i32, i32), VecDeque<f32>>,
     pub note_pos_map: HashMap<(i32, i32), u8>,
 }
 
@@ -629,7 +629,7 @@ impl Resource {
             shake_play_paused: false,
 
             // aggressive
-            particle_pos_list: VecDeque::new(),
+            particle_pos_map: HashMap::new(),
             note_pos_map: HashMap::new(),
         })
     }
@@ -646,13 +646,22 @@ impl Resource {
         let pt = self.world_to_screen(Point::default());
 
         if self.config.aggressive_particle {
-            let roughly_pos = vec2(round_to_step(pt.x, 0.01), round_to_step(pt.y, 0.01));
-            while self.particle_pos_list.front().is_some_and(|it| self.time - it.0 > self.res_pack.info.hit_fx_duration) {
-                self.particle_pos_list.pop_front();
+            let roughly_pos = ((pt.x * 200.0) as i32, (pt.y * 200.0) as i32);
+            let now = self.time;
+            let duration = self.res_pack.info.hit_fx_duration;
+
+            let queue = self.particle_pos_map.entry(roughly_pos).or_default();
+
+            while queue.front().is_some_and(|&t| now - t > duration) {
+                queue.pop_front();
             }
-            if self.particle_pos_list.iter().filter(|it| it.1 == roughly_pos).count() < 10
-                || self.particle_pos_list.iter().filter(|it| (it.0 - self.time).abs() < self.res_pack.info.hit_fx_duration * 0.1 && it.1 == roughly_pos).count() < 2 {
-                self.particle_pos_list.push_back((self.time, roughly_pos));
+
+            let recent_count = queue.iter().rev()
+                .take_while(|&&t| (t - now).abs() < duration * 0.1)
+                .count();
+
+            if queue.len() < 10 || recent_count < 2 {
+                queue.push_back(now);
             } else {
                 return;
             }
