@@ -1,5 +1,5 @@
 use crate::{
-    client::{Ptr, User},
+    client::{Chart, Ptr, User},
     dir,
 };
 use anyhow::Result;
@@ -34,6 +34,26 @@ pub struct BriefChartInfo {
     pub created: Option<DateTime<Utc>>,
     pub updated: Option<DateTime<Utc>>,
     pub chart_updated: Option<DateTime<Utc>>,
+}
+
+impl BriefChartInfo {
+    pub fn from_chart(chart: &Chart) -> Self {
+        Self {
+            id: Some(chart.id),
+            uploader: Some(chart.uploader.clone()),
+            name: chart.name.clone(),
+            level: chart.level.clone(),
+            difficulty: chart.difficulty,
+            intro: chart.description.clone().unwrap_or_default(),
+            charter: chart.charter.clone(),
+            composer: chart.composer.clone(),
+            illustrator: chart.illustrator.clone(),
+            score_total: 1_000_000,
+            created: Some(chart.created),
+            updated: Some(chart.updated),
+            chart_updated: Some(chart.chart_updated),
+        }
+    }
 }
 
 impl From<ChartInfo> for BriefChartInfo {

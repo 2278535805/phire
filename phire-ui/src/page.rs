@@ -48,15 +48,39 @@ pub fn thumbnail_path(path: &str) -> Result<PathBuf> {
     Ok(format!("{}/{}", dir::cache_image_local()?, path.replace('/', "_")).into())
 }
 
-pub fn illustration_task(notify: Arc<Notify>, path: String) -> Task<Result<(DynamicImage, Option<DynamicImage>)>> {
+pub fn illustration_task(notify: Arc<Notify>, path: String, full: bool) -> Task<Result<(DynamicImage, Option<DynamicImage>)>> {
     Task::new(async move {
         notify.notified().await;
         let mut fs = fs_from_path(&path)?;
         let info = fs::load_info(fs.deref_mut()).await?;
-        let image = image::load_from_memory(&fs.load_file(&info.illustration).await?)?;
-        let thumbnail = Images::local_or_else(thumbnail_path(&path)?, async { Ok(Images::thumbnail(&image)) }).await?;
-        Ok((thumbnail, Some(image)))
+        let mut img = None;
+        let thumbnail = Images::local_or_else(thumbnail_path(&path)?, async {
+            let image = image::load_from_memory(&fs.load_file(&info.illustration).await?)?;
+            let thumbnail = Images::thumbnail(&image);
+            img = Some(image);
+            Ok(thumbnail)
+        })
+        .await?;
+        if full {
+            if img.is_none() {
+                img = Some(image::load_from_memory(&fs.load_file(&info.illustration).await?)?);
+            }
+        } else {
+            img = None;
+        }
+        Ok((thumbnail, img))
     })
+}
+
+pub fn local_illustration(path: String, def: SafeTexture, full: bool) -> Illustration {
+    let notify = Arc::new(Notify::new());
+    Illustration {
+        texture: (def.clone(), def),
+        notify: Arc::clone(&notify),
+        task: Some(illustration_task(notify, path, full)),
+        loaded: Arc::default(),
+        load_time: f32::NAN,
+    }
 }
 
 pub fn load_local(order: &(ChartOrder, bool)) -> Vec<ChartItem> {
@@ -72,7 +96,7 @@ pub fn load_local(order: &(ChartOrder, bool)) -> Vec<ChartItem> {
                 Illustration {
                     texture: (tex.clone(), tex.clone()),
                     notify: Arc::clone(&notify),
-                    task: Some(illustration_task(notify, it.local_path.clone())),
+                    task: Some(illustration_task(notify, it.local_path.clone(), false)),
                     loaded: Arc::default(),
                     load_time: f32::NAN,
                 }
@@ -107,6 +131,30 @@ impl Illustration {
                 notify.notified().await;
                 Ok((file.load_image().await?, None))
             })),
+            loaded: Arc::default(),
+            load_time: f32::NAN,
+        }
+    }
+
+    pub fn from_file_thumbnail(file: File) -> Self {
+        let notify = Arc::default();
+        Self {
+            texture: (BLACK_TEXTURE.clone(), BLACK_TEXTURE.clone()),
+            notify: Arc::clone(&notify),
+            task: Some(Task::new(async move {
+                notify.notified().await;
+                Ok((file.load_thumbnail().await?, None))
+            })),
+            loaded: Arc::default(),
+            load_time: f32::NAN,
+        }
+    }
+
+    pub fn from_done(tex: SafeTexture) -> Self {
+        Self {
+            texture: (tex.clone(), tex),
+            notify: Arc::default(),
+            task: None,
             loaded: Arc::default(),
             load_time: f32::NAN,
         }

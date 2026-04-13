@@ -1,9 +1,10 @@
-use super::{Object, Ptr, User, File};
+use super::{File, Object, Ptr, User};
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[allow(dead_code)]
 pub struct Event {
     pub id: i32,
     pub creator: Ptr<User>,

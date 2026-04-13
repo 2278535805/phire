@@ -30,6 +30,8 @@ bitflags! {
         const SET_ALL_ROLE      = 0x00001000;
         const SET_REVIEWER      = 0x00002000;
         const SET_SUPERVISOR    = 0x00004000;
+        const BAN_AVATAR        = 0x00008000;
+        const REVIEW_PECJAM     = 0x00010000;
     }
 }
 
@@ -41,6 +43,7 @@ bitflags! {
         const SUPERVISOR        = 0x0004;
         const HEAD_SUPERVISOR   = 0x0008;
         const HEAD_REVIEWER     = 0x0010;
+        const PECJAM_REVIEWER   = 0x0020;
     }
 }
 
@@ -75,11 +78,15 @@ impl Roles {
             perm |= Permissions::SET_RANKED;
             perm |= Permissions::SET_SUPERVISOR;
         }
+        if self.contains(Self::PECJAM_REVIEWER) {
+            perm |= Permissions::REVIEW_PECJAM;
+        }
         perm
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Default, Clone, Debug, Serialize, Deserialize)]
+#[serde(default)]
 pub struct User {
     pub id: i32,
     pub name: String,
@@ -90,7 +97,6 @@ pub struct User {
     pub bio: Option<String>,
     pub exp: i64,
     pub rks: f32,
-    #[serde(default)]
     pub roles: i32,
 
     pub joined: DateTime<Utc>,
@@ -109,22 +115,27 @@ impl User {
     }
 
     pub fn has_perm(&self, perm: Permissions) -> bool {
-        Roles::from_bits(self.roles).map_or(false, |it| it.perms(false).contains(perm))
+        Roles::from_bits(self.roles).is_some_and(|it| it.perms(false).contains(perm))
     }
 
     pub fn name_color(&self) -> Color {
-        Color::from_hex_argb(if self.badges.iter().any(|it| it == "admin") {
-            0xff673ab7
+        Color::from_hex_rgb(if self.badges.iter().any(|it| it == "admin") {
+            0x673ab7
         } else if self.badges.iter().any(|it| it == "sponsor") {
-            0xffff7043
+            0xff7043
         } else {
-            0xffffffff
+            0xffffff
         })
     }
 }
 
-static TASKS: Lazy<Mutex<HashMap<i32, Task<Result<Option<DynamicImage>>>>>> = Lazy::new(Mutex::default);
-static RESULTS: Lazy<Mutex<HashMap<i32, (String, Color, Option<Option<SafeTexture>>)>>> = Lazy::new(Mutex::default);
+type UserTask = Task<Result<Option<DynamicImage>>>;
+type UserTaskMap = HashMap<i32, UserTask>;
+type UserResult = (String, Color, Option<Option<SafeTexture>>);
+type UserResultMap = HashMap<i32, UserResult>;
+
+static TASKS: Lazy<Mutex<UserTaskMap>> = Lazy::new(Mutex::default);
+static RESULTS: Lazy<Mutex<UserResultMap>> = Lazy::new(Mutex::default);
 
 pub struct UserManager;
 
