@@ -4,8 +4,9 @@ use super::{BpmList, Effect, JudgeLine, JudgeLineKind, Matrix, Resource, UIEleme
 use crate::{core::Object, fs::FileSystem, judge::JudgeStatus, ui::Ui};
 use anyhow::{Context, Result};
 use macroquad::prelude::*;
+use rustc_hash::FxHashMap;
 use sasa::AudioClip;
-use std::{cell::RefCell, collections::HashMap};
+use std::{cell::RefCell};
 
 #[derive(Default)]
 pub struct ChartExtra {
@@ -20,7 +21,7 @@ pub struct ChartSettings {
     pub pe_alpha_extension: bool,
 }
 
-pub type HitSoundMap = HashMap<String, AudioClip>;
+pub type HitSoundMap = FxHashMap<String, AudioClip>;
 const PROGRESS_BAR_COLOR: Color = Color::new(0.565, 0.565, 0.565, 1.0);
 
 pub struct Chart {

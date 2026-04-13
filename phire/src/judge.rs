@@ -9,6 +9,7 @@ use macroquad::prelude::{
 };
 use miniquad::{EventHandler, MouseButton};
 use once_cell::sync::Lazy;
+use rustc_hash::FxHashMap;
 use sasa::{PlaySfxParams, Sfx};
 use serde::Serialize;
 use std::{cell::RefCell, collections::HashMap, num::FpCategory};
@@ -254,7 +255,7 @@ pub struct Judge {
     // notes of each line in order
     // LinkedList::drain_filter is unstable...
     pub notes: Vec<(Vec<u32>, usize)>,
-    pub trackers: HashMap<u64, FlickTracker>,
+    pub trackers: FxHashMap<u64, FlickTracker>,
     pub last_time: f32,
 
     key_down_count: u32,
@@ -281,7 +282,7 @@ impl Judge {
             .collect();
         Self {
             notes,
-            trackers: HashMap::new(),
+            trackers: FxHashMap::with_capacity_and_hasher(16, Default::default()),
             last_time: 0.,
 
             key_down_count: 0,

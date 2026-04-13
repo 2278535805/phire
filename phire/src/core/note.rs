@@ -2,7 +2,7 @@ use super::{
     chart::ChartSettings, BpmList, CtrlObject, JudgeLine, Matrix, Object, Point, Resource, Vector
 };
 use crate::{
-    core::{Anim, HEIGHT_RATIO}, ext::{parse_alpha, round_to_step}, judge::JudgeStatus, parse::RPE_HEIGHT, ui::Ui
+    core::{Anim, HEIGHT_RATIO}, ext::{parse_alpha}, judge::JudgeStatus, parse::RPE_HEIGHT, ui::Ui
 };
 
 

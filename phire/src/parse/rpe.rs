@@ -15,6 +15,7 @@ use anyhow::{Context, Result};
 use image::{codecs::gif, AnimationDecoder, DynamicImage, ImageError};
 use macroquad::prelude::{Color, WHITE};
 use ordered_float::NotNan;
+use rustc_hash::FxHashMap;
 use sasa::AudioClip;
 use serde::{Deserialize, Serialize};
 use std::{cell::RefCell, collections::HashMap, future::IntoFuture, rc::Rc, str::FromStr, time::Duration};
@@ -200,7 +201,7 @@ pub struct RPEChart {
     judge_line_list: Vec<RPEJudgeLine>,
 }
 
-type BezierMap = HashMap<(u16, i16, i16), Rc<dyn TweenFunction>>;
+type BezierMap = FxHashMap<(u16, i16, i16), Rc<dyn TweenFunction>>;
 
 fn bezier_key<T>(event: &RPEEvent<T>) -> (u16, i16, i16) {
     let p = &event.bezier_points;
@@ -690,7 +691,7 @@ fn add_bezier<T>(map: &mut BezierMap, event: &RPEEvent<T>) {
 }
 
 fn get_bezier_map(rpe: &RPEChart) -> BezierMap {
-    let mut map = HashMap::new();
+    let mut map = FxHashMap::default();
     for line in &rpe.judge_line_list {
         for event_layer in line.event_layers.iter().flatten() {
             for event in event_layer
@@ -716,7 +717,7 @@ pub async fn parse_rpe(source: &str, fs: &mut dyn FileSystem, extra: ChartExtra)
     fn vec<T>(v: &Option<Vec<T>>) -> impl Iterator<Item = &T> {
         v.iter().flat_map(|it| it.iter())
     }
-    let mut hitsounds = HashMap::new();
+    let mut hitsounds = FxHashMap::default();
     #[rustfmt::skip]
     let max_time = *rpe
         .judge_line_list

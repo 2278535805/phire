@@ -9,8 +9,9 @@ use crate::{
     judge::{HitSound, JudgeStatus},
 };
 use anyhow::{Context, Result};
+use rustc_hash::FxHashMap;
 use serde::Deserialize;
-use std::{cell::RefCell, collections::HashMap};
+use std::{cell::RefCell};
 use tracing::warn;
 
 #[derive(Deserialize)]
@@ -310,5 +311,5 @@ pub fn parse_phigros(source: &str, extra: ChartExtra) -> Result<Chart> {
         .collect::<Result<Vec<_>>>()?;
 
     process_lines(&mut lines);
-    Ok(Chart::new(pgr.offset, lines, BpmList::from_time(bpm_values), ChartSettings::default(), extra, HashMap::new()))
+    Ok(Chart::new(pgr.offset, lines, BpmList::from_time(bpm_values), ChartSettings::default(), extra, FxHashMap::default()))
 }
