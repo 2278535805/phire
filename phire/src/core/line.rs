@@ -227,29 +227,28 @@ impl JudgeLine {
     }
 
     pub fn fetch_pos(&self, res: &Resource, lines: &[JudgeLine]) -> Vector {
-        let current_translation = self.object.now_translation(res);
         if let Some(parent) = self.parent {
             let parent = &lines[parent];
-            let parent_rotate = Rotation2::new(parent.object.rotation.now().to_radians());
-            parent.fetch_pos(res, lines) + parent_rotate * current_translation
-        } else {
-            current_translation
+            let parent_translation = parent.fetch_pos(res, lines);
+            return parent_translation + Rotation2::new(parent.fetch_rot(lines).to_radians()) * self.object.now_translation(res);
         }
+        self.object.now_translation(res)
     }
 
-    pub fn fetch_rotate(&self, res: &Resource, lines: &[JudgeLine]) -> Matrix {
-        let current_rotate = self.object.now_rotation();
-        match (self.parent, self.rotate_with_parent) {
-            (Some(parent), true) => {
-                let parent = &lines[parent];
-                parent.fetch_rotate(res, lines) * current_rotate
+    pub fn fetch_rot(&self, lines: &[JudgeLine]) -> f32 {
+        let mut rot = self.object.rotation.now();
+        if self.rotate_with_parent {
+            if let Some(parent) = self.parent {
+                rot += lines[parent].fetch_rot(lines);
             }
-            _ => current_rotate,
         }
+        rot
     }
 
     pub fn now_transform(&self, res: &Resource, lines: &[JudgeLine]) -> Matrix {
-        self.fetch_rotate(res, lines).append_translation(&self.fetch_pos(res, lines))
+        Rotation2::new(self.fetch_rot(lines).to_radians())
+            .to_homogeneous()
+            .append_translation(&self.fetch_pos(res, lines))
     }
 
     pub fn render(&self, ui: &mut Ui, res: &mut Resource, lines: &[JudgeLine], bpm_list: &mut BpmList, settings: &ChartSettings, id: usize) {
