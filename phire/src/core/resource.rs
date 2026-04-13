@@ -17,6 +17,7 @@ use rand_pcg::{
     Pcg32,
     rand_core::SeedableRng
 };
+use rustc_hash::FxHashMap;
 
 pub const MAX_SIZE: usize = 64; // needs tweaking
 pub static DPI_VALUE: AtomicU32 = AtomicU32::new(250);
@@ -489,8 +490,8 @@ pub struct Resource {
     #[cfg(feature = "play")]
     pub shake_play_paused: bool,
 
-    particle_pos_map: HashMap<(i32, i32), VecDeque<f32>>,
-    pub note_pos_map: HashMap<(i32, i32), u8>,
+    particle_pos_map: FxHashMap<(i32, i32), VecDeque<f32>>,
+    pub note_pos_map: FxHashMap<(i32, i32), u8>,
 }
 
 impl Resource {
@@ -629,8 +630,8 @@ impl Resource {
             shake_play_paused: false,
 
             // aggressive
-            particle_pos_map: HashMap::new(),
-            note_pos_map: HashMap::new(),
+            particle_pos_map: FxHashMap::with_capacity_and_hasher(262144, Default::default()), // 401 × 401 = 160,801, particles may exist outside the screen
+            note_pos_map: FxHashMap::with_capacity_and_hasher(262144, Default::default()),
         })
     }
 
@@ -646,7 +647,7 @@ impl Resource {
         let pt = self.world_to_screen(Point::default());
 
         if self.config.aggressive_particle {
-            let roughly_pos = ((pt.x * 200.0) as i32, (pt.y * 200.0) as i32);
+            let roughly_pos = ((pt.x * 200.0).round() as i32, (pt.y * 200.0).round() as i32);
             let now = self.time;
             let duration = self.res_pack.info.hit_fx_duration;
 
