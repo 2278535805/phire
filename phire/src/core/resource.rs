@@ -449,7 +449,7 @@ pub struct Resource {
     pub last_vp: (i32, i32, i32, i32),
     pub note_width: f32,
 
-    pub time: f32,
+    pub time: f64,
 
     pub alpha: f32,
     pub judge_line_color: Color,
@@ -471,7 +471,7 @@ pub struct Resource {
 
     pub audio: AudioManager,
     pub music: AudioClip,
-    pub track_length: f32,
+    pub track_length: f64,
     pub sfx_click: Sfx,
     pub sfx_drag: Sfx,
     pub sfx_flick: Sfx,
@@ -490,7 +490,7 @@ pub struct Resource {
     #[cfg(feature = "play")]
     pub shake_play_paused: bool,
 
-    particle_pos_map: FxHashMap<(i32, i32), VecDeque<f32>>,
+    particle_pos_map: FxHashMap<(i32, i32), VecDeque<f64>>,
     pub note_pos_map: FxHashMap<(i32, i32), u8>,
 }
 
@@ -563,7 +563,7 @@ impl Resource {
 
         let mut audio = create_audio_manger(&config)?;
         let music = AudioClip::new(fs.load_file(&info.music).await?)?;
-        let music_length = music.length() as f32;
+        let music_length = music.length();
         let track_length = config.play_end_time.unwrap_or(music_length).min(music_length);
         let buffer_size = Some(BUFFER_SIZE);
         let sfx_click = audio.create_sfx(res_pack.sfx_click.clone(), buffer_size)?;
@@ -572,7 +572,7 @@ impl Resource {
         let frame_times: VecDeque<f64> = VecDeque::new();
 
         let aspect_ratio = config.aspect_ratio.unwrap_or(info.aspect_ratio);
-        let note_width = config.note_scale * NOTE_WIDTH_RATIO_BASE;
+        let note_width = config.note_scale * NOTE_WIDTH_RATIO_BASE as f32;
         let note_scale = config.note_scale;
 
         let no_effect = !config.render_extra || has_no_effect;
@@ -649,7 +649,7 @@ impl Resource {
         if self.config.aggressive_particle {
             let roughly_pos = ((pt.x * 200.0).round() as i32, (pt.y * 200.0).round() as i32);
             let now = self.time;
-            let duration = self.res_pack.info.hit_fx_duration;
+            let duration = self.res_pack.info.hit_fx_duration as f64;
 
             let queue = self.particle_pos_map.entry(roughly_pos).or_default();
 

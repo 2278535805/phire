@@ -12,13 +12,13 @@ pub use crate::{
 };
 
 //const HOLD_PARTICLE_INTERVAL: f32 = 0.15;
-const FADEOUT_TIME: f32 = 0.16;
-const BAD_TIME: f32 = 0.5;
+const FADEOUT_TIME: f64 = 0.16;
+const BAD_TIME: f64 = 0.5;
 
 #[derive(Clone, Debug)]
 pub enum NoteKind {
     Click,
-    Hold { end_time: f32, end_height: f32, end_speed: Option<f32> },
+    Hold { end_time: f64, end_height: f64, end_speed: Option<f64> },
     Flick,
     Drag,
 }
@@ -38,15 +38,15 @@ pub struct Note {
     pub object: Object,
     pub kind: NoteKind,
     pub hitsound: HitSound,
-    pub time: f32,
-    pub height: f32,
-    pub speed: f32,
+    pub time: f64,
+    pub height: f64,
+    pub speed: f64,
 
     pub above: bool,
     pub multiple_hint: bool,
     pub fake: bool,
     pub judge: JudgeStatus,
-    pub judge_scale: f32,
+    pub judge_scale: f64,
     pub color: Anim<Color>,
     pub hit_fx_color: Anim<Color>,
     pub protected: bool,
@@ -58,9 +58,9 @@ unsafe impl Send for Note {}
 pub struct RenderConfig<'a> {
     pub settings: &'a ChartSettings,
     pub ctrl_obj: &'a mut CtrlObject,
-    pub line_height: f32,
-    pub appear_before: f32,
-    pub invisible_time: f32,
+    pub line_height: f64,
+    pub appear_before: f64,
+    pub invisible_time: f64,
     pub draw_below: bool,
     pub incline_sin: f32,
 }
@@ -141,7 +141,7 @@ impl Note {
         line.object.rotation.now() + if self.above { 0. } else { 180. }
     }
 
-    pub fn update(&mut self, res: &mut Resource, parent_rot: f32, parent_tr: &Matrix, ctrl_obj: &mut CtrlObject, line_height: f32, bpm_list: &mut BpmList, index: usize) {
+    pub fn update(&mut self, res: &mut Resource, parent_rot: f32, parent_tr: &Matrix, ctrl_obj: &mut CtrlObject, line_height: f64, bpm_list: &mut BpmList, index: usize) {
         if self.time < res.config.play_start_time || res.disable_hit_fx {
             return;
         }
@@ -151,10 +151,10 @@ impl Note {
             if res.time >= *at {
                 //_immediate_particle = true;
                 let beat = 30. / bpm_list.now_bpm(
-                    if bpm_list.per_line_bpm_storage { index as f32 } else { self.time }
+                    if bpm_list.per_line_bpm_storage { index as f64 } else { self.time }
                 );
                 //println!("{} {} {}", index, bpm_list.now_bpm(index as f32), beat);
-                *at = res.time + beat * res.info.hold_particle_interval_ratio / res.config.speed; //HOLD_PARTICLE_INTERVAL
+                *at = res.time + beat * res.info.hold_particle_interval_ratio as f64 / res.config.speed as f64; //HOLD_PARTICLE_INTERVAL
                 Some(if let Some(color) = self.hit_fx_color.now_opt() {
                     color
                 } else if perfect && !res.config.all_good && !res.config.all_bad {
@@ -184,8 +184,8 @@ impl Note {
         // && self.ctrl_obj.dead()
     }
 
-    fn init_ctrl_obj(&self, ctrl_obj: &mut CtrlObject, line_height: f32) {
-        ctrl_obj.set_height((self.height - line_height + self.object.translation.1.now() / self.speed) * RPE_HEIGHT / 2.);
+    fn init_ctrl_obj(&self, ctrl_obj: &mut CtrlObject, line_height: f64) {
+        ctrl_obj.set_height((self.height - line_height + self.object.translation.1.now() as f64 / self.speed) * RPE_HEIGHT as f64 / 2.);
     }
 
     pub fn now_transform(&self, res: &Resource, ctrl_obj: &CtrlObject, base: f32, incline_sin: f32, can_scale_x: bool, can_scale_y: bool) -> Matrix {
@@ -205,7 +205,7 @@ impl Note {
         self.object.now_rotation().append_nonuniform_scaling(&scale).append_translation(&tr)
     }
 
-    pub fn render(&self, ui: &mut Ui, res: &mut Resource, config: &mut RenderConfig, bpm_list: &mut BpmList, line_set_debug_alpha: bool, line_id: usize, height_above: f32) {
+    pub fn render(&self, ui: &mut Ui, res: &mut Resource, config: &mut RenderConfig, bpm_list: &mut BpmList, line_set_debug_alpha: bool, line_id: usize, height_above: f64) {
         if config.appear_before.is_finite() {
         //if config.appear_before.is_finite() && !matches!(self.kind, NoteKind::Hold { .. }) {
             let beat = bpm_list.beat(self.time);
@@ -229,21 +229,22 @@ impl Note {
             }
         }
 
-        let spd = self.speed * ctrl_obj.y.now_opt().unwrap_or(1.);
-        let line_height = config.line_height / res.aspect_ratio * spd;
-        let height = self.height / res.aspect_ratio * spd;
+        let aspect_ratio = res.aspect_ratio as f64;
+        let spd = self.speed * ctrl_obj.y.now_opt().unwrap_or(1.) as f64;
+        let line_height = config.line_height / aspect_ratio * spd;
+        let height = self.height / aspect_ratio * spd;
         let base = height - line_height;
 
         let cover_base = if !res.info.hold_partial_cover {
-            height + self.object.translation.1.now() - line_height
+            height + self.object.translation.1.now() as f64 - line_height
         } else {
             match self.kind {
                 NoteKind::Hold { end_time: _,  end_height, end_speed: _ } => {
-                    let end_height = end_height / res.aspect_ratio;
-                    end_height + self.object.translation.1.now() - line_height
+                    let end_height = end_height / aspect_ratio;
+                    end_height + self.object.translation.1.now() as f64 - line_height
                 }
                 _ => {
-                    height + self.object.translation.1.now() - line_height
+                    height + self.object.translation.1.now() as f64 - line_height
                 }
             }
         };
@@ -278,6 +279,7 @@ impl Note {
             color.a *= 0.4;
         }
         if res.config.fade > 0. {
+            let base = base as f32;
             let over = res.config.fade * 0.8;
             if base > res.config.fade {
                 return;
@@ -285,6 +287,7 @@ impl Note {
                 color.a *= (res.config.fade - base) / (res.config.fade - over);
             }
         } else if res.config.fade < 0. {
+            let base = base as f32;
             let fade_out = res.config.fade.abs();
             let over = fade_out * 0.8;
             if base < over {
@@ -309,9 +312,9 @@ impl Note {
         let draw = |res: &mut Resource, tex: Texture2D| {
             let mut color = color;
             if !config.draw_below {
-                color.a *= (self.time - res.time).min(0.) / FADEOUT_TIME + 1.;
+                color.a *= ((self.time - res.time).min(0.) / FADEOUT_TIME + 1.) as f32;
             }
-            res.with_model(self.now_transform(res, ctrl_obj, base, config.incline_sin, true, true), |res| {
+            res.with_model(self.now_transform(res, ctrl_obj, base as f32, config.incline_sin, true, true), |res| {
                 if res.config.aggressive_note {
                     let pt = res.world_to_screen(Point::default());
                     let roughly_pos = ((pt.x * 200.0).round() as i32, (pt.y * 200.0).round() as i32);
@@ -341,7 +344,7 @@ impl Note {
                         return;
                     }
 
-                    let end_height = end_height / res.aspect_ratio * spd;
+                    let end_height = end_height / aspect_ratio * spd;
                     let time = if res.time >= self.time {res.time} else {self.time};
 
                     //let clip = !config.draw_below && config.settings.hold_partial_cover;
@@ -350,7 +353,7 @@ impl Note {
                     let h = if self.time <= res.time { line_height } else { height };
                     let bottom = h - line_height; //StartY
                     let top = if let Some(end_spd) = end_speed {
-                        let end_spd = end_spd * ctrl_obj.y.now_opt().unwrap_or(1.);
+                        let end_spd = end_spd * ctrl_obj.y.now_opt().unwrap_or(1.) as f64;
                         if end_spd == 0. {
                             if res.config.chart_debug_note > 0. {
                                 color.a *= 0.2;
@@ -360,7 +363,7 @@ impl Note {
                         }
 
                         let hold_height = end_height - height;
-                        let hold_line_height = (time - self.time) * end_spd / res.aspect_ratio / HEIGHT_RATIO;
+                        let hold_line_height = (time - self.time) * end_spd / aspect_ratio / HEIGHT_RATIO;
                         bottom + hold_height - hold_line_height
                     } else {
                         end_height - line_height
@@ -394,7 +397,7 @@ impl Note {
                         }),
                         order,
                         -scale,
-                        bottom,
+                        bottom as f32,
                         color,
                         DrawTextureParams {
                             source: Some({
@@ -402,12 +405,12 @@ impl Note {
                                     let hold_body = style.hold_body.as_ref().unwrap();
                                     let width = hold_body.width();
                                     let height = hold_body.height();
-                                    Rect::new(0., 0., 1., (top - bottom) / scale / 2. * width / height)
+                                    Rect::new(0., 0., 1., (top - bottom) as f32 / scale / 2. * width / height)
                                 } else {
                                     style.hold_body_rect()
                                 }
                             }),
-                            dest_size: Some(vec2(scale * 2., top - bottom)),
+                            dest_size: Some(vec2(scale * 2., (top - bottom) as f32)),
                             ..Default::default()
                         },
                         clip,
@@ -421,7 +424,7 @@ impl Note {
                             **tex,
                             order,
                             -scale,
-                            bottom - if res.res_pack.info.hold_compact { hf.y } else { hf.y * 2. },
+                            bottom as f32 - if res.res_pack.info.hold_compact { hf.y } else { hf.y * 2. },
                             color,
                             DrawTextureParams {
                                 source: Some(r),
@@ -439,7 +442,7 @@ impl Note {
                         **tex,
                         order,
                         -scale,
-                        top - if res.res_pack.info.hold_compact { hf.y } else { 0. },
+                        top as f32 - if res.res_pack.info.hold_compact { hf.y } else { 0. },
                         color,
                         DrawTextureParams {
                             source: Some(r),
@@ -480,7 +483,7 @@ impl Note {
                         };
                         format!(" v: {}{}", self.speed, end_spd)
                     };
-                    res.with_model(self.now_transform(res, ctrl_obj, bottom, config.incline_sin, false, false), |res: &mut Resource| {
+                    res.with_model(self.now_transform(res, ctrl_obj, bottom as f32, config.incline_sin, false, false), |res: &mut Resource| {
                         res.with_model(Matrix::new_nonuniform_scaling(&Vector::new(1.0, if self.above { -1.0 } else { 1.0 })), |res: &mut Resource| {
                             res.apply_model(|res| {
                                 ui.text(format!("[{}] t:{:.2}({:.2}) h:{:.2}({:.2})[{:.2}]", line_id, self.time, end_time, self.height, end_height, base))
@@ -508,7 +511,7 @@ impl Note {
                     } else {
                         format!(" v: {}", self.speed)
                     };
-                    res.with_model(self.now_transform(res, ctrl_obj, base, config.incline_sin, false, false), |res: &mut Resource| {
+                    res.with_model(self.now_transform(res, ctrl_obj, base as f32, config.incline_sin, false, false), |res: &mut Resource| {
                         res.with_model(Matrix::new_nonuniform_scaling(&Vector::new(1.0, if self.above { -1.0 } else { 1.0 })), |res: &mut Resource| {
                             res.apply_model(|res| {
                                 ui.text(format!("[{}] t:{:.2} h:{:.2}[{:.2}]", line_id, self.time, self.height, base))
@@ -533,7 +536,7 @@ impl Note {
 }
 
 pub struct BadNote {
-    pub time: f32,
+    pub time: f64,
     pub kind: NoteKind,
     pub matrix: Matrix,
 }
@@ -555,7 +558,7 @@ impl BadNote {
                 },
                 self.kind.order(),
                 res.note_width,
-                Color::new(0.423529, 0.262745, 0.262745, (self.time - res.time).max(-1.) / BAD_TIME + 1.),
+                Color::new(0.423529, 0.262745, 0.262745, ((self.time - res.time).max(-1.) / BAD_TIME + 1.) as f32),
             );
         });
         true

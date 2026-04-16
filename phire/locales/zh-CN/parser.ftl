@@ -28,6 +28,7 @@ move-events-parse-failed = move 事件解析失败
 # pec
 unexpected-eol = 行意外结束
 expected-f32 = 应当为 f32
+expected-f64 = 应当为 f64
 expected-usize = 应当为 usize
 expected-tween = 应当为 tween
 

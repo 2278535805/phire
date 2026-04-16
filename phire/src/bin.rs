@@ -33,9 +33,9 @@ impl<R: Read> BinaryReader<R> {
         self.1 = 0;
     }
 
-    pub fn time(&mut self) -> Result<f32> {
+    pub fn time(&mut self) -> Result<f64> {
         self.1 += self.uleb()? as u32;
-        Ok(self.1 as f32 / 1000.)
+        Ok(self.1 as f64 / 1000.)
     }
 
     pub fn array<T: BinaryData>(&mut self) -> Result<Vec<T>> {
@@ -71,7 +71,7 @@ impl<W: Write> BinaryWriter<W> {
         self.1 = 0;
     }
 
-    pub fn time(&mut self, v: f32) -> Result<()> {
+    pub fn time(&mut self, v: f64) -> Result<()> {
         let v = (v * 1000.).round() as u32;
         assert!(v >= self.1);
         self.uleb((v - self.1) as _)?;
@@ -161,6 +161,16 @@ impl BinaryData for f32 {
 
     fn write_binary<W: Write>(&self, w: &mut BinaryWriter<W>) -> Result<()> {
         Ok(w.0.write_f32::<LE>(*self)?)
+    }
+}
+
+impl BinaryData for f64 {
+    fn read_binary<R: Read>(r: &mut BinaryReader<R>) -> Result<Self> {
+        Ok(r.0.read_f64::<LE>()?)
+    }
+
+    fn write_binary<W: Write>(&self, w: &mut BinaryWriter<W>) -> Result<()> {
+        Ok(w.0.write_f64::<LE>(*self)?)
     }
 }
 
@@ -392,7 +402,7 @@ impl BinaryData for Note {
             hitsound,
             time: r.time()?,
             height: r.read()?,
-            speed: if r.read()? { r.read::<f32>()? } else { 1. },
+            speed: if r.read()? { r.read::<f64>()? } else { 1. },
             above: r.read()?,
             multiple_hint: false,
             fake: r.read()?,

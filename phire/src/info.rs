@@ -30,14 +30,14 @@ pub struct ChartInfo {
     pub music: String,
     pub illustration: String,
 
-    pub preview_start: f32,
-    pub preview_end: Option<f32>,
+    pub preview_start: f64,
+    pub preview_end: Option<f64>,
     pub aspect_ratio: f32,
     pub force_aspect_ratio: bool,
     pub background_dim: f32,
     pub line_reference_y_axis: bool,
     pub line_length: Option<f32>,
-    pub offset: f32,
+    pub offset: f64,
     pub tip: Option<String>,
     pub tags: Vec<String>,
 

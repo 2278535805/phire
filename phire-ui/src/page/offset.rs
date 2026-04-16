@@ -24,14 +24,14 @@ pub struct OffsetPage {
     slider: Slider,
 
     touched: bool,
-    touch: Option<(f32, f32)>,
+    touch: Option<(f64, f32)>,
 
     frame_times: VecDeque<f64>, // frame interval time
-    latency_record: VecDeque<f32>,
+    latency_record: VecDeque<f64>,
 }
 
 impl OffsetPage {
-    const FADE_TIME: f32 = 0.8;
+    const FADE_TIME: f64 = 0.8;
 
     pub async fn new() -> Result<Self> {
         let config = &get_data().config;
@@ -54,7 +54,7 @@ impl OffsetPage {
             .context("Failed to load resource pack")?;
 
         let frame_times: VecDeque<f64> = VecDeque::new();
-        let latency_record: VecDeque<f32> = VecDeque::new();
+        let latency_record: VecDeque<f64> = VecDeque::new();
         Ok(Self {
             audio,
             cali,
@@ -111,9 +111,9 @@ impl Page for OffsetPage {
     fn touch(&mut self, touch: &Touch, s: &mut SharedState) -> Result<bool> {
         let t = s.t;
         let config = &mut get_data_mut().config;
-        let mut offset = config.offset * 1000.;
+        let mut offset = config.offset as f32 * 1000.;
         if self.slider.touch(touch, t, &mut offset).is_some() {
-            config.offset = offset / 1000.;
+            config.offset = offset as f64 / 1000.;
             return Ok(true);
         }
         let x = touch.position.x;
@@ -171,10 +171,10 @@ impl Page for OffsetPage {
 
             let ot = t;
 
-            let mut t = self.tm.now() as f32 - config.offset;
+            let mut t = self.tm.now() - config.offset;
 
             if config.auto_tweak_offset {
-                let latency = get_latency(&self.audio, &self.frame_times) as f32;
+                let latency = get_latency(&self.audio, &self.frame_times);
                 t -= latency;
                 ui.text(format!("{} {:.0}ms", tl!("estimated"), latency * 1000.))
                     .pos(0.0, ct.y + aspect * 0.5)
@@ -206,7 +206,7 @@ impl Page for OffsetPage {
             }
 
             if let Some((latency, time)) = self.touch {
-                let p = (ot - time) / Self::FADE_TIME;
+                let p = (ot - time) / Self::FADE_TIME as f32;
                 if p > 1. {
                     self.touch = None;
                 } else {
@@ -216,7 +216,7 @@ impl Page for OffsetPage {
                         ..self.color
                     };
                     if latency.abs() <= 0.700 {
-                        ui.fill_rect(Rect::new(calculate_pos(latency) - hh / 2., ct.y - aspect * 0.4 - hw / 2., hh, hw), c);
+                        ui.fill_rect(Rect::new(calculate_pos(latency as f32) - hh / 2., ct.y - aspect * 0.4 - hw / 2., hh, hw), c);
                     }
 
                     ui.text(format!("{} {:.0}ms", tl!("now"), latency * 1000.))
@@ -231,7 +231,7 @@ impl Page for OffsetPage {
             let avg_latency = if self.latency_record.is_empty() {
                 0.0
             } else {
-                self.latency_record.iter().sum::<f32>() / self.latency_record.len() as f32
+                self.latency_record.iter().sum::<f64>() / self.latency_record.len() as f64
             };
             ui.text(format!("{} {:.0}ms", tl!("avg"), avg_latency * 1000.))
                 .pos(0.0, ct.y + aspect * 0.4)
@@ -240,7 +240,7 @@ impl Page for OffsetPage {
                 .color(Color::new(1., 1., 1., 0.8 * c.a))
                 .draw();
 
-            let offset = config.offset * 1000.;
+            let offset = config.offset as f32 * 1000.;
             self.slider
                 .render(ui, Rect::new(-0.08, ct.y + aspect * 0.1 - 0.2 / 2., 0.45, 0.2), ot, c, offset, format!("{offset:.0}ms"));
 

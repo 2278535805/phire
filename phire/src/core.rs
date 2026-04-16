@@ -1,16 +1,16 @@
 pub use macroquad::color::Color;
 
-pub const NOTE_WIDTH_RATIO_BASE: f32 = 0.13175016;
-pub const HEIGHT_RATIO: f32 = 0.83175;
+pub const NOTE_WIDTH_RATIO_BASE: f64 = 0.13175016;
+pub const HEIGHT_RATIO: f64 = 0.83175;
 
-pub const EPS: f32 = 1e-5;
+pub const EPS: f64 = 1e-5;
 
 pub type Point = nalgebra::Point2<f32>;
 pub type Vector = nalgebra::Vector2<f32>;
 pub type Matrix = nalgebra::Matrix3<f32>;
 
 mod anim;
-pub use anim::{Anim, AnimFloat, AnimVector, Keyframe};
+pub use anim::{Anim, AnimFloat, AnimFloatF64, AnimVector, Keyframe};
 
 mod chart;
 pub use chart::{Chart, ChartExtra, ChartSettings, HitSoundMap};
@@ -66,8 +66,8 @@ impl Default for Triple {
 }
 
 impl Triple {
-    pub fn beats(&self) -> f32 {
-        self.0 as f32 + self.1 as f32 / self.2 as f32
+    pub fn beats(&self) -> f64 {
+        self.0 as f64 + self.1 as f64 / self.2 as f64
     }
 
     pub fn display(&self) -> String {
@@ -77,7 +77,7 @@ impl Triple {
 
 #[derive(Default, Clone)] // the default is a dummy
 pub struct BpmList {
-    elements: Vec<(f32, f32, f32)>, // (beats, time, bpm)
+    elements: Vec<(f64, f64, f64)>, // (beats, time, bpm)
     cursor: usize,
     // compatible pgr formatVersion
     // false: use global bpm list storage.
@@ -86,11 +86,11 @@ pub struct BpmList {
 }
 
 impl BpmList {
-    pub fn new(ranges: Vec<(f32, f32)> /*(beat, bpm)*/) -> Self {
+    pub fn new(ranges: Vec<(f64, f64)> /*(beat, bpm)*/) -> Self {
         let mut elements = Vec::new();
         let mut time = 0.0;
         let mut last_beats = 0.0;
-        let mut last_bpm: Option<f32> = None;
+        let mut last_bpm: Option<f64> = None;
         for (now_beats, bpm) in ranges {
             if let Some(bpm) = last_bpm {
                 time += (now_beats - last_beats) * (60. / bpm);
@@ -107,7 +107,7 @@ impl BpmList {
     }
 
     // compatible pgr formatVersion
-    pub fn from_time(ranges: Vec<(f32, f32)> /*(time/index, bpm)*/) -> Self {
+    pub fn from_time(ranges: Vec<(f64, f64)> /*(time/index, bpm)*/) -> Self {
         let mut elements = Vec::new();
         for (time, bpm) in ranges {
             elements.push((0.0, time, bpm));
@@ -119,7 +119,7 @@ impl BpmList {
         }
     }
 
-    pub fn time_beats(&mut self, beats: f32) -> f32 {
+    pub fn time_beats(&mut self, beats: f64) -> f64 {
         while let Some(kf) = self.elements.get(self.cursor + 1) {
             if kf.0 > beats {
                 break;
@@ -133,11 +133,11 @@ impl BpmList {
         time + (beats - start_beats) * (60. / bpm)
     }
 
-    pub fn time(&mut self, triple: &Triple) -> f32 {
+    pub fn time(&mut self, triple: &Triple) -> f64 {
         self.time_beats(triple.beats())
     }
 
-    pub fn beat(&mut self, time: f32) -> f32 {
+    pub fn beat(&mut self, time: f64) -> f64 {
         while let Some(kf) = self.elements.get(self.cursor + 1) {
             if kf.1 > time {
                 break;
@@ -151,7 +151,7 @@ impl BpmList {
         beats + (time - start_time) / (60. / bpm)
     }
 
-    pub fn now_bpm(&mut self, time: f32) -> f32 {
+    pub fn now_bpm(&mut self, time: f64) -> f64 {
         while let Some(kf) = self.elements.get(self.cursor + 1) {
             if kf.1 > time {
                 break;

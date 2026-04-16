@@ -28,6 +28,7 @@ move-events-parse-failed = Failed to parse move events
 # pec
 unexpected-eol = Unexpected end of line
 expected-f32 = Expected f32
+expected-f64 = Expected f64
 expected-usize = Expected usize
 expected-tween = Expected tween
 

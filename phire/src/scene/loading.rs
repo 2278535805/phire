@@ -22,7 +22,7 @@ const TRANSITION_TIME: f32 = 1.4;
 const WAIT_TIME: f32 = 0.;
 
 pub type UploadFn = Arc<dyn Fn(Vec<u8>) -> Task<Result<RecordUpdateState>>>;
-pub type UpdateFn = Box<dyn FnMut(f32, &mut Resource, &mut Judge)>;
+pub type UpdateFn = Box<dyn FnMut(f64, &mut Resource, &mut Judge)>;
 
 pub struct BasicPlayer {
     pub avatar: Option<SafeTexture>,
