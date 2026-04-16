@@ -26,7 +26,7 @@ pub type HitSoundMap = FxHashMap<String, AudioClip>;
 const PROGRESS_BAR_COLOR: Color = Color::new(0.565, 0.565, 0.565, 1.0);
 
 pub struct Chart {
-    pub offset: f32,
+    pub offset: f64,
     pub lines: Vec<JudgeLine>,
     pub bpm_list: RefCell<BpmList>,
     pub settings: ChartSettings,
@@ -38,7 +38,7 @@ pub struct Chart {
 }
 
 impl Chart {
-    pub fn new(offset: f32, lines: Vec<JudgeLine>, bpm_list: BpmList, settings: ChartSettings, extra: ChartExtra, hitsounds: HitSoundMap) -> Self {
+    pub fn new(offset: f64, lines: Vec<JudgeLine>, bpm_list: BpmList, settings: ChartSettings, extra: ChartExtra, hitsounds: HitSoundMap) -> Self {
         let mut attach_ui = [None; 7];
         let mut order = (0..lines.len())
             .filter(|it| {

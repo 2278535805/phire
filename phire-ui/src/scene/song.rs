@@ -78,10 +78,10 @@ fn create_music(clip: AudioClip) -> Result<Music> {
     Ok(music)
 }
 
-fn with_effects((mut frames, sample_rate): (Vec<Frame>, u32), range: Option<(f32, f32)>) -> Result<AudioClip> {
+fn with_effects((mut frames, sample_rate): (Vec<Frame>, u32), range: Option<(f64, f64)>) -> Result<AudioClip> {
     if let Some((begin, end)) = range {
-        frames.drain(((end * sample_rate as f32) as usize).min(frames.len())..);
-        frames.drain(..((begin * sample_rate as f32) as usize));
+        frames.drain(((end * sample_rate as f64) as usize).min(frames.len())..);
+        frames.drain(..((begin * sample_rate as f64) as usize));
     }
     let len = (0.8 * sample_rate as f64) as usize;
     let len = len.min(frames.len() / 2);
@@ -670,6 +670,7 @@ impl SongScene {
                     let mut judges: VecDeque<JudgeEvent> = VecDeque::new();
                     let mut last_send_touch_time: f32 = 0.;
                     move |t, res, judge| {
+                        let t = t as f32;
                         if client.ping_fail_count() >= 1 && reconnect_task.is_none() {
                             warn!("lost connection, auto re-connect");
                             let token = token.clone();
@@ -728,7 +729,7 @@ impl SongScene {
                             last_send_touch_time = t;
                         }
                         judges.extend(judge.judgements.borrow_mut().drain(..).map(|it| JudgeEvent {
-                            time: it.0,
+                            time: it.0 as f32,
                             line_id: it.1,
                             note_id: it.2,
                             judgement: {
@@ -1106,7 +1107,7 @@ impl SongScene {
                 dir.read(&info.music)?
             };
             let (frames, sample_rate) = AudioClip::decode(bytes)?;
-            let length = frames.len() as f32 / sample_rate as f32;
+            let length = frames.len() as f64 / sample_rate as f64;
             if info.preview_end.unwrap_or(info.preview_start + 1.) > length {
                 tl!(bail "edit-preview-invalid");
             }
@@ -1150,7 +1151,7 @@ impl Scene for SongScene {
             }
             Err(res) => res,
         };
-        let _res = match res.downcast::<Option<f32>>() {
+        let _res = match res.downcast::<Option<f64>>() {
             Ok(offset) => {
                 if let Some(offset) = *offset {
                     let dir = phire::dir::Dir::new(format!("{}/{}", dir::charts()?, self.local_path.as_ref().unwrap()))?;

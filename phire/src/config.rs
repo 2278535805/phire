@@ -70,7 +70,7 @@ pub struct Config {
     pub offline_mode: bool,
     #[cfg(any(target_os = "windows", target_os = "linux"))]
     pub fullscreen_mode: bool,
-    pub offset: f32,
+    pub offset: f64,
     pub particle: bool,
     pub player_name: String,
     pub player_rks: f32,
@@ -92,7 +92,7 @@ pub struct Config {
     // for compatibility
     pub autoplay: Option<bool>,
 
-    pub judge_offset: f32,
+    pub judge_offset: f64,
 
     pub render_line: bool,
     pub render_line_extra: bool,
@@ -118,8 +118,8 @@ pub struct Config {
     pub rotation_mode: bool,
     pub rotation_flat_mode: bool,
 
-    pub play_start_time: f32,
-    pub play_end_time: Option<f32>,
+    pub play_start_time: f64,
+    pub play_end_time: Option<f64>,
     #[cfg(feature = "play")]
     pub shake_play_mode: bool,
 }

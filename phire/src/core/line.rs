@@ -1,8 +1,8 @@
 use super::{chart::ChartSettings, object::CtrlObject, Anim, AnimFloat, BpmList, Matrix, Note, Object, Point, RenderConfig, Resource, Vector};
 use crate::{
     config::Mods,
-    core::NoteKind,
-    ext::{get_viewport, parse_alpha, NotNanExt, SafeTexture},
+    core::{NoteKind, anim::AnimFloatF64},
+    ext::{NotNanExt, SafeTexture, get_viewport, parse_alpha},
     judge::{JudgeStatus, LIMIT_BAD},
     ui::Ui,
 };
@@ -97,7 +97,7 @@ impl JudgeLineCache {
             (
                 !it.above,
                 it.speed.not_nan(),
-                (it.height + it.object.translation.1.now() * it.speed).not_nan(),
+                (it.height + it.object.translation.1.now() as f64 * it.speed).not_nan(),
             )
         });
         
@@ -143,7 +143,7 @@ pub struct JudgeLine {
     pub color: Anim<Color>,
     pub ctrl_obj: RefCell<CtrlObject>,
     pub kind: JudgeLineKind,
-    pub height: AnimFloat,
+    pub height: AnimFloatF64,
     pub incline: AnimFloat,
     pub notes: Vec<Note>,
     pub parent: Option<usize>,
@@ -404,8 +404,8 @@ impl JudgeLine {
                 settings,
                 ctrl_obj: &mut self.ctrl_obj.borrow_mut(),
                 line_height: self.height.now(),
-                appear_before: f32::INFINITY,
-                invisible_time: f32::INFINITY,
+                appear_before: f64::INFINITY,
+                invisible_time: f64::INFINITY,
                 draw_below: self.show_below,
                 incline_sin: self.incline.now_opt().map(|it| it.to_radians().sin()).unwrap_or_default(),
             };
@@ -434,7 +434,7 @@ impl JudgeLine {
                         config.draw_below = false;
                     }
                     w if (100..1000).contains(&w) => {
-                        config.appear_before = (w as f32 - 100.) / 10.;
+                        config.appear_before = (w as f64 - 100.) / 10.;
                     }
                     w if (1000..2000).contains(&w) => {
                         // TODO unsupported
@@ -449,10 +449,11 @@ impl JudgeLine {
                 res.screen_to_world(Point::new(vw, -vh)),
                 res.screen_to_world(Point::new(vw, vh)),
             ];
-            let height_above = p[0].y.max(p[1].y.max(p[2].y.max(p[3].y)));
-            let height_below = p[0].y.min(p[1].y.min(p[2].y.min(p[3].y)));
+            let height_above = p[0].y.max(p[1].y.max(p[2].y.max(p[3].y))) as f64;
+            let height_below = p[0].y.min(p[1].y.min(p[2].y.min(p[3].y))) as f64;
             let agg = res.config.aggressive_chart;
             let mut height = self.height.clone();
+            let aspect_ratio = res.aspect_ratio as f64;
             if res.config.note_scale > 0. && res.config.render_note {
                 for index in &self.cache.above_indices {
                     let speed = self.notes[*index].speed;
@@ -478,7 +479,7 @@ impl JudgeLine {
                                     config.line_height
                                 }
                             };
-                            let note_height = (note.height - line_height + note.object.translation.1.now()) / res.aspect_ratio * speed;
+                            let note_height = (note.height - line_height + note.object.translation.1.now() as f64) / aspect_ratio * speed;
                             match note.kind {   
                                 NoteKind::Hold { end_height, .. } => {
                                     if end_height < height_below {
@@ -525,7 +526,7 @@ impl JudgeLine {
                                         config.line_height
                                     }
                                 };
-                                let note_height = (note.height - line_height + note.object.translation.1.now()) / res.aspect_ratio * speed;
+                                let note_height = (note.height - line_height + note.object.translation.1.now() as f64) / aspect_ratio * speed;
                                 match note.kind {   
                                     NoteKind::Hold { end_height, .. } => {
                                         if end_height < height_below {
@@ -579,16 +580,16 @@ impl JudgeLine {
                         } else {
                             String::new()
                         };
-                        let line_height_ulp = {
+                        let line_height_ulp_in_f32 = {
                             if !config.line_height.is_nan() & !config.line_height.is_infinite() {
-                                f32::EPSILON * config.line_height.abs()
+                                f32::EPSILON * config.line_height.abs() as f32
                             } else {
                                 0.0
                             }
                         };
                         let line_height_ulp_string = {
-                                if line_height_ulp > 0.0018518519 {
-                                    format!("(Speed too high! ULP: {:.4})", line_height_ulp)
+                                if line_height_ulp_in_f32 > 0.0018518519 {
+                                    format!("(Speed too high! ULP: {:.4})", line_height_ulp_in_f32)
                                 } else {
                                     String::new()
                                 }
@@ -613,9 +614,9 @@ impl JudgeLine {
                         } else {
                             format!(" anc:{} {}", self.anchor[0], self.anchor[1])
                         };
-                        let color = if line_height_ulp > 0.018518519 { // 10px error in 1080P
+                        let color = if line_height_ulp_in_f32 > 0.018518519 { // 10px error in 1080P
                             Color::new(1., 0., 0., parse_alpha(alpha, res.alpha, 0.15, res.config.chart_debug_line > 0.))
-                        } else if line_height_ulp > 0.0018518519 { // 1px error in 1080P
+                        } else if line_height_ulp_in_f32 > 0.0018518519 { // 1px error in 1080P
                             Color::new(1., 1., 0., parse_alpha(alpha, res.alpha, 0.15, res.config.chart_debug_line > 0.))
                         } else {
                             Color::new(1., 1., 1., parse_alpha(alpha, res.alpha, 0.15, res.config.chart_debug_line > 0.))

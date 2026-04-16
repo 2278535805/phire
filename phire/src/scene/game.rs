@@ -41,8 +41,8 @@ mod inner;
 #[cfg(feature = "closed")]
 use inner::*;
 
-pub const WAIT_TIME: f32 = 0.5;
-const AFTER_TIME: f32 = 0.7;
+pub const WAIT_TIME: f64 = 0.5;
+const AFTER_TIME: f64 = 0.7;
 const PAUSE_BACKGROUND_ALPHA: f32 = 0.6;
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -72,7 +72,7 @@ impl SimpleRecord {
     }
 }
 
-fn fmt_time(t: f32) -> String {
+fn fmt_time(t: f64) -> String {
     let f = t < 0.;
     let t = t.abs();
     let secs = t % 60.;
@@ -122,11 +122,11 @@ pub struct GameScene {
     pub judge: Judge,
     pub gl: InternalGlContext<'static>,
     player: Option<BasicPlayer>,
-    info_offset: f32,
+    info_offset: f64,
     effects: Vec<Effect>,
 
     first_in: bool,
-    exercise_range: Range<f32>,
+    exercise_range: Range<f64>,
     exercise_press: Option<(i8, u64)>,
     exercise_btns: (RectButton, RectButton),
 
@@ -187,10 +187,10 @@ macro_rules! reset_music_speed {
 
 
 impl GameScene {
-    pub const BEFORE_TIME: f32 = 0.7;
-    pub const BEFORE_DURATION: f32 = 1.2;
-    pub const WAIT_AFTER_TIME: f32 = AFTER_TIME + 0.3;
-    pub const FADEOUT_TIME: f32 = WAIT_TIME + Self::WAIT_AFTER_TIME;
+    pub const BEFORE_TIME: f64 = 0.7;
+    pub const BEFORE_DURATION: f64 = 1.2;
+    pub const WAIT_AFTER_TIME: f64 = AFTER_TIME + 0.3;
+    pub const FADEOUT_TIME: f64 = WAIT_TIME + Self::WAIT_AFTER_TIME;
 
     pub async fn load_chart_bytes(fs: &mut dyn FileSystem, info: &ChartInfo) -> Result<Vec<u8>> {
         if let Ok(bytes) = fs.load_file(&info.chart).await {
@@ -376,7 +376,7 @@ impl GameScene {
             chart
                 .extra
                 .effects
-                .push(Effect::new(0.0..f32::INFINITY, include_str!("fxaa.glsl"), Vec::new(), false).unwrap());
+                .push(Effect::new(0.0..f64::INFINITY, include_str!("fxaa.glsl"), Vec::new(), false).unwrap());
         }
 
         let judge = Judge::new(&chart);
@@ -458,11 +458,11 @@ impl GameScene {
     }
 
     fn ui(&mut self, ui: &mut Ui, tm: &mut TimeManager) -> Result<()> {
-        let time = tm.now() as f32;
+        let time = tm.now();
         let p = match self.state {
             State::Starting => {
                 if time <= Self::BEFORE_TIME {
-                    1. - (1. - time / Self::BEFORE_TIME).clamp(0., 1.).powi(3)
+                    1. - (1. - time / Self::BEFORE_TIME).clamp(0., 1.).powi(3) as f32
                 } else {
                     1.
                 }
@@ -471,7 +471,7 @@ impl GameScene {
             State::Playing => 1.,
             State::Ending => {
                 let t = time - self.res.track_length - WAIT_TIME;
-                1. - (t / (Self::WAIT_AFTER_TIME)).clamp(0., 1.).powi(2)
+                1. - (t / (Self::WAIT_AFTER_TIME)).clamp(0., 1.).powi(2) as f32
             }
         };
         let c = Color::new(1., 1., 1., self.res.alpha);
@@ -479,8 +479,8 @@ impl GameScene {
         let aspect_ratio = res.aspect_ratio;
         let screen_aspect = screen_aspect();
         let scale_ratio = 1.777777;
-        let top = -1.;
-        let eps = 2e-2;
+        let top: f32 = -1.;
+        let eps: f32 = 2e-2;
         let margin = 0.0425 * scale_ratio;
         let pause_w = 0.011 * scale_ratio;
         let pause_h = pause_w * 3.5;
@@ -623,7 +623,8 @@ impl GameScene {
         let hw = 0.003;
         let height = eps * 1.0;
         let offset = self.chart.offset + self.info_offset + res.config.offset;
-        let dest = (aspect_ratio * 2. * (res.time - self.exercise_range.start + offset) / (self.exercise_range.end - self.exercise_range.start)).max(0.).min(aspect_ratio * 2.);
+        let dest = (res.time - self.exercise_range.start + offset) / (self.exercise_range.end - self.exercise_range.start);
+        let dest = (aspect_ratio * 2. * dest as f32).max(0.).min(aspect_ratio * 2.);
         if res.config.render_ui_bar {
             self.chart.with_element(ui, res, UIElement::Bar, Some((-aspect_ratio, top + height / 2.)), Some((-aspect_ratio, top + height / 2.)), |ui, color| {
                 //let ct = Vector::new(0., top + height / 2.);
@@ -766,6 +767,7 @@ impl GameScene {
             }
             if matches!(self.mode, GameMode::Exercise | GameMode::TweakOffset) {
                 let asp = self.touch_scale();
+                let track_length = self.res.track_length as f32;
                 for touch in ui.ensure_touches() {
                     touch.position *= asp;
                 }
@@ -783,10 +785,10 @@ impl GameScene {
                 let rad = 0.03;
                 let sp = self.offset().min(0.);
                 ui.fill_rect(Rect::new(-hw, -h, hw * 2., h * 2.), Color::new(0.4, 0.4, 0.4, 1.));
-                let st = -hw + (self.exercise_range.start - sp) / (self.res.track_length - sp) * hw * 2.;
-                let en = -hw + (self.exercise_range.end - sp) / (self.res.track_length - sp) * hw * 2.;
-                let t = tm.now() as f32;
-                let cur = -hw + (t - sp) / (self.res.track_length - sp) * hw * 2.;
+                let st = -hw + (self.exercise_range.start - sp) as f32 / (self.res.track_length - sp) as f32 * hw * 2.;
+                let en = -hw + (self.exercise_range.end - sp) as f32 / (self.res.track_length - sp) as f32 * hw * 2.;
+                let t = tm.now();
+                let cur = -hw + (t - sp) as f32 / (self.res.track_length - sp) as f32 * hw * 2.;
                 ui.fill_rect(Rect::new(st, -h, en - st, h * 2.), Color::new(0.6, 0.6, 0.6, 1.));
                 ui.fill_rect(Rect::new(st, -eh, 0., eh + h).feather(0.005), Color::new(0.66, 0.78, 0.98, 1.));
                 ui.fill_circle(st, -eh, rad, Color::new(0.66, 0.78, 0.98, 1.));
@@ -815,23 +817,23 @@ impl GameScene {
                         .find(|it| it.phase == TouchPhase::Started && r.contains(it.position))
                         .map(|it| (0, it.id));
                 }
-                ui.text(fmt_time(t)).pos(0., -0.23).anchor(0.5, 0.).size(0.8).draw();
+                ui.text(fmt_time(tm.now())).pos(0., -0.23).anchor(0.5, 0.).size(0.8).draw();
                 if self.pause_rewind.time.is_some() {
                     self.exercise_press = None;
                 }
                 if let Some((ctrl, id)) = &self.exercise_press {
                     if let Some(touch) = Judge::get_touches(1.0).iter().rfind(|it| it.id == *id) {
                         let x = touch.position.x;
-                        let p = (x + hw) / (hw * 2.) * (self.res.track_length - sp) + sp;
-                        let p = if self.res.track_length - sp <= 3. || *ctrl == 0 {
-                            p.clamp(sp, self.res.track_length)
+                        let p = (x + hw) / (hw * 2.) * (self.res.track_length - sp) as f32 + sp as f32;
+                        let p = if track_length - sp as f32 <= 3. || *ctrl == 0 {
+                            p.clamp(sp as f32, track_length)
                         } else {
                             p.clamp(
-                                if *ctrl == -1 { sp } else { self.exercise_range.start + 3. },
+                                if *ctrl == -1 { sp as f32 } else { self.exercise_range.start as f32 + 3. },
                                 if *ctrl == -1 {
-                                    self.exercise_range.end - 3.
+                                    self.exercise_range.end as f32 - 3.
                                 } else {
-                                    self.res.track_length
+                                    track_length
                                 },
                             )
                         };
@@ -843,7 +845,7 @@ impl GameScene {
                                 &mut self.exercise_range.start
                             } else {
                                 &mut self.exercise_range.end
-                            }) = p;
+                            }) = p as f64;
                         }
                         if matches!(touch.phase, TouchPhase::Cancelled | TouchPhase::Ended) {
                             self.exercise_press = None;
@@ -907,11 +909,11 @@ impl GameScene {
         res.config.interactive && matches!(state, State::Playing)
     }
 
-    fn offset(&self) -> f32 {
+    fn offset(&self) -> f64 {
         self.chart.offset + self.info_offset + self.res.config.offset
     }
 
-    fn offset_chart(&self) -> f32 {
+    fn offset_chart(&self) -> f64 {
         self.chart.offset + self.info_offset
     }
 
@@ -941,7 +943,7 @@ impl GameScene {
                 .draw();
             let d = 0.14;
             let mut bpm_list = self.chart.bpm_list.borrow_mut();
-            let beat = (15. / bpm_list.now_bpm(tm.now() as f32)).clamp(0.020, 0.500);
+            let beat = (15. / bpm_list.now_bpm(tm.now())).clamp(0.020, 0.500);
             if ui.button("lg_sub", Rect::new(d, r.center().y, 0., 0.).feather(0.026), "-") && ita {
                 self.info_offset -= beat;
             }
@@ -1068,7 +1070,7 @@ impl Scene for GameScene {
         if tm.paused() {
             GYRO.lock().unwrap().reset_gyroscope();
         }
-        let time = tm.now() as f32;
+        let time = tm.now();
         let time = match self.state {
             State::Starting => {
                 #[cfg(target_os = "windows")]
@@ -1094,11 +1096,11 @@ impl Scene for GameScene {
                         //self.music.pause()?;
                         self.first_in = false;
                     }
-                    tm.now() as f32
+                    tm.now()
                 } else {
                     GYRO.lock().unwrap().reset_gyroscope();
                     if self.res.config.enter_animation {
-                        self.res.alpha = 1. - (1. - time / Self::BEFORE_TIME).clamp(0., 1.).powi(3);
+                        self.res.alpha = 1. - (1. - time / Self::BEFORE_TIME).clamp(0., 1.).powi(3) as f32;
                     } else {
                         self.res.alpha = 1.;
                     };
@@ -1169,7 +1171,7 @@ impl Scene for GameScene {
                         GameMode::TweakOffset => Some(NextScene::PopWithResult(Box::new(None::<f32>))),
                     };
                 }
-                self.res.alpha = 1. - (t / AFTER_TIME).clamp(0., 1.).powi(2);
+                self.res.alpha = 1. - (t / AFTER_TIME).clamp(0., 1.).powi(2) as f32;
                 self.res.track_length + WAIT_TIME
             }
         };
@@ -1177,7 +1179,7 @@ impl Scene for GameScene {
         let time = if self.mode == GameMode::TweakOffset {
             time.max(0.) - self.offset_chart()
         } else if self.res.config.auto_tweak_offset {
-            (time - self.offset() - get_latency(&self.res.audio, &self.res.frame_times) as f32).max(0.)
+            (time - self.offset() - get_latency(&self.res.audio, &self.res.frame_times)).max(0.)
         } else {
             (time - self.offset()).max(0.)
         };
@@ -1316,7 +1318,7 @@ impl Scene for GameScene {
     fn render(&mut self, tm: &mut TimeManager, ui: &mut Ui) -> Result<()> {
         let res = &mut self.res;
 
-        let time = tm.now() as f32;
+        let time = tm.now();
         let p = match self.state {
             State::Starting => {
                 if time < Self::BEFORE_DURATION {
@@ -1332,7 +1334,7 @@ impl Scene for GameScene {
             }
         };
         let ratio = if res.config.chart_ratio != 1. && res.config.enter_animation {
-            1. + (res.config.chart_ratio - 1.) * ease_in_out_quartic(p)
+            1. + (res.config.chart_ratio - 1.) * ease_in_out_quartic(p as f32)
         } else {
             res.config.chart_ratio
         };
@@ -1408,13 +1410,13 @@ impl Scene for GameScene {
             zoom: chart_zoom,
             viewport: chart_viewport.map(|(x, y, w, h)| {
                 if res.info.fold_animation && matches!(self.state, State::Starting) {
-                    let scale_x = (1. - (1. - time / Self::BEFORE_TIME).clamp(0., 1.).powi(3)).powf(2.0);
+                    let scale_x = (1. - (1. - time / Self::BEFORE_TIME).clamp(0., 1.).powi(3)).powf(2.0) as f32;
                     let new_w = (w as f32 * scale_x).round() as i32;
                     let dx = (w - new_w) / 2;
                     (x + dx, y, new_w, h)
                 } else if res.info.fold_animation && matches!(self.state, State::Ending) {
                     let t = time - res.track_length - WAIT_TIME;
-                    let scale_x = (1. - (t / (Self::WAIT_AFTER_TIME)).clamp(0., 1.).powi(2)).powf(2.0);
+                    let scale_x = (1. - (t / (Self::WAIT_AFTER_TIME)).clamp(0., 1.).powi(2)).powf(2.0) as f32;
                     let new_w = (w as f32 * scale_x).round() as i32;
                     let dx = (w - new_w) / 2;
                     (x + dx, y, new_w, h)

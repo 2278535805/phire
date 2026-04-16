@@ -42,7 +42,7 @@ impl ChartInfoEdit {
     }
 }
 
-fn format_time(t: f32) -> String {
+fn format_time(t: f64) -> String {
     use std::fmt::Write;
     let mut s = String::new();
     let it = t as u32;
@@ -91,7 +91,7 @@ pub fn render_chart_info(ui: &mut Ui, edit: &mut ChartInfoEdit, width: f32) -> (
         let r = ui.input(tl!("preview-time"), &mut string, (len, &mut changed));
         dy!(r.h + s);
         if changed {
-            match || -> Result<(f32, f32), Cow<'static, str>> {
+            match || -> Result<(f64, f64), Cow<'static, str>> {
                 let (st, en) = string.split_once(['-', '—']).ok_or_else(|| tl!("illegal-input"))?;
                 let st = parse_time(st.trim()).ok_or_else(|| tl!("invalid time"))?;
                 let en = parse_time(en.trim()).ok_or_else(|| tl!("invalid time"))?;
@@ -122,7 +122,7 @@ pub fn render_chart_info(ui: &mut Ui, edit: &mut ChartInfoEdit, width: f32) -> (
         let r = ui.input(tl!("offset"), &mut string, (len, &mut changed));
         dy!(r.h + s);
         if changed {
-            match string.parse::<f32>() {
+            match string.parse::<f64>() {
                 Err(_) => {
                     show_message(tl!("illegal-input")).error();
                 }
