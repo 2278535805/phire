@@ -17,9 +17,9 @@ use regex::Regex;
 use std::sync::Arc;
 use tracing::warn;
 
-const BEFORE_TIME: f32 = 1.;
-const TRANSITION_TIME: f32 = 1.4;
-const WAIT_TIME: f32 = 0.;
+const BEFORE_TIME: f64 = 1.;
+const TRANSITION_TIME: f64 = 1.4;
+const WAIT_TIME: f64 = 0.;
 
 pub type UploadFn = Arc<dyn Fn(Vec<u8>) -> Task<Result<RecordUpdateState>>>;
 pub type UpdateFn = Box<dyn FnMut(f64, &mut Resource, &mut Judge)>;
@@ -37,13 +37,13 @@ pub struct LoadingScene {
     illustration: SafeTexture,
     pub load_task: LocalTask<Result<GameScene>>,
     next_scene: Option<NextScene>,
-    finish_time: f32,
+    finish_time: f64,
     target: Option<RenderTarget>,
     charter: String,
 }
 
 impl LoadingScene {
-    pub const TOTAL_TIME: f32 = BEFORE_TIME + TRANSITION_TIME + WAIT_TIME;
+    pub const TOTAL_TIME: f64 = BEFORE_TIME + TRANSITION_TIME + WAIT_TIME;
 
     pub async fn load_background(fs: &mut Box<dyn FileSystem>, config: &Config, path: &str) -> Result<(Texture2D, Texture2D)> {
         let image = image::load_from_memory(&fs.load_file(path).await?).context("Failed to decode image")?;
@@ -111,7 +111,7 @@ impl LoadingScene {
             illustration,
             load_task: Some(future),
             next_scene: None,
-            finish_time: f32::INFINITY,
+            finish_time: f64::INFINITY,
             target: None,
             charter,
         })
@@ -138,7 +138,7 @@ impl Scene for LoadingScene {
                         self.load_task = None;
                         self.next_scene =
                             Some(game_scene.map_or_else(|e| NextScene::PopWithResult(Box::new(e)), |it| NextScene::Replace(Box::new(it))));
-                        self.finish_time = tm.now() as f32 + BEFORE_TIME;
+                        self.finish_time = tm.now() + BEFORE_TIME;
                         break;
                     }
                 }
@@ -151,7 +151,7 @@ impl Scene for LoadingScene {
         let cam = ui.camera();
         let asp = -cam.zoom.y;
         let top = 1. / asp;
-        let now = tm.now() as f32;
+        let now = tm.now();
         let intern = unsafe { get_internal_gl() };
         let gl = intern.quad_gl;
         set_camera(&Camera2D {
@@ -169,7 +169,7 @@ impl Scene for LoadingScene {
             0.
         };
         if dx != 0. {
-            gl.push_model_matrix(Mat4::from_translation(vec3(dx, 0., 0.)));
+            gl.push_model_matrix(Mat4::from_translation(vec3(dx as f32, 0., 0.)));
         }
         let vo = -top / 10.;
         let voi = -top / 8.5;
@@ -235,12 +235,12 @@ impl Scene for LoadingScene {
         let p = 0.6;
         let s = 0.2;
         let t = ((now - 0.3).max(0.) % (p * 2. + s)) / p;
-        let st = (t - 1.).clamp(0., 1.).powi(3);
-        let en = 1. - (1. - t.min(1.)).powi(3);
+        let st = (t - 1.).clamp(0., 1.).powi(3) as f32;
+        let en = 1. - (1. - t.min(1.)).powi(3) as f32;
 
         let mut r = Rect::new(r.x + r.w * st, r.y, r.w * (en - st), r.h);
         ui.fill_rect(r, WHITE);
-        r.x += dx;
+        r.x += dx as f32;
         ui.scissor(Some(r));
         draw_text_aligned(ui, text_loading, 0.865, top * 0.865, (1., 1.), 0.41, BLACK);
         ui.scissor(None);
@@ -255,7 +255,7 @@ impl Scene for LoadingScene {
         if matches!(self.next_scene, Some(NextScene::PopWithResult(_))) {
             return self.next_scene.take().unwrap();
         }
-        if tm.now() as f32 > self.finish_time + TRANSITION_TIME + WAIT_TIME || !self.config.enter_animation {
+        if tm.now() > self.finish_time + TRANSITION_TIME + WAIT_TIME || !self.config.enter_animation {
             if let Some(scene) = self.next_scene.take() {
                 return scene;
             }
