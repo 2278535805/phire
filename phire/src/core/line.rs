@@ -442,7 +442,7 @@ impl JudgeLine {
                     _ => {}
                 }
             }
-            let (vw, vh) = (1.0 / res.config.chart_ratio, 1.0 / res.config.chart_ratio);
+            let (vw, vh) = (1.0 / res.config.chart_ratio, 1.0 / res.aspect_ratio / res.config.chart_ratio);
             let p = [
                 res.screen_to_world(Point::new(-vw, -vh)),
                 res.screen_to_world(Point::new(-vw, vh)),
@@ -529,13 +529,13 @@ impl JudgeLine {
                                 let note_height = ((note.height - line_height) * speed + note.object.translation.1.now() as f64) / aspect_ratio;
                                 match note.kind {   
                                     NoteKind::Hold { end_height, .. } => {
-                                        if end_height < height_below {
+                                        if end_height < -height_above {
                                             continue;
                                         }
                                         
                                     },
                                     _ => {
-                                        if note_height < height_below {
+                                        if note_height < -height_above {
                                             continue;
                                         }
                                     }
