@@ -393,7 +393,6 @@ struct GpuParticle {
     uv: Vec4,
     data: Vec4,
     color: Vec4,
-    rotate_2d: Vec2,
 }
 
 struct CpuParticle {
@@ -406,7 +405,6 @@ struct CpuParticle {
     frame: u16,
     initial_size: f32,
     color: Color,
-    rotation : f32,
 }
 
 pub struct Emitter {
@@ -478,7 +476,6 @@ impl Emitter {
                 VertexAttribute::with_buffer("in_attr_inst_uv", VertexFormat::Float4, 1),
                 VertexAttribute::with_buffer("in_attr_inst_data", VertexFormat::Float4, 1),
                 VertexAttribute::with_buffer("in_attr_inst_color", VertexFormat::Float4, 1),
-                VertexAttribute::with_buffer("in_attr_rotate_2d", VertexFormat::Float2, 1),
             ],
             shader,
             PipelineParams {
@@ -603,7 +600,6 @@ impl Emitter {
         let r = self.config.size - self.config.size * rand::gen_range(0.0, self.config.size_randomness);
 
         let rotation = self.config.initial_rotation - self.config.initial_rotation * rand::gen_range(0.0, self.config.initial_rotation_randomness);
-        let (sin_rot, cos_rot) = rotation.sin_cos();
 
         let particle = if self.config.local_coords {
             GpuParticle {
@@ -611,7 +607,6 @@ impl Emitter {
                 uv: vec4(1.0, 1.0, 0.0, 0.0),
                 data: vec4(self.particles_spawned as f32, 0.0, 0.0, 0.0),
                 color: self.config.colors_curve.start.to_vec(),
-                rotate_2d: vec2(cos_rot, sin_rot)
             }
         } else {
             GpuParticle {
@@ -619,7 +614,6 @@ impl Emitter {
                 uv: vec4(1.0, 1.0, 0.0, 0.0),
                 data: vec4(self.particles_spawned as f32, 0.0, 0.0, 0.0),
                 color: self.config.colors_curve.start.to_vec(),
-                rotate_2d: vec2(cos_rot, sin_rot)
             }
         };
 
@@ -644,7 +638,6 @@ impl Emitter {
             frame: 0,
             initial_size: r,
             color: self.config.base_color,
-            rotation: rotation,
         });
     }
 
@@ -680,7 +673,6 @@ impl Emitter {
                     break;
                 }
             }
-
         }
 
         if self.config.one_shot && self.time_passed > self.config.lifetime {
@@ -718,10 +710,6 @@ impl Emitter {
             //cpu.lived = f32::min(cpu.lived + dt, cpu.lifetime);
             cpu.lived += dt;
             cpu.now_velocity += self.config.gravity * dt;
-
-            cpu.rotation += cpu.now_angular_velocity * dt;
-            let (sin_rot, cos_rot) = cpu.rotation.sin_cos();
-            gpu.rotate_2d = vec2(cos_rot, sin_rot);
 
             if let Some(atlas) = &self.config.atlas {
                 if cpu.lifetime != 0.0 {
