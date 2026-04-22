@@ -489,7 +489,7 @@ impl GameScene {
             && !tm.paused()
             && self.pause_rewind.time.is_none()
             && matches!(self.state, State::Playing)
-            && Judge::get_touches(res.config.chart_ratio).iter().any(|touch| {
+            && Judge::get_touches(res.config.chart_ratio, res.config.low_resolution_mode).iter().any(|touch| {
                 touch.phase == TouchPhase::Started && {
                     let p = touch.position;
                     let p = Point::new(p.x * screen_aspect, p.y * screen_aspect);
@@ -710,7 +710,7 @@ impl GameScene {
             );
             if res.config.interactive {
                 let mut clicked = None;
-                for touch in Judge::get_touches(1.0) {
+                for touch in Judge::get_touches(1.0, res.config.low_resolution_mode) {
                     if touch.phase != TouchPhase::Started {
                         continue;
                     }
@@ -794,7 +794,7 @@ impl GameScene {
                 ui.fill_circle(st, -eh, rad, Color::new(0.66, 0.78, 0.98, 1.));
                 if self.exercise_press.is_none() {
                     let r = ui.rect_to_global(Rect::new(st, -eh, 0., 0.).feather(rad));
-                    self.exercise_press = Judge::get_touches(1.0)
+                    self.exercise_press = Judge::get_touches(1.0, self.res.config.low_resolution_mode)
                         .iter()
                         .find(|it| it.phase == TouchPhase::Started && r.contains(it.position))
                         .map(|it| (-1, it.id));
@@ -803,7 +803,7 @@ impl GameScene {
                 ui.fill_circle(en, eh, rad, Color::new(1., 0.34, 0.54, 1.));
                 if self.exercise_press.is_none() {
                     let r = ui.rect_to_global(Rect::new(en, eh, 0., 0.).feather(rad));
-                    self.exercise_press = Judge::get_touches(1.0)
+                    self.exercise_press = Judge::get_touches(1.0, self.res.config.low_resolution_mode)
                         .iter()
                         .find(|it| it.phase == TouchPhase::Started && r.contains(it.position))
                         .map(|it| (1, it.id));
@@ -812,7 +812,7 @@ impl GameScene {
                 ui.fill_circle(cur, 0., rad, Color::new(0.95, 0.95, 0.95, 1.));
                 if self.exercise_press.is_none() {
                     let r = ui.rect_to_global(Rect::new(cur, 0., 0., 0.).feather(rad));
-                    self.exercise_press = Judge::get_touches(1.0)
+                    self.exercise_press = Judge::get_touches(1.0, self.res.config.low_resolution_mode)
                         .iter()
                         .find(|it| it.phase == TouchPhase::Started && r.contains(it.position))
                         .map(|it| (0, it.id));
@@ -822,7 +822,7 @@ impl GameScene {
                     self.exercise_press = None;
                 }
                 if let Some((ctrl, id)) = &self.exercise_press {
-                    if let Some(touch) = Judge::get_touches(1.0).iter().rfind(|it| it.id == *id) {
+                    if let Some(touch) = Judge::get_touches(1.0, self.res.config.low_resolution_mode).iter().rfind(|it| it.id == *id) {
                         let x = touch.position.x;
                         let p = (x + hw) / (hw * 2.) * (self.res.track_length - sp) as f32 + sp as f32;
                         let p = if track_length - sp as f32 <= 3. || *ctrl == 0 {
@@ -1346,18 +1346,23 @@ impl Scene for GameScene {
         let msaa = res.config.sample_count > 1;
 
         // camera setup
-        let vp = res.camera.viewport.unwrap_or(ui.viewport);
-        let asp2_window = ui.viewport.2 as f32 / ui.viewport.3 as f32;
-        let asp2_chart = vp.2 as f32 / vp.3 as f32;
-        let asp2_ui = vp.3 as f32 / vp.2 as f32;
-        let asp2_ui_window = ui.viewport.3 as f32 / ui.viewport.2 as f32;
-
+        let ui_viewport = if res.config.low_resolution_mode {
+            (ui.viewport.0 / 2, ui.viewport.1 / 2, ui.viewport.2 / 2, ui.viewport.3 / 2)
+        } else {
+            ui.viewport
+        };
+        let vp = res.camera.viewport.unwrap_or(ui_viewport);
+        let viewport_window = Some(ui_viewport);
         let viewport_chart = if res.chart_target.is_some() {
-            Some((vp.0 - ui.viewport.0, vp.1 - ui.viewport.1, vp.2, vp.3))
+            Some((vp.0 - ui_viewport.0, vp.1 - ui_viewport.1, vp.2, vp.3))
         } else {
             res.camera.viewport
         };
-        let viewport_window = Some(ui.viewport);
+
+        let asp2_window = ui_viewport.2 as f32 / ui_viewport.3 as f32;
+        let asp2_chart = vp.2 as f32 / vp.3 as f32;
+        let asp2_ui = vp.3 as f32 / vp.2 as f32;
+        let asp2_ui_window = ui_viewport.3 as f32 / ui_viewport.2 as f32;
 
         let chart_onto = res
             .chart_target
@@ -1383,7 +1388,7 @@ impl Scene for GameScene {
             let dim_alpha = 0.7;
             //let alpha = res.alpha * (1. - dim_alpha) + dim_alpha;    
             let dim = Color::new(0.1, 0.1, 0.1, dim_alpha * res.alpha);
-            let x_range = vp.0 as f32 / ui.viewport.2 as f32;
+            let x_range = vp.0 as f32 / ui_viewport.2 as f32;
             let y_range =  vp.1 as f32 / vp.3 as f32;
             draw_rectangle(-1., -h,x_range * 2., h * 2., dim); // Left
             draw_rectangle(1., -h,-x_range * 2., h * 2., dim); // Right
@@ -1497,7 +1502,7 @@ impl Scene for GameScene {
                 self.tweak_offset(ui, Self::interactive(&self.res, &self.state), tm);
             }
             if self.res.config.touch_debug {
-                for touch in Judge::get_touches(1.0) {
+                for touch in Judge::get_touches(1.0, self.res.config.low_resolution_mode) {
                     ui.fill_circle(touch.position.x, touch.position.y, 0.04, Color { a: 0.4, ..RED });
                 }
             }
@@ -1513,7 +1518,7 @@ impl Scene for GameScene {
             self.overlay_ui(ui, tm)?;
         }
 
-        if msaa || !self.res.no_effect {
+        if !self.res.no_effect || msaa || self.res.config.low_resolution_mode {
             // render the texture onto screen
             if let Some(target) = &self.res.chart_target {
                 self.gl.flush();
@@ -1521,7 +1526,7 @@ impl Scene for GameScene {
                 set_camera(&Camera2D {
                     zoom: vec2(1., asp2_window),
                     render_target: self.res.camera.render_target,
-                    viewport: viewport_window,
+                    viewport: Some(ui.viewport),
                     ..Default::default()
                 });
                 draw_texture_ex(

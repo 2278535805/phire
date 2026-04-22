@@ -439,7 +439,7 @@ impl Main {
             }
         }
         Judge::on_new_frame();
-        let mut touches = Judge::get_touches(1.0);
+        let mut touches = Judge::get_touches(1.0, false);
         touches.iter_mut().for_each(f);
         if !touches.is_empty() {
             let now = self.tm.now();

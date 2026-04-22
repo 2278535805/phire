@@ -680,7 +680,12 @@ impl Resource {
             return false;
         }
         self.last_vp = vp;
-        if !self.no_effect || self.config.sample_count != 1 {
+        let vp = if self.config.low_resolution_mode {
+            (vp.0 / 2, vp.1 / 2, vp.2 / 2, vp.3 / 2)
+        } else {
+            vp
+        };
+        if !self.no_effect || self.config.sample_count != 1 || self.config.low_resolution_mode {
             self.chart_target = Some(MSRenderTarget::new((vp.2 as u32, vp.3 as u32), self.config.sample_count));
         }
         fn viewport(aspect_ratio: f32, (x, y, w, h): (i32, i32, i32, i32)) -> (i32, i32, i32, i32) {
