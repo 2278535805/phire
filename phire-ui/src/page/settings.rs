@@ -280,7 +280,8 @@ struct GeneralList {
     fullscreen_btn: DRectButton,
     mp_btn: DRectButton,
     mp_addr_btn: DRectButton,
-    lowq_btn: DRectButton,
+    anti_aliasing_btn: DRectButton,
+    low_resolution_btn: DRectButton,
     insecure_btn: DRectButton,
 }
 
@@ -304,7 +305,8 @@ impl GeneralList {
             fullscreen_btn: DRectButton::new(),
             mp_btn: DRectButton::new(),
             mp_addr_btn: DRectButton::new(),
-            lowq_btn: DRectButton::new(),
+            anti_aliasing_btn: DRectButton::new(),
+            low_resolution_btn: DRectButton::new(),
             insecure_btn: DRectButton::new(),
         }
     }
@@ -340,8 +342,12 @@ impl GeneralList {
             request_input("mp_addr", &config.mp_address, tl!("item-mp-addr"));
             return Ok(Some(true));
         }
-        if self.lowq_btn.touch(touch, t) {
+        if self.anti_aliasing_btn.touch(touch, t) {
             config.sample_count = if config.sample_count == 1 { 2 } else { 1 };
+            return Ok(Some(true));
+        }
+        if self.low_resolution_btn.touch(touch, t) {
+            config.low_resolution_mode ^= true;
             return Ok(Some(true));
         }
         if self.insecure_btn.touch(touch, t) {
@@ -414,8 +420,12 @@ impl GeneralList {
             self.mp_addr_btn.render_text(ui, rr, t, c.a, &config.mp_address, 0.4, false);
         }
         item! {
-            render_title(ui, c, tl!("item-lowq"), Some(tl!("item-lowq-sub")));
-            render_switch(ui, rr, t, c, &mut self.lowq_btn, config.sample_count == 1);
+            render_title(ui, c, tl!("item-anti-aliasing"), None);
+            render_switch(ui, rr, t, c, &mut self.anti_aliasing_btn, config.sample_count == 2);
+        }
+        item! {
+            render_title(ui, c, tl!("item-low-resolution"), None);
+            render_switch(ui, rr, t, c, &mut self.low_resolution_btn, config.low_resolution_mode);
         }
         item! {
             render_title(ui, c, tl!("item-insecure"), Some(tl!("item-insecure-sub")));
