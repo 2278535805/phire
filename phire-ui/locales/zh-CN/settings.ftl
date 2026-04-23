@@ -70,6 +70,7 @@ item-rotation-flat-mode-sub = 此模式会根据开始游戏时的方向来矫�
 item-shake-play-mode = 摇一摇模式
 
 item-health-mode = 生存模式
+item-health-mode-example = 生存模式示例
 item-max-health = 最大血量
 item-initial-health = 初始血量
 

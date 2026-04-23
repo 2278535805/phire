@@ -5,15 +5,33 @@ use crate::{get_data, get_data_mut, popup::ChooseButton, save_data, scene::BGM_V
 use anyhow::Result;
 use macroquad::prelude::*;
 use phire::{
-    ext::{poll_future, semi_black, validate_combo, LocalTask, RectExt, SafeTexture, ScaleType},
-    l10n::{LanguageIdentifier, LANG_IDENTS, LANG_NAMES},
-    scene::{request_input, return_input, show_error, show_message, take_input},
-    ui::{DRectButton, Scroll, Slider, Ui},
+    ext::{LocalTask, RectExt, SafeTexture, ScaleType, poll_future, semi_black, validate_combo},
     health::HealthType,
+    l10n::{LANG_IDENTS, LANG_NAMES, LanguageIdentifier},
+    scene::{request_input, return_input, show_error, show_message, take_input},
+    ui::{DRectButton, Dialog, Scroll, Slider, Ui}
 };
 use std::{borrow::Cow, net::ToSocketAddrs, sync::atomic::Ordering};
 
 const ITEM_HEIGHT: f32 = 0.15;
+const HEALTH_MODE_DIALOG_INFO: &'static str = r#""classic"
+
+{
+    "comboHeal": {
+        "comboForHeal": 10
+    }
+}
+
+{
+    "speedBased": {
+        "successFactor": 0.1,
+        "failureFactor": 0.2,
+        "maxHealthJudgeSpeed": 1.0,
+        "minHealthJudgeSpeed": -8.0,
+        "maxHealthTimeSpeed": 1.0,
+        "minHealthTimeSpeed": -1.2
+    }
+}"#;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum SettingListType {
@@ -802,12 +820,13 @@ impl OtherList {
         }
 
         if self.health_mode_btn.touch(touch, t) {
-            config.health_mode_type = match config.health_mode_type {
-                None => Some(HealthType::None),
-                Some(HealthType::None) => Some(HealthType::ComboHeal { combo_for_heal: 10 }),
-                Some(HealthType::ComboHeal { .. }) => Some(HealthType::SpeedBased { success_factor: 0.1, failure_factor: 0.3, min_health_judge_speed: -8.0, max_health_judge_speed: 1.0, min_health_time_speed: -1.2, max_health_time_speed: 1.0 }),
-                Some(HealthType::SpeedBased { .. }) => None,
+            Dialog::info(tl!("item-health-mode-example"), HEALTH_MODE_DIALOG_INFO).show();
+            let text = if let Some(health_mode_type) = config.health_mode_type.clone() {
+                health_mode_type.to_json()?
+            } else {
+                String::new()
             };
+            request_input("health-mode", &text, tl!("item-health-mode"));
             return Ok(Some(true));
         }
 
@@ -841,6 +860,26 @@ impl OtherList {
                 }
                 data.config.combo = text;
                 return Ok(true);
+            } else {
+                return_input(id, text);
+            }
+        }
+        if let Some((id, text)) = take_input() {
+            if id == "health-mode" {
+                if text.trim().is_empty() {
+                    data.config.health_mode_type = None;
+                    return Ok(true);
+                }
+                match HealthType::from_json(&text) {
+                    Ok(health) => {
+                        data.config.health_mode_type = Some(health);
+                        return Ok(true);
+                    }
+                    Err(_) => {
+                        show_message(tl!("illegal-input")).error();
+                        return Ok(false);
+                    }
+                }
             } else {
                 return_input(id, text);
             }
@@ -948,9 +987,9 @@ impl OtherList {
             render_title(ui, c, tl!("item-health-mode"), None);
             let text = match config.health_mode_type {
                 None => "OFF",
-                Some(HealthType::None) => "::None",
-                Some(HealthType::ComboHeal { .. }) => "::ComboHeal",
-                Some(HealthType::SpeedBased { .. }) => "::SpeedBased",
+                Some(HealthType::Classic) => "Classic",
+                Some(HealthType::ComboHeal { .. }) => "ComboHeal",
+                Some(HealthType::SpeedBased { .. }) => "SpeedBased",
             };
             self.health_mode_btn.render_text(ui, rr, t, c.a, text, 0.4, false);
         }

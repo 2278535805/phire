@@ -594,7 +594,7 @@ impl Resource {
             FxHashMap::default()
         };
 
-        let health = Health::new(config.health_mode_type.clone().unwrap_or(HealthType::None), config.max_health, config.initial_health);
+        let health = Health::new(config.health_mode_type.clone().unwrap_or(HealthType::Classic), config.max_health, config.initial_health);
 
         macroquad::window::gl_set_drawcall_buffer_capacity(MAX_SIZE * 4, MAX_SIZE * 6);
         Ok(Self {
@@ -656,7 +656,7 @@ impl Resource {
     pub fn reset(&mut self) {
         self.judge_line_color = self.res_pack.info.line_perfect();
         self.emitter.emitter_square.config.rng = Some(Pcg32::seed_from_u64(RNG_SEED));
-        self.health = Health::new(self.config.health_mode_type.clone().unwrap_or(HealthType::None), self.config.max_health, self.config.initial_health);
+        self.health = Health::new(self.config.health_mode_type.clone().unwrap_or(HealthType::Classic), self.config.max_health, self.config.initial_health);
     }
 
     pub fn emit_at_origin(&mut self, rotation: f32, color: Color) {

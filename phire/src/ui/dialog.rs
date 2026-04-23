@@ -51,6 +51,24 @@ impl Dialog {
         }
     }
 
+    pub fn info(title: impl Into<String>, message: impl Into<String>) -> Self {
+        let message: String = message.into();
+        Self {
+            title: title.into(),
+            message: message.clone(),
+            buttons: vec![tl!("info-copy").to_string(), tl!("ok").to_string()],
+            listener: Some(Box::new(move |pos| {
+                if pos == 0 {
+                    unsafe { get_internal_gl() }.quad_context.clipboard_set(&message);
+                    show_message(tl!("copied")).ok();
+                }
+            })),
+
+            rect_buttons: vec![DRectButton::new(); 2],
+            ..Default::default()
+        }
+    }
+
     pub fn error(error: Error) -> Self {
         let error = format!("{error:?}");
         Self {
@@ -60,7 +78,7 @@ impl Dialog {
             listener: Some(Box::new(move |pos| {
                 if pos == 0 {
                     unsafe { get_internal_gl() }.quad_context.clipboard_set(&error);
-                    show_message(tl!("error-copied")).ok();
+                    show_message(tl!("copied")).ok();
                 }
             })),
 

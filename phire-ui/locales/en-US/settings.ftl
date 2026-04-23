@@ -70,6 +70,7 @@ item-rotation-flat-mode-sub = Orientation calibrates when the game starts. If it
 item-shake-play-mode = Shake Mode
 
 item-health-mode = Health Mode
+item-health-mode-example = Health Mode Example
 item-max-health = Max Health
 item-initial-health = Initial Health
 
