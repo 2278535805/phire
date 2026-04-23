@@ -11,7 +11,6 @@ pub use crate::{
     judge::HitSound,
 };
 
-//const HOLD_PARTICLE_INTERVAL: f32 = 0.15;
 const FADEOUT_TIME: f64 = 0.16;
 const BAD_TIME: f64 = 0.5;
 
@@ -146,10 +145,8 @@ impl Note {
             return;
         }
         self.object.set_time(res.time);
-        //let mut _immediate_particle = false;
         let color = if let JudgeStatus::Hold(perfect, ref mut at, ..) = self.judge {
             if res.time >= *at {
-                //_immediate_particle = true;
                 let beat = 30. / bpm_list.now_bpm(
                     if bpm_list.per_line_bpm_storage { index as f64 } else { self.time }
                 );
@@ -293,7 +290,6 @@ impl Note {
             if base < over {
                 return;
             } else if base < fade_out {
-                //color.a *= (fade_out - base) / (fade_out - over);
                 color.a *= (base - over) / (fade_out - over);
             }
         }
@@ -345,7 +341,7 @@ impl Note {
                     }
 
                     let end_height = end_height / aspect_ratio * spd;
-                    let time = if res.time >= self.time {res.time} else {self.time};
+                    let time = if res.time >= self.time { res.time } else { self.time };
 
                     //let clip = !config.draw_below && config.settings.hold_partial_cover;
                     let clip = false;
@@ -369,15 +365,6 @@ impl Note {
                         end_height - line_height
                     };
 
-                    //let max_hold_height = 3. / res.config.chart_ratio / res.aspect_ratio;
-                    //let top = if res.config.aggressive && hold_height - hold_line_height >= max_hold_height { bottom + max_hold_height } else { top };
-
-                    //println!("res.time:{:.6}\tend_height:{:.7}\tspd:{}\tend_spd:{:.7}\tline_height:{:.6}\th:{}\tbottom:{:.6}\ttop:{:.6}\thold_height:{} {}", res.time, end_height, spd, end_spd, line_height, h, bottom, top, hold_height, height - h);
-
-                    //if res.time < self.time && bottom < -1e-6 && (!config.settings.hold_partial_cover && !matches!(res.chart_format, ChartFormat::Pgr)) {
-                    //    return;
-                    //}
-
                     let style = if res.config.render_double_hint && self.multiple_hint {
                         &res.res_pack.note_style_mh
                     } else {
@@ -387,7 +374,6 @@ impl Note {
                     let tex = &style.hold;
                     let ratio = style.hold_ratio();
                     // body
-                    // TODO (end_height - height) is not always total height
                     draw_tex(
                         res,
                         **(if res.res_pack.info.hold_repeat {
