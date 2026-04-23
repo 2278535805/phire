@@ -604,6 +604,9 @@ impl GameScene {
         }
         let lf = -aspect_ratio + margin;
         let bt = -top - eps * 3.5 + (1. - p) * 0.4;
+        if res.config.health_mode_type.is_some() && matches!(self.mode, GameMode::Normal | GameMode::NoRetry | GameMode::View) {
+            draw_text_aligned_opt_width(ui, &format!("{:.2} / {:.2}", &res.health.now_health, &res.health.max_health), lf, 0., (0., 1.), 0.505 * scale_ratio, semi_white(0.5 * c.a), 0.9 * aspect_ratio);
+        }
         if res.config.render_ui_name {
             self.chart.with_element(ui, res, UIElement::Name, Some((lf, bt)), Some((lf, bt)), |ui, color| {
                 draw_text_aligned_opt_width(ui, &res.info.name, lf, bt, (0., 1.), 0.505 * scale_ratio, Color { a: color.a * c.a, ..color }, 0.9 * aspect_ratio);
@@ -1116,7 +1119,7 @@ impl Scene for GameScene {
                 time
             }
             State::Playing => {
-                if time >= self.res.track_length + WAIT_TIME {
+                if time >= self.res.track_length + WAIT_TIME || (self.res.health.state.track_failed && matches!(self.mode, GameMode::Normal | GameMode::NoRetry | GameMode::View)) {
                     self.music.pause()?;
                     self.state = State::Ending;
                 }
@@ -1124,7 +1127,7 @@ impl Scene for GameScene {
             }
             State::Ending => {
                 let t = time - self.res.track_length - WAIT_TIME;
-                if t >= Self::WAIT_AFTER_TIME {
+                if t >= Self::WAIT_AFTER_TIME || self.res.health.state.track_failed {
                     if self.res.config.autoplay() {
                         self.judge.commit_all(&mut self.chart);
                     }
@@ -1190,6 +1193,9 @@ impl Scene for GameScene {
             let angle = GYRO.lock().unwrap().get_angle(&self.res.config);
 
             self.judge.update(&mut self.res, &mut self.chart, &mut self.bad_notes, -angle);
+            if self.res.config.health_mode_type.is_some() && matches!(self.state, State::Playing) {
+                self.res.health.update(time as f32);
+            }
             self.gl.quad_gl.viewport(None);
         }
         if let Some(update) = &mut self.update_fn {

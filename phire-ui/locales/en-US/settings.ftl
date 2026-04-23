@@ -69,8 +69,13 @@ item-rotation-flat-mode = Rotation Mode - Lay Flat
 item-rotation-flat-mode-sub = Orientation calibrates when the game starts. If its wrong, tap reset on the pause screen.
 item-shake-play-mode = Shake Mode
 
+item-health-mode = Health Mode
+item-max-health = Max Health
+item-initial-health = Initial Health
+
 load-cali-failed = Failed to load audio
 not-combo = Cannot be COMBO
+illegal-input = Illegal input
 
 about-content =
   Phira v{ $version }

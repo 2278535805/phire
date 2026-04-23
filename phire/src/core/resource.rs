@@ -4,6 +4,7 @@ use crate::{
     core::tween::Tweenable,
     ext::{SafeTexture, create_audio_manger, nalgebra_to_glm},
     fs::FileSystem,
+    health::{Health, HealthType},
     info::ChartInfo,
     particle::{AtlasConfig, ColorCurve, Curve, Emitter, EmitterConfig, Interpolation, ParticleShape}
 };
@@ -492,6 +493,8 @@ pub struct Resource {
 
     particle_pos_map: FxHashMap<(i32, i32), VecDeque<f64>>,
     pub note_pos_map: FxHashMap<(i32, i32), u8>,
+
+    pub health: Health,
 }
 
 impl Resource {
@@ -591,6 +594,8 @@ impl Resource {
             FxHashMap::default()
         };
 
+        let health = Health::new(config.health_mode_type.clone().unwrap_or(HealthType::None), config.max_health, config.initial_health);
+
         macroquad::window::gl_set_drawcall_buffer_capacity(MAX_SIZE * 4, MAX_SIZE * 6);
         Ok(Self {
             config,
@@ -643,12 +648,15 @@ impl Resource {
 
             particle_pos_map,
             note_pos_map,
+
+            health,
         })
     }
 
     pub fn reset(&mut self) {
         self.judge_line_color = self.res_pack.info.line_perfect();
         self.emitter.emitter_square.config.rng = Some(Pcg32::seed_from_u64(RNG_SEED));
+        self.health = Health::new(self.config.health_mode_type.clone().unwrap_or(HealthType::None), self.config.max_health, self.config.initial_health);
     }
 
     pub fn emit_at_origin(&mut self, rotation: f32, color: Color) {

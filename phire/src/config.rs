@@ -3,6 +3,8 @@ use std::fmt;
 use bitflags::bitflags;
 use serde::{Deserialize, Serialize};
 
+use crate::health::HealthType;
+
 bitflags! {
     #[derive(Clone, Copy, Default, Deserialize, Serialize, PartialEq, Eq, Debug)]
     #[serde(transparent)]
@@ -123,6 +125,10 @@ pub struct Config {
     pub play_end_time: Option<f64>,
     #[cfg(feature = "play")]
     pub shake_play_mode: bool,
+
+    pub health_mode_type: Option<HealthType>,
+    pub max_health: f32,
+    pub initial_health: f32,
 }
 
 impl Default for Config {
@@ -211,6 +217,10 @@ impl Default for Config {
             play_end_time: None,
             #[cfg(feature = "play")]
             shake_play_mode: false,
+
+            health_mode_type: None,
+            max_health: 100.,
+            initial_health: 70.,
         }
     }
 }

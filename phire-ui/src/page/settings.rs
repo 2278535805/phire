@@ -9,6 +9,7 @@ use phire::{
     l10n::{LanguageIdentifier, LANG_IDENTS, LANG_NAMES},
     scene::{request_input, return_input, show_error, show_message, take_input},
     ui::{DRectButton, Scroll, Slider, Ui},
+    health::HealthType,
 };
 use std::{borrow::Cow, net::ToSocketAddrs, sync::atomic::Ordering};
 
@@ -706,6 +707,10 @@ struct OtherList {
     rotation_flat_mode: DRectButton,
     #[cfg(feature = "play")]
     shake_play_mode_btn: DRectButton,
+
+    health_mode_btn: DRectButton,
+    max_health_btn: DRectButton,
+    initial_health_btn: DRectButton,
 }
 
 impl OtherList {
@@ -724,6 +729,10 @@ impl OtherList {
             rotation_flat_mode: DRectButton::new(),
             #[cfg(feature = "play")]
             shake_play_mode_btn: DRectButton::new(),
+
+            health_mode_btn: DRectButton::new(),
+            max_health_btn: DRectButton::new(),
+            initial_health_btn: DRectButton::new(),
         }
     }
 
@@ -791,6 +800,26 @@ impl OtherList {
             config.shake_play_mode ^= true;
             return Ok(Some(true));
         }
+
+        if self.health_mode_btn.touch(touch, t) {
+            config.health_mode_type = match config.health_mode_type {
+                None => Some(HealthType::None),
+                Some(HealthType::None) => Some(HealthType::ComboHeal { combo_for_heal: 10 }),
+                Some(HealthType::ComboHeal { .. }) => Some(HealthType::SpeedBased { success_factor: 0.1, failure_factor: 0.2, min_health_judge_speed: -8.0, max_health_judge_speed: 1.0, min_health_time_speed: -1.2, max_health_time_speed: 1.0 }),
+                Some(HealthType::SpeedBased { .. }) => None,
+            };
+            return Ok(Some(true));
+        }
+
+        if self.max_health_btn.touch(touch, t) {
+            request_input("max-health", &config.max_health.to_string(), tl!("item-max-health"));
+            return Ok(Some(true));
+        }
+
+        if self.initial_health_btn.touch(touch, t) {
+            request_input("initial-health", &config.initial_health.to_string(), tl!("item-initial-health"));
+            return Ok(Some(true));
+        }
         Ok(None)
     }
 
@@ -812,6 +841,38 @@ impl OtherList {
                 }
                 data.config.combo = text;
                 return Ok(true);
+            } else {
+                return_input(id, text);
+            }
+        }
+        if let Some((id, text)) = take_input() {
+            if id == "max-health" {
+                match text.parse::<f32>() {
+                    Ok(num) => {
+                        data.config.max_health = num;
+                        return Ok(true);
+                    }
+                    Err(_) => {
+                        show_message(tl!("illegal-input")).error();
+                        return Ok(false);
+                    }
+                }
+            } else {
+                return_input(id, text);
+            }
+        }
+        if let Some((id, text)) = take_input() {
+            if id == "initial-health" {
+                match text.parse::<f32>() {
+                    Ok(num) => {
+                        data.config.initial_health = num;
+                        return Ok(true);
+                    }
+                    Err(_) => {
+                        show_message(tl!("illegal-input")).error();
+                        return Ok(false);
+                    }
+                }
             } else {
                 return_input(id, text);
             }
@@ -881,6 +942,25 @@ impl OtherList {
         item! {
             render_title(ui, c, tl!("item-shake-play-mode"), None);
             render_switch(ui, rr, t, c, &mut self.shake_play_mode_btn, config.shake_play_mode);
+        }
+
+        item! {
+            render_title(ui, c, tl!("item-health-mode"), None);
+            let text = match config.health_mode_type {
+                None => "OFF",
+                Some(HealthType::None) => "::None",
+                Some(HealthType::ComboHeal { .. }) => "::ComboHeal",
+                Some(HealthType::SpeedBased { .. }) => "::SpeedBased",
+            };
+            self.health_mode_btn.render_text(ui, rr, t, c.a, text, 0.4, false);
+        }
+        item! {
+            render_title(ui, c, tl!("item-max-health"), None);
+            self.max_health_btn.render_text(ui, rr, t, c.a, &format!("{:.2}", config.max_health), 0.4, false);
+        }
+        item! {
+            render_title(ui, c, tl!("item-initial-health"), None);
+            self.initial_health_btn.render_text(ui, rr, t, c.a, &format!("{:.2}", config.initial_health), 0.4, false);
         }
         (w, h)
     }
