@@ -579,6 +579,18 @@ impl Resource {
 
         let emitter = ParticleEmitter::new(&res_pack, note_scale, Some(config.clone()));
 
+        // aggressive 401 × 401 = 160,801
+        let particle_pos_map = if config.aggressive_particle {
+            FxHashMap::with_capacity_and_hasher(160801, Default::default())
+        } else {
+            FxHashMap::default()
+        };
+        let note_pos_map = if config.aggressive_note {
+            FxHashMap::with_capacity_and_hasher(160801, Default::default())
+        } else {
+            FxHashMap::default()
+        };
+
         macroquad::window::gl_set_drawcall_buffer_capacity(MAX_SIZE * 4, MAX_SIZE * 6);
         Ok(Self {
             config,
@@ -629,9 +641,8 @@ impl Resource {
             #[cfg(feature = "play")]
             shake_play_paused: false,
 
-            // aggressive
-            particle_pos_map: FxHashMap::with_capacity_and_hasher(262144, Default::default()), // 401 × 401 = 160,801, particles may exist outside the screen
-            note_pos_map: FxHashMap::with_capacity_and_hasher(262144, Default::default()),
+            particle_pos_map,
+            note_pos_map,
         })
     }
 
