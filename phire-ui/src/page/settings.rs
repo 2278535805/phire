@@ -805,7 +805,7 @@ impl OtherList {
             config.health_mode_type = match config.health_mode_type {
                 None => Some(HealthType::None),
                 Some(HealthType::None) => Some(HealthType::ComboHeal { combo_for_heal: 10 }),
-                Some(HealthType::ComboHeal { .. }) => Some(HealthType::SpeedBased { success_factor: 0.1, failure_factor: 0.2, min_health_judge_speed: -8.0, max_health_judge_speed: 1.0, min_health_time_speed: -1.2, max_health_time_speed: 1.0 }),
+                Some(HealthType::ComboHeal { .. }) => Some(HealthType::SpeedBased { success_factor: 0.1, failure_factor: 0.3, min_health_judge_speed: -8.0, max_health_judge_speed: 1.0, min_health_time_speed: -1.2, max_health_time_speed: 1.0 }),
                 Some(HealthType::SpeedBased { .. }) => None,
             };
             return Ok(Some(true));
