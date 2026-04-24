@@ -482,6 +482,7 @@ impl JudgeLine {
                             let note_height = ((note.height - line_height) * speed + note.object.translation.1.now() as f64) / aspect_ratio;
                             match note.kind {   
                                 NoteKind::Hold { end_height, .. } => {
+                                    let end_height = ((end_height - line_height) * speed + note.object.translation.1.now() as f64) / aspect_ratio;
                                     if end_height < height_below {
                                         continue;
                                     }
@@ -529,6 +530,7 @@ impl JudgeLine {
                                 let note_height = ((note.height - line_height) * speed + note.object.translation.1.now() as f64) / aspect_ratio;
                                 match note.kind {   
                                     NoteKind::Hold { end_height, .. } => {
+                                        let end_height = ((end_height - line_height) * speed + note.object.translation.1.now() as f64) / aspect_ratio;
                                         if end_height < -height_above {
                                             continue;
                                         }
