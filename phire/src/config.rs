@@ -125,7 +125,7 @@ pub struct Config {
     pub play_end_time: Option<f64>,
     #[cfg(feature = "play")]
     pub shake_play_mode: bool,
-
+    #[cfg(feature = "play")]
     pub health_mode: Option<HealthConfig>,
 }
 
@@ -215,7 +215,7 @@ impl Default for Config {
             play_end_time: None,
             #[cfg(feature = "play")]
             shake_play_mode: false,
-
+            #[cfg(feature = "play")]
             health_mode: None,
         }
     }

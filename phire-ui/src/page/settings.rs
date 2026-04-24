@@ -727,7 +727,7 @@ impl OtherList {
             rotation_flat_mode: DRectButton::new(),
             #[cfg(feature = "play")]
             shake_play_mode_btn: DRectButton::new(),
-
+            #[cfg(feature = "play")]
             health_mode_btn: DRectButton::new(),
         }
     }
@@ -796,7 +796,7 @@ impl OtherList {
             config.shake_play_mode ^= true;
             return Ok(Some(true));
         }
-
+        #[cfg(feature = "play")]
         if self.health_mode_btn.touch(touch, t) {
             let text = if let Some(health_mode) = config.health_mode.clone() {
                 health_mode.to_json()?
@@ -831,6 +831,7 @@ impl OtherList {
                 return_input(id, text);
             }
         }
+        #[cfg(feature = "play")]
         if let Some((id, text)) = take_input() {
             if id == "health-mode" {
                 if text.trim().is_empty() {
@@ -917,7 +918,7 @@ impl OtherList {
             render_title(ui, c, tl!("item-shake-play-mode"), None);
             render_switch(ui, rr, t, c, &mut self.shake_play_mode_btn, config.shake_play_mode);
         }
-
+        #[cfg(feature = "play")]
         item! {
             render_title(ui, c, tl!("item-health-mode"), Some(tl!("item-health-mode-sub")));
             let text = match config.health_mode.clone().map(|it| it.mode) {
