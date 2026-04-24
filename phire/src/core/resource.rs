@@ -656,7 +656,7 @@ impl Resource {
     pub fn reset(&mut self) {
         self.judge_line_color = self.res_pack.info.line_perfect();
         self.emitter.emitter_square.config.rng = Some(Pcg32::seed_from_u64(RNG_SEED));
-        self.health = Health::new(self.config.health_mode.clone().unwrap_or_default());
+        self.health.reset();
     }
 
     pub fn emit_at_origin(&mut self, rotation: f32, color: Color) {

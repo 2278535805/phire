@@ -9,60 +9,11 @@ use phire::{
     health::{HealthConfig, HealthType},
     l10n::{LANG_IDENTS, LANG_NAMES, LanguageIdentifier},
     scene::{request_input, return_input, show_error, show_message, take_input},
-    ui::{DRectButton, Dialog, Scroll, Slider, Ui}
+    ui::{DRectButton, Scroll, Slider, Ui}
 };
 use std::{borrow::Cow, net::ToSocketAddrs, sync::atomic::Ordering};
 
 const ITEM_HEIGHT: f32 = 0.15;
-const HEALTH_MODE_DIALOG_INFO: &'static str = r#"
-{
-  "mode": "classic",
-  "max_health": 100.0,
-  "initial_health": 70.0,
-  "perfect_heal": true,
-  "good_heal": false,
-  "bad_heal": false,
-  "perfect_factor": 1.0,
-  "good_factor": -1.0,
-  "bad_factor": -3.0
-}
-
-{
-  "mode": {
-    "comboHeal": {
-      "comboForHeal": 10
-    }
-  },
-  "max_health": 100.0,
-  "initial_health": 70.0,
-  "perfect_heal": true,
-  "good_heal": false,
-  "bad_heal": false,
-  "perfect_factor": 1.0,
-  "good_factor": -1.0,
-  "bad_factor": -3.0
-}
-
-{
-  "mode": {
-    "speedBased": {
-      "successFactor": 0.1,
-      "failureFactor": 0.2,
-      "maxHealthJudgeSpeed": 1.0,
-      "minHealthJudgeSpeed": -8.0,
-      "maxHealthTimeSpeed": 1.0,
-      "minHealthTimeSpeed": -1.2
-    }
-  },
-  "max_health": 100.0,
-  "initial_health": 70.0,
-  "perfect_heal": true,
-  "good_heal": false,
-  "bad_heal": false,
-  "perfect_factor": 1.0,
-  "good_factor": -1.0,
-  "bad_factor": -3.0
-}"#;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum SettingListType {
@@ -847,7 +798,6 @@ impl OtherList {
         }
 
         if self.health_mode_btn.touch(touch, t) {
-            Dialog::info(tl!("item-health-mode-example"), HEALTH_MODE_DIALOG_INFO).show();
             let text = if let Some(health_mode) = config.health_mode.clone() {
                 health_mode.to_json()?
             } else {
@@ -969,12 +919,12 @@ impl OtherList {
         }
 
         item! {
-            render_title(ui, c, tl!("item-health-mode"), None);
+            render_title(ui, c, tl!("item-health-mode"), Some(tl!("item-health-mode-sub")));
             let text = match config.health_mode.clone().map(|it| it.mode) {
                 None => "OFF",
-                Some(HealthType::Classic) => "Classic",
-                Some(HealthType::ComboHeal { .. }) => "ComboHeal",
-                Some(HealthType::SpeedBased { .. }) => "SpeedBased",
+                Some(HealthType::Classic{}) => "classic",
+                Some(HealthType::ComboHeal{ .. }) => "comboHeal",
+                Some(HealthType::SpeedBased{ .. }) => "speedBased",
             };
             self.health_mode_btn.render_text(ui, rr, t, c.a, text, 0.4, false);
         }

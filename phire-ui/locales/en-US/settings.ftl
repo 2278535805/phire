@@ -71,6 +71,7 @@ item-shake-play-mode = Shake Mode
 
 item-health-mode = Health Mode
 item-health-mode-example = Health Mode Example
+item-health-mode-sub = classic | comboHeal | speedBased
 item-max-health = Max Health
 item-initial-health = Initial Health
 
