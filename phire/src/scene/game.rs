@@ -604,11 +604,11 @@ impl GameScene {
         }
         let lf = -aspect_ratio + margin;
         let bt = -top - eps * 3.5 + (1. - p) * 0.4;
-        if res.config.health_mode_type.is_some() && matches!(self.mode, GameMode::Normal | GameMode::NoRetry | GameMode::View) {
+        if res.config.health_mode.is_some() && matches!(self.mode, GameMode::Normal | GameMode::NoRetry | GameMode::View) {
             let w = aspect_ratio * 0.05;
             let y = -top - eps * 9.;
             let h = top * 2. + eps * 23.;
-            let dh = res.health.now_health / res.health.max_health * h;
+            let dh = res.health.config.initial_health / res.health.config.max_health * h;
             ui.fill_rect(
                 Rect::new(lf, y, w, h),
                 Color::new(0.4, 0.4, 0.4, 1.),
@@ -617,7 +617,7 @@ impl GameScene {
                 Rect::new(lf, y, w, dh),
                 Color::new(0.6, 0.6, 0.6, 1.),
             );
-            draw_text_aligned_opt_width(ui, &format!("{:.0}", &res.health.now_health), lf + w * 0.5, y + dh - 0.01, (0.5, 1.), 0.4 * scale_ratio, semi_white(0.8 * c.a), 0.9 * aspect_ratio);
+            draw_text_aligned_opt_width(ui, &format!("{:.0}", &res.health.config.initial_health), lf + w * 0.5, y + dh - 0.01, (0.5, 1.), 0.4 * scale_ratio, semi_white(0.8 * c.a), 0.9 * aspect_ratio);
         }
         if res.config.render_ui_name {
             self.chart.with_element(ui, res, UIElement::Name, Some((lf, bt)), Some((lf, bt)), |ui, color| {
@@ -1205,7 +1205,7 @@ impl Scene for GameScene {
             let angle = GYRO.lock().unwrap().get_angle(&self.res.config);
 
             self.judge.update(&mut self.res, &mut self.chart, &mut self.bad_notes, -angle);
-            if self.res.config.health_mode_type.is_some() && matches!(self.state, State::Playing) {
+            if self.res.config.health_mode.is_some() && matches!(self.state, State::Playing) {
                 self.res.health.update(time as f32);
             }
             self.gl.quad_gl.viewport(None);

@@ -620,7 +620,7 @@ impl Judge {
                             NoteKind::Click => {
                                 note.judge = JudgeStatus::Judged;
                                 judgements.push((if dt <= LIMIT_PERFECT { Judgement::Perfect } else { Judgement::Good }, line_id, id, Some(t)));
-                                if res.config.health_mode_type.is_some() {
+                                if res.config.health_mode.is_some() {
                                     res.health.on_judge(Judgement::Perfect);
                                 }
                             }
@@ -637,7 +637,7 @@ impl Judge {
                             // keep the note after bad judgement
                             note.judge = JudgeStatus::PreJudge;
                             judgements.push((Judgement::Bad, line_id, id, None));
-                            if res.config.health_mode_type.is_some() {
+                            if res.config.health_mode.is_some() {
                                 res.health.on_judge(Judgement::Bad);
                             }
                         }
@@ -684,7 +684,7 @@ impl Judge {
                                     Judgement::Bad
                                 };
                             judgements.push((judge, line_id, id, None));
-                            if res.config.health_mode_type.is_some() {
+                            if res.config.health_mode.is_some() {
                                 res.health.on_judge(judge);
                             }
                         }
@@ -718,7 +718,7 @@ impl Judge {
                             if t > *up_time + UP_TOLERANCE {
                                 note.judge = JudgeStatus::Judged;
                                 judgements.push((Judgement::Miss, line_id, *id, None));
-                                if res.config.health_mode_type.is_some() {
+                                if res.config.health_mode.is_some() {
                                     res.health.on_judge(Judgement::Miss);
                                 }
                             } else if up_time.is_infinite() {
@@ -738,7 +738,7 @@ impl Judge {
                 if dt > LIMIT_BAD {
                     note.judge = JudgeStatus::Judged;
                     judgements.push((Judgement::Miss, line_id, *id, None));
-                    if res.config.health_mode_type.is_some() {
+                    if res.config.health_mode.is_some() {
                         res.health.on_judge(Judgement::Miss);
                     }
                     continue;
@@ -776,7 +776,7 @@ impl Judge {
                             note.judge = JudgeStatus::Judged;
                             let judge = if perfect { Judgement::Perfect } else { Judgement::Good };
                             judgements.push((judge, line_id, *id, Some(diff)));
-                            if res.config.health_mode_type.is_some() {
+                            if res.config.health_mode.is_some() {
                                 res.health.on_judge(judge);
                             }
                             continue;
@@ -801,7 +801,7 @@ impl Judge {
                     note.judge = JudgeStatus::Judged;
                     if !matches!(note.kind, NoteKind::Click) {
                         judgements.push((Judgement::Perfect, line_id, *id, diff));
-                        if res.config.health_mode_type.is_some() {
+                        if res.config.health_mode.is_some() {
                             res.health.on_judge(Judgement::Perfect);
                         }
                     }
@@ -913,7 +913,7 @@ impl Judge {
                         if t >= end_time {
                             note.judge = JudgeStatus::Judged;
                             judgements.push((line_id, *id));
-                            if res.config.health_mode_type.is_some() {
+                            if res.config.health_mode.is_some() {
                                 res.health.on_judge(Judgement::Perfect);
                             }
                             continue;
@@ -936,7 +936,7 @@ impl Judge {
                     JudgeStatus::Hold(true, t, judge_time, true, f64::INFINITY)
                 } else {
                     judgements.push((line_id, *id));
-                    if res.config.health_mode_type.is_some() {
+                    if res.config.health_mode.is_some() {
                         res.health.on_judge(Judgement::Perfect);
                     }
                     JudgeStatus::Judged
