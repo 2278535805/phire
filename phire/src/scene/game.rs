@@ -608,16 +608,16 @@ impl GameScene {
             let w = aspect_ratio * 0.05;
             let y = -top - eps * 9.;
             let h = top * 2. + eps * 23.;
-            let dh = res.health.config.initial_health / res.health.config.max_health * h;
+            let dh = res.health.state.now_health / res.health.config.max_health * h;
             ui.fill_rect(
                 Rect::new(lf, y, w, h),
-                Color::new(0.4, 0.4, 0.4, 1.),
+                Color::new(0.4, 0.4, 0.4, c.a),
             );
             ui.fill_rect(
                 Rect::new(lf, y, w, dh),
-                Color::new(0.6, 0.6, 0.6, 1.),
+                Color::new(0.6, 0.6, 0.6, c.a),
             );
-            draw_text_aligned_opt_width(ui, &format!("{:.0}", &res.health.config.initial_health), lf + w * 0.5, y + dh - 0.01, (0.5, 1.), 0.4 * scale_ratio, semi_white(0.8 * c.a), 0.9 * aspect_ratio);
+            draw_text_aligned_opt_width(ui, &format!("{:.0}", &res.health.state.now_health), lf + w * 0.5, y + dh - 0.01, (0.5, 1.), 0.4 * scale_ratio, semi_white(0.8 * c.a), 0.9 * aspect_ratio);
         }
         if res.config.render_ui_name {
             self.chart.with_element(ui, res, UIElement::Name, Some((lf, bt)), Some((lf, bt)), |ui, color| {
