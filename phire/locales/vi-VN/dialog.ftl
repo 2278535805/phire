@@ -4,4 +4,4 @@ ok = OK
 
 error = Lỗi
 error-copy = Chép lỗi
-error-copied = Đã chép
+copied = Đã chép

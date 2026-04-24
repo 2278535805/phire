@@ -4,4 +4,7 @@ ok = OK
 
 error = Error
 error-copy = Copy error
-error-copied = Copied
+copied = Copied
+
+info-copy = Copy info
+

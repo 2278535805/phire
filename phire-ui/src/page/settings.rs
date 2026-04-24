@@ -5,10 +5,11 @@ use crate::{get_data, get_data_mut, popup::ChooseButton, save_data, scene::BGM_V
 use anyhow::Result;
 use macroquad::prelude::*;
 use phire::{
-    ext::{poll_future, semi_black, validate_combo, LocalTask, RectExt, SafeTexture, ScaleType},
-    l10n::{LanguageIdentifier, LANG_IDENTS, LANG_NAMES},
+    ext::{LocalTask, RectExt, SafeTexture, ScaleType, poll_future, semi_black, validate_combo},
+    health::{HealthConfig, HealthType},
+    l10n::{LANG_IDENTS, LANG_NAMES, LanguageIdentifier},
     scene::{request_input, return_input, show_error, show_message, take_input},
-    ui::{DRectButton, Scroll, Slider, Ui},
+    ui::{DRectButton, Scroll, Slider, Ui}
 };
 use std::{borrow::Cow, net::ToSocketAddrs, sync::atomic::Ordering};
 
@@ -706,6 +707,8 @@ struct OtherList {
     rotation_flat_mode: DRectButton,
     #[cfg(feature = "play")]
     shake_play_mode_btn: DRectButton,
+
+    health_mode_btn: DRectButton,
 }
 
 impl OtherList {
@@ -724,6 +727,8 @@ impl OtherList {
             rotation_flat_mode: DRectButton::new(),
             #[cfg(feature = "play")]
             shake_play_mode_btn: DRectButton::new(),
+            #[cfg(feature = "play")]
+            health_mode_btn: DRectButton::new(),
         }
     }
 
@@ -791,6 +796,16 @@ impl OtherList {
             config.shake_play_mode ^= true;
             return Ok(Some(true));
         }
+        #[cfg(feature = "play")]
+        if self.health_mode_btn.touch(touch, t) {
+            let text = if let Some(health_mode) = config.health_mode.clone() {
+                health_mode.to_json()?
+            } else {
+                String::new()
+            };
+            request_input("health-mode", &text, tl!("item-health-mode"));
+            return Ok(Some(true));
+        }
         Ok(None)
     }
 
@@ -812,6 +827,27 @@ impl OtherList {
                 }
                 data.config.combo = text;
                 return Ok(true);
+            } else {
+                return_input(id, text);
+            }
+        }
+        #[cfg(feature = "play")]
+        if let Some((id, text)) = take_input() {
+            if id == "health-mode" {
+                if text.trim().is_empty() {
+                    data.config.health_mode = None;
+                    return Ok(true);
+                }
+                match HealthConfig::from_json(&text) {
+                    Ok(health_mode) => {
+                        data.config.health_mode = Some(health_mode);
+                        return Ok(true);
+                    }
+                    Err(_) => {
+                        show_message(tl!("illegal-input")).error();
+                        return Ok(false);
+                    }
+                }
             } else {
                 return_input(id, text);
             }
@@ -881,6 +917,17 @@ impl OtherList {
         item! {
             render_title(ui, c, tl!("item-shake-play-mode"), None);
             render_switch(ui, rr, t, c, &mut self.shake_play_mode_btn, config.shake_play_mode);
+        }
+        #[cfg(feature = "play")]
+        item! {
+            render_title(ui, c, tl!("item-health-mode"), Some(tl!("item-health-mode-sub")));
+            let text = match config.health_mode.clone().map(|it| it.mode) {
+                None => "OFF",
+                Some(HealthType::Classic{}) => "classic",
+                Some(HealthType::ComboHeal{ .. }) => "comboHeal",
+                Some(HealthType::SpeedBased{ .. }) => "speedBased",
+            };
+            self.health_mode_btn.render_text(ui, rr, t, c.a, text, 0.4, false);
         }
         (w, h)
     }
