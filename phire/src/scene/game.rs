@@ -1213,7 +1213,7 @@ impl Scene for GameScene {
 
             self.judge.update(&mut self.res, &mut self.chart, &mut self.bad_notes, -angle);
             #[cfg(feature = "play")]
-            if self.res.config.health_mode.is_some() && matches!(self.state, State::Playing) {
+            if self.res.config.health_mode.is_some() && matches!(self.state, State::Playing) && matches!(self.mode, GameMode::Normal | GameMode::NoRetry | GameMode::View) {
                 self.res.health.update(time as f32);
             }
             self.gl.quad_gl.viewport(None);
