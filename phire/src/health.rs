@@ -173,9 +173,6 @@ impl Health {
             }
             _ => {
                 self.state.now_health = (self.state.now_health + factor).clamp(0.0, self.config.max_health);
-                if self.state.now_health <= 0.0 {
-                    self.state.track_failed = true;
-                }
             }
         }
     }
