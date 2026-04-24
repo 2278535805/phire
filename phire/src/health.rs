@@ -26,8 +26,8 @@ pub struct SpeedBasedJudgeConfig {
     pub success_factor: f32,
     pub failure_factor: f32,
     pub punish_factor: f32,
-    pub max_health_speed: f32,
-    pub min_health_speed: f32,
+    pub max_speed: f32,
+    pub min_speed: f32,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -45,15 +45,15 @@ impl Default for SpeedBasedConfig {
                 success_factor: 0.1,
                 failure_factor: 0.2,
                 punish_factor: 0.0,
-                max_health_speed: 1.0,
-                min_health_speed: -8.0,
+                max_speed: 1.0,
+                min_speed: -8.0,
             },
             without_judge: SpeedBasedJudgeConfig {
                 success_factor: 0.1,
                 failure_factor: 0.0,
                 punish_factor: 0.1,
-                max_health_speed: 1.0,
-                min_health_speed: -1.2,
+                max_speed: 1.0,
+                min_speed: -1.2,
             },
         }
     }
@@ -69,8 +69,8 @@ pub enum HealthType {
 
 #[derive(Default, Deserialize, Serialize, Clone)]
 pub struct HealthState {
-    pub health_judge_speed: f32,
-    pub health_time_speed: f32,
+    pub speed_with_judge: f32,
+    pub speed_without_judge: f32,
     pub cumulative_combo: usize,
     pub track_failed: bool,
     pub now_health: f32,
@@ -79,6 +79,7 @@ pub struct HealthState {
 
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(default)]
+#[serde(rename_all = "camelCase")]
 pub struct HealthConfig {
     pub mode: HealthType,
     pub max_health: f32,
@@ -150,8 +151,8 @@ impl Health {
     fn heal(&mut self, factor: f32) {
         match &self.config.mode {
             HealthType::SpeedBased(config) => {
-                self.state.health_judge_speed = (self.state.health_judge_speed + factor * config.with_judge.success_factor).clamp(config.with_judge.min_health_speed, config.with_judge.max_health_speed);
-                self.state.health_time_speed = (self.state.health_time_speed + config.without_judge.success_factor).clamp(config.without_judge.min_health_speed, config.without_judge.max_health_speed);
+                self.state.speed_with_judge = (self.state.speed_with_judge + factor * config.with_judge.success_factor).clamp(config.with_judge.min_speed, config.with_judge.max_speed);
+                self.state.speed_without_judge = (self.state.speed_without_judge + config.without_judge.success_factor).clamp(config.without_judge.min_speed, config.without_judge.max_speed);
             }
             HealthType::ComboHeal(config) => {
                 self.state.cumulative_combo += 1;
@@ -167,8 +168,8 @@ impl Health {
     fn damage(&mut self, factor: f32) {
         match &self.config.mode {
             HealthType::SpeedBased(config) => {
-                self.state.health_judge_speed = (self.state.health_judge_speed + factor * config.with_judge.failure_factor).clamp(config.with_judge.min_health_speed, config.with_judge.max_health_speed);
-                self.state.health_time_speed = (self.state.health_time_speed + config.without_judge.failure_factor).clamp(config.without_judge.min_health_speed, config.without_judge.max_health_speed);
+                self.state.speed_with_judge = (self.state.speed_with_judge + factor * config.with_judge.failure_factor).clamp(config.with_judge.min_speed, config.with_judge.max_speed);
+                self.state.speed_without_judge = (self.state.speed_without_judge + config.without_judge.failure_factor).clamp(config.without_judge.min_speed, config.without_judge.max_speed);
             }
             _ => {
                 self.state.now_health = (self.state.now_health + factor).clamp(0.0, self.config.max_health);
@@ -209,16 +210,16 @@ impl Health {
         if let HealthType::SpeedBased(config) = &self.config.mode {
             let dt = now - self.state.last_update_time;
             self.state.last_update_time = now;
-            let delta_health = self.state.health_judge_speed * dt;
-            let new_health = self.state.now_health + delta_health + self.state.health_time_speed * dt;
+            let delta_health = self.state.speed_with_judge * dt;
+            let new_health = self.state.now_health + delta_health + self.state.speed_without_judge * dt;
             self.state.now_health = new_health.clamp(0.0, self.config.max_health);
-            self.state.health_judge_speed = (self.state.health_judge_speed - dt * config.with_judge.punish_factor).clamp(config.with_judge.min_health_speed, config.with_judge.max_health_speed);
-            self.state.health_time_speed = (self.state.health_time_speed - dt * config.without_judge.punish_factor).clamp(config.without_judge.min_health_speed, config.without_judge.max_health_speed);
+            self.state.speed_with_judge = (self.state.speed_with_judge - dt * config.with_judge.punish_factor).clamp(config.with_judge.min_speed, config.with_judge.max_speed);
+            self.state.speed_without_judge = (self.state.speed_without_judge - dt * config.without_judge.punish_factor).clamp(config.without_judge.min_speed, config.without_judge.max_speed);
             if self.state.now_health <= 0.0 {
                 self.state.track_failed = true;
             } else if self.state.now_health >= self.config.max_health {
-                self.state.health_judge_speed = self.state.health_judge_speed.min(0.);
-                self.state.health_time_speed = self.state.health_time_speed.min(0.);
+                self.state.speed_with_judge = self.state.speed_with_judge.min(0.);
+                self.state.speed_without_judge = self.state.speed_without_judge.min(0.);
             }
         }
     }
