@@ -66,12 +66,26 @@ impl HitSound {
     pub fn play(&self, res: &mut Resource) {
         match self {
             HitSound::None => {}
-            HitSound::Click => play_sfx(&mut res.sfx_click, &res.config),
-            HitSound::Flick => play_sfx(&mut res.sfx_flick, &res.config),
-            HitSound::Drag => play_sfx(&mut res.sfx_drag, &res.config),
+            HitSound::Click => {
+                if check_hitsound(&mut res.played_hitsounds_count, "click") {
+                    play_sfx(&mut res.sfx_click, &res.config)
+                }
+            },
+            HitSound::Flick => {
+                if check_hitsound(&mut res.played_hitsounds_count, "flick") {
+                    play_sfx(&mut res.sfx_flick, &res.config)
+                }
+            },
+            HitSound::Drag => {
+                if check_hitsound(&mut res.played_hitsounds_count, "drag") {
+                    play_sfx(&mut res.sfx_drag, &res.config)
+                }
+            },
             HitSound::Custom(s) => {
                 if let Some(sfx) = res.extra_sfxs.get_mut(s) {
-                    play_sfx(sfx, &res.config);
+                    if check_hitsound(&mut res.played_hitsounds_count, s) {
+                        play_sfx(sfx, &res.config)
+                    }
                 }
             }
         }
@@ -84,6 +98,16 @@ impl HitSound {
             NoteKind::Drag => HitSound::Drag,
             NoteKind::Hold { .. } => HitSound::Click,
         }
+    }
+}
+
+fn check_hitsound(map: &mut HashMap<String, u8, rustc_hash::FxBuildHasher>, sfx: &str) -> bool {
+    let count = map.entry(sfx.to_string()).or_insert(0);
+    if *count < 5 {
+        *count += 1;
+        true
+    } else {
+        false
     }
 }
 
@@ -375,6 +399,7 @@ impl Judge {
     }
 
     pub fn update(&mut self, res: &mut Resource, chart: &mut Chart, bad_notes: &mut Vec<BadNote>, angle: f32) {
+        res.played_hitsounds_count.clear();
         if res.config.autoplay() {
             self.auto_play_update(res, chart);
             return;

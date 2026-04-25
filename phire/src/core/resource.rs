@@ -1,10 +1,10 @@
 use super::{MSRenderTarget, Matrix, Point, NOTE_WIDTH_RATIO_BASE};
 use crate::{
     config::Config,
-    core::tween::Tweenable,
+    core::{HitSound, tween::Tweenable},
     ext::{SafeTexture, create_audio_manger, nalgebra_to_glm},
     fs::FileSystem,
-    health::{Health, HealthType},
+    health::Health,
     info::ChartInfo,
     particle::{AtlasConfig, ColorCurve, Curve, Emitter, EmitterConfig, Interpolation, ParticleShape}
 };
@@ -493,7 +493,7 @@ pub struct Resource {
 
     particle_pos_map: FxHashMap<(i32, i32), VecDeque<f64>>,
     pub note_pos_map: FxHashMap<(i32, i32), u8>,
-
+    pub played_hitsounds_count: FxHashMap<String, u8>,
     #[cfg(feature = "play")]
     pub health: Health,
 }
@@ -594,6 +594,7 @@ impl Resource {
         } else {
             FxHashMap::default()
         };
+        let hitsounds_map = FxHashMap::with_capacity_and_hasher(4, Default::default());
         #[cfg(feature = "play")]
         let health = Health::new(config.health_mode.clone().unwrap_or_default());
 
@@ -649,6 +650,7 @@ impl Resource {
 
             particle_pos_map,
             note_pos_map,
+            played_hitsounds_count: hitsounds_map,
             #[cfg(feature = "play")]
             health,
         })
