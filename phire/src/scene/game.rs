@@ -318,8 +318,9 @@ impl GameScene {
             ChartExtra::default()
         };
         let bytes = Self::load_chart_bytes(fs, info).await.context("Failed to load chart")?;
+        let text = std::str::from_utf8(&bytes);
         let format = info.format.clone().unwrap_or_else(|| {
-            if let Ok(text) = std::str::from_utf8(&bytes) {
+            if let Ok(text) = text {
                 if text.starts_with('{') {
                     if text.contains("\"META\"") {
                         ChartFormat::Rpe
@@ -334,9 +335,9 @@ impl GameScene {
             }
         });
         let mut chart = match format {
-            ChartFormat::Rpe => parse_rpe(&String::from_utf8_lossy(&bytes), fs, extra).await,
-            ChartFormat::Pgr => parse_phigros(&String::from_utf8_lossy(&bytes), extra),
-            ChartFormat::Pec => parse_pec(&String::from_utf8_lossy(&bytes), extra),
+            ChartFormat::Rpe => parse_rpe(&text?, fs, extra).await,
+            ChartFormat::Pgr => parse_phigros(&text?, extra),
+            ChartFormat::Pec => parse_pec(&text?, extra),
             ChartFormat::Pbc => {
                 let mut r = BinaryReader::new(Cursor::new(bytes));
                 r.read()
