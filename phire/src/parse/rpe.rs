@@ -217,7 +217,7 @@ fn parse_events<T: Tweenable, V: Clone + Into<T>>(
     default: Option<T>,
     bezier_map: &BezierMap,
 ) -> Result<Anim<T>> {
-    let mut kfs = Vec::new();
+    let mut kfs = Vec::with_capacity(rpe.len() * 2 + 1);
     if let Some(default) = default {
         if !rpe.is_empty() && rpe[0].start_time.beats() != 0.0 {
             kfs.push(Keyframe::new(0.0, default, 0));
@@ -252,7 +252,7 @@ fn parse_speed_events(r: &mut BpmList, rpe: &[RPEEventLayer], max_time: f64) -> 
     let anis: Vec<AnimFloatF64> = rpe
         .into_iter()
         .map(|it| {
-            let mut kfs = Vec::new();
+            let mut kfs = Vec::with_capacity(it.len() * 2);
             for e in it {
                 let start_beats = e.start_time.beats();
                 let end_beats = e.end_time.beats();
@@ -300,7 +300,7 @@ fn parse_speed_events(r: &mut BpmList, rpe: &[RPEEventLayer], max_time: f64) -> 
     }
     pts.sort();
     pts.dedup();
-    let mut kfs = Vec::new();
+    let mut kfs = Vec::with_capacity(pts.len());
     let mut height = 0.0;
     for i in 0..(pts.len() - 1) {
         let now_time = *pts[i];
@@ -333,7 +333,7 @@ fn parse_speed_events(r: &mut BpmList, rpe: &[RPEEventLayer], max_time: f64) -> 
 }
 
 fn parse_gif_events<V: Clone + Into<f32>>(r: &mut BpmList, rpe: &[RPEEvent<V>], bezier_map: &BezierMap, gif: &GifFrames) -> Result<AnimFloat> {
-    let mut kfs = Vec::new();
+    let mut kfs = Vec::with_capacity(rpe.len() * 3);
     kfs.push(Keyframe::new(0.0, 0.0, 2));
     let mut next_rep_time: u128 = 0;
     for e in rpe {
@@ -379,7 +379,7 @@ async fn parse_notes(
     height: &mut AnimFloatF64,
     hitsounds: &mut HitSoundMap,
 ) -> Result<Vec<Note>> {
-    let mut notes = Vec::new();
+    let mut notes = Vec::with_capacity(rpe.len());
     for note in rpe {
         let time: f64 = r.time(&note.start_time);
         height.set_time(time);
@@ -752,7 +752,7 @@ pub async fn parse_rpe(source: &str, fs: &mut dyn FileSystem, extra: ChartExtra)
         })
         .max().unwrap_or_default() + 1.;
     // don't want to add a whole crate for a mere join_all...
-    let mut lines = Vec::new();
+    let mut lines = Vec::with_capacity(rpe.judge_line_list.len());
     for (id, line) in rpe.judge_line_list.into_iter().enumerate() {
         let name = line.name.clone();
         lines.push(

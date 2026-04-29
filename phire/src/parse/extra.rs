@@ -54,7 +54,7 @@ impl<V> ExtAnim<V> {
             ExtAnim::Default => Anim::default(),
             ExtAnim::Fixed(value) => Anim::fixed(value.into()),
             ExtAnim::Keyframes(events) => {
-                let mut kfs = Vec::new();
+                let mut kfs = Vec::with_capacity(events.len() * 2 + 2);
                 if let Some(default) = default {
                     if events[0].start_time.beats() != 0.0 {
                         kfs.push(Keyframe::new(0.0, default, 0));

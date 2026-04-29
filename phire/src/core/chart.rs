@@ -50,7 +50,7 @@ impl Chart {
                 }
             })
             .collect::<Vec<_>>();
-        order.sort_by_key(|it| (lines[*it].z_index, *it));
+        order.sort_unstable_by_key(|it| (lines[*it].z_index, *it));
         Self {
             offset,
             lines,

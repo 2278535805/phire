@@ -300,7 +300,7 @@ impl Judge {
             .iter()
             .map(|line| {
                 let mut idx: Vec<u32> = (0..(line.notes.len() as u32)).filter(|it| !line.notes[*it as usize].fake).collect();
-                idx.sort_by_key(|id| line.notes[*id as usize].time.not_nan());
+                idx.sort_unstable_by_key(|id| line.notes[*id as usize].time.not_nan());
                 (idx, 0)
             })
             .collect();

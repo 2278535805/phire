@@ -93,7 +93,7 @@ pub struct JudgeLineCache {
 
 impl JudgeLineCache {
     pub fn new(notes: &mut Vec<Note>) -> Self {
-        notes.sort_by_key(|it| {
+        notes.sort_unstable_by_key(|it| {
             (
                 !it.above,
                 it.speed.not_nan(),
@@ -102,7 +102,7 @@ impl JudgeLineCache {
         });
         
         let mut res = Self {
-            update_order: Vec::new(),
+            update_order: Vec::with_capacity(notes.len()),
             above_indices: Vec::new(),
             below_indices: Vec::new(),
         };
@@ -111,7 +111,8 @@ impl JudgeLineCache {
     }
 
     pub(crate) fn reset(&mut self, notes: &mut Vec<Note>) {
-        self.update_order = (0..notes.len() as u32).collect();
+        self.update_order.clear();
+        self.update_order.extend(0..notes.len() as u32);        
         self.above_indices.clear();
         self.below_indices.clear();
         let mut index = 0;

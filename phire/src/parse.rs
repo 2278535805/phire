@@ -12,51 +12,22 @@ pub use rpe::{parse_rpe, RPE_HEIGHT, RPE_WIDTH, RPEChart};
 
 pub(crate) fn process_lines(v: &mut [crate::core::JudgeLine]) {
     use crate::ext::NotNanExt;
-    let mut times = Vec::new();
-    // TODO optimize using k-merge sort
-    let sorts = v
-        .iter()
-        .map(|line| {
-            let mut idx: Vec<usize> = (0..line.notes.len()).collect();
-            idx.sort_by_key(|id| line.notes[*id].time.not_nan());
-            idx
-        })
-        .collect::<Vec<_>>();
-    for (line, idx) in v.iter_mut().zip(sorts.iter()) {
-        let v = &mut line.notes;
-        let mut i = 0;
-        while i < v.len() {
-            times.push(v[idx[i]].time.not_nan());
-            let mut j = i + 1;
-            while j < v.len() && v[idx[j]].time == v[idx[i]].time {
-                j += 1;
-            }
-            if j != i + 1 {
-                times.push(v[idx[i]].time.not_nan());
-            }
-            i = j;
-        }
+    use ordered_float::NotNan;
+    use rustc_hash::FxHashMap;
+
+    let total_notes: usize = v.iter().map(|l| l.notes.len()).sum();
+    let mut time_counts: FxHashMap<NotNan<f64>, u32> = FxHashMap::with_capacity_and_hasher(total_notes, Default::default());
+
+    for note in v.iter().flat_map(|l| l.notes.iter()) {
+        *time_counts.entry(note.time.not_nan()).or_insert(0) += 1;
     }
-    times.sort();
-    let mut mt = Vec::new();
-    if !times.is_empty() {
-        for i in 0..(times.len() - 1) {
-            // since times are generated in the same way, theoretically we can compare them directly
-            if times[i] == times[i + 1] && (i == 0 || times[i - 1] != times[i]) {
-                mt.push(*times[i]);
-            }
-        }
-    }
-    for (line, idx) in v.iter_mut().zip(sorts.iter()) {
-        let mut i = 0;
-        for id in idx {
-            let note = &mut line.notes[*id];
-            let time = note.time;
-            while i < mt.len() && mt[i] < time {
-                i += 1;
-            }
-            if i < mt.len() && mt[i] == time {
-                note.multiple_hint = true;
+
+    for line in v.iter_mut() {
+        for note in line.notes.iter_mut() {
+            if let Some(&count) = time_counts.get(&note.time.not_nan()) {
+                if count > 1 {
+                    note.multiple_hint = true;
+                }
             }
         }
     }
