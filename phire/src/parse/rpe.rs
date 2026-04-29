@@ -493,7 +493,7 @@ async fn parse_judge_line(
     bezier_map: &BezierMap,
     hitsounds: &mut HitSoundMap,
 ) -> Result<JudgeLine> {
-    let mut line_texture_map: HashMap<String, SafeTexture> = Default::default();
+    let mut line_texture_map: FxHashMap<String, SafeTexture> = FxHashMap::default();
     let event_layers: Vec<_> = rpe.event_layers.into_iter().flatten().collect();
     let r = &mut BpmList::new(bpm_list.into_iter().map(|it| (it.start_time.beats(), it.bpm / rpe.bpm_factor)).collect());
 
