@@ -535,6 +535,7 @@ impl BinaryData for ChartSettings {
 
     fn write_binary<W: Write>(&self, w: &mut BinaryWriter<W>) -> Result<()> {
         w.write_val(self.pe_alpha_extension)?;
+        w.write_val(self.line_reference_y_axis)?;
         Ok(())
     }
 }
