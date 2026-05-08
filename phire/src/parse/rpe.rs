@@ -219,7 +219,7 @@ fn parse_events<T: Tweenable, V: Clone + Into<T>>(
 ) -> Result<Anim<T>> {
     let mut kfs = Vec::with_capacity(rpe.len() * 2 + 1);
     if let Some(default) = default {
-        if !rpe.is_empty() && rpe[0].start_time.beats() != 0.0 {
+        if !rpe.is_empty() && rpe[0].start_time.beats() > 0.0 {
             kfs.push(Keyframe::new(0.0, default, 0));
         }
     }
