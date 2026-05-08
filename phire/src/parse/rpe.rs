@@ -548,7 +548,7 @@ async fn parse_judge_line(
                 let line_factor = if rpe.texture == "line.png"
                         && rpe.extended
                             .as_ref()
-                            .map_or(true, |it| it.text_events.as_ref().map_or(true, |it| it.is_empty()))
+                            .map_or(true, |it| it.text_events.as_ref().is_none_or(|it| it.is_empty()))
                         && rpe.attach_ui.is_none()
                     {
                         4000. / RPE_WIDTH / 6.
