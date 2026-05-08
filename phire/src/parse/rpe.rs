@@ -3,7 +3,7 @@ crate::tl_file!("parser" ptl);
 use super::{process_lines, RPE_TWEEN_MAP};
 use crate::{
     core::{
-        Anim, AnimFloat, AnimFloatF64, AnimVector, BezierTween, BpmList, Chart, ChartExtra, ChartSettings, ClampedTween, CtrlObject, EPS, GifFrames, HEIGHT_RATIO, HitSoundMap, JudgeLine, JudgeLineCache, JudgeLineKind, Keyframe, Note, NoteKind, Object, StaticTween, Triple, TweenFunction, Tweenable, UIElement
+        Anim, AnimFloat, AnimFloatF64, AnimVector, BezierTween, BpmList, Chart, ChartExtra, ChartSettings, ClampedTween, CtrlObject, EPS, GifFrames, HEIGHT_RATIO, HitSoundMap, JudgeLine, JudgeLineCache, JudgeLineKind, Keyframe, Note, NoteKind, Object, StaticTween, Triple, TweenFunction, Tweenable, UIElement, Vector
     },
     ext::{NotNanExt, SafeTexture},
     fs::FileSystem,
@@ -545,6 +545,16 @@ async fn parse_judge_line(
                     Ok(res)
                 }
                 let factor = if rpe.texture == "line.png" { 1. } else { 2. / RPE_WIDTH };
+                let line_scale = if rpe.texture == "line.png"
+                        && rpe.extended
+                            .as_ref()
+                            .map_or(true, |it| it.text_events.as_ref().map_or(true, |it| it.is_empty()))
+                        && rpe.attach_ui.is_none()
+                    {
+                        0.5
+                    } else {
+                        1.
+                    };
                 rpe.extended
                     .as_ref()
                     .map(|e| -> Result<_> {
@@ -552,25 +562,14 @@ async fn parse_judge_line(
                             parse(
                                 r,
                                 &e.scale_x_events,
-                                factor
-                                    * if rpe.texture == "line.png"
-                                        && rpe
-                                            .extended
-                                            .as_ref()
-                                            .map_or(true, |it| it.text_events.as_ref().map_or(true, |it| it.is_empty()))
-                                        && rpe.attach_ui.is_none()
-                                    {
-                                        0.5
-                                    } else {
-                                        1.
-                                    },
+                                factor * line_scale,
                                 bezier_map,
                             )?,
                             parse(r, &e.scale_y_events, factor, bezier_map)?,
                         ))
                     })
                     .transpose()?
-                    .unwrap_or_default()
+                    .unwrap_or(AnimVector::fixed(Vector::new(factor * line_scale, factor)))
             },
         },
         color: if let Some(events) = rpe.extended.as_ref().and_then(|e| e.color_events.as_ref()) {
