@@ -529,6 +529,7 @@ impl BinaryData for ChartSettings {
     fn read_binary<R: Read>(r: &mut BinaryReader<R>) -> Result<Self> {
         Ok(Self {
             pe_alpha_extension: r.read()?,
+            line_reference_y_axis: r.read()?,
         })
     }
 

@@ -265,12 +265,12 @@ impl JudgeLine {
                             if color.a == 0.0 {
                                 return;
                             }
-                            let len = if res.info.line_reference_y_axis {
-                                res.info.line_length() / res.aspect_ratio
+                            let len = if settings.line_reference_y_axis {
+                                res.info.line_length / res.aspect_ratio
                             } else {
-                                res.info.line_length()
+                                res.info.line_length
                             };
-                            let thickness = if res.info.line_reference_y_axis {
+                            let thickness = if settings.line_reference_y_axis {
                                 0.0150 / res.aspect_ratio
                             } else {
                                 0.0100

@@ -20,6 +20,7 @@ pub struct ChartExtra {
 #[derive(Default)]
 pub struct ChartSettings {
     pub pe_alpha_extension: bool,
+    pub line_reference_y_axis: bool,
 }
 
 pub type HitSoundMap = FxHashMap<String, AudioClip>;

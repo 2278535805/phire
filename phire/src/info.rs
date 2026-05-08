@@ -35,8 +35,7 @@ pub struct ChartInfo {
     pub aspect_ratio: f32,
     pub force_aspect_ratio: bool,
     pub background_dim: f32,
-    pub line_reference_y_axis: bool,
-    pub line_length: Option<f32>,
+    pub line_length: f32,
     pub offset: f64,
     pub tip: Option<String>,
     pub tags: Vec<String>,
@@ -77,8 +76,7 @@ impl Default for ChartInfo {
             aspect_ratio: 16. / 9.,
             force_aspect_ratio: false,
             background_dim: 0.1,
-            line_reference_y_axis: false,
-            line_length: None,
+            line_length: 6.0,
             offset: 0.,
             tip: None,
             tags: Vec::new(),
@@ -98,14 +96,3 @@ impl Default for ChartInfo {
     }
 }
 
-impl ChartInfo {
-    pub fn line_length(&self) -> f32 {
-        if let Some(line_length) = self.line_length {
-            line_length
-        } else if self.line_reference_y_axis {
-            5.75
-        } else {
-            6.0
-        }
-    }
-}
