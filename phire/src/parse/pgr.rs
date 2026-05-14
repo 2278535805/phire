@@ -275,6 +275,7 @@ fn parse_judge_line(pgr: PgrJudgeLine, max_time: f64, format_version: u32) -> Re
         z_index: 0,
         show_below: false,
         attach_ui: None,
+        scale_on_notes: 0,
 
         cache,
     })
