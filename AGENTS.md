@@ -23,9 +23,6 @@ cargo build
 # Build (release, strips symbols)
 cargo build --release
 
-# Build WASM
-./build_wasm.sh          # requires wasm-bindgen CLI, wasm32-unknown-unknown target
-
 # Chart converter
 cargo run -p prpr-pbc -- <input_chart> <output.pbc>
 ```
