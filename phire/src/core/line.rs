@@ -167,11 +167,25 @@ impl JudgeLine {
         self.height.set_time(res.time);
         let line_height = self.height.now();
         let mut ctrl_obj = self.ctrl_obj.borrow_mut();
-        self.cache.update_order.retain(|id| {
-            let note = &mut self.notes[*id as usize];
+
+        //   self.cache.update_order.retain(|id| {
+        //       let note = &mut self.notes[*id as usize];
+        //       note.update(...);
+        //       !note.dead()
+        //   });
+        //   retain 在删除元素时需要将后续所有元素前移（memmove），开销为 O(n)
+
+        let mut i = 0;
+        while i < self.cache.update_order.len() {
+            let id = self.cache.update_order[i];
+            let note = &mut self.notes[id as usize];
             note.update(res, rot, &tr, &mut ctrl_obj, line_height, bpm_list, index);
-            !note.dead()
-        });
+            if note.dead() {
+                self.cache.update_order.swap_remove(i); // update_order 顺序不影响功能
+            } else {
+                i += 1;
+            }
+        }
         drop(ctrl_obj);
         match &mut self.kind {
             JudgeLineKind::Text(anim) => {
@@ -197,34 +211,56 @@ impl JudgeLine {
                 },
             }
         };
-        self.cache.above_indices.retain_mut(|index| {
-            while not_judge(*index) {
+
+        //   self.cache.above_indices.retain_mut(|index| {
+        //       while not_judge(*index) { ... }
+        //       true/false
+        //   });
+        //   retain_mut 在删除元素时需要将后续元素前移，产生内存拷贝开销
+
+        let mut write_idx = 0;
+        for i in 0..self.cache.above_indices.len() {
+            let mut index = self.cache.above_indices[i];
+            while not_judge(index) {
                 if self
                     .notes
-                    .get(*index + 1)
-                    .map_or(false, |it| it.above && it.speed == self.notes[*index].speed)
+                    .get(index + 1)
+                    .map_or(false, |it| it.above && it.speed == self.notes[index].speed)
                 {
-                    *index += 1;
+                    index += 1;
                 } else {
-                    return false;
+                    index = usize::MAX; // 标记删除
+                    break;
                 }
             }
-            true
-        });
-        self.cache.below_indices.retain_mut(|index| {
-            while not_judge(*index) {
+            if index != usize::MAX {
+                self.cache.above_indices[write_idx] = index;
+                write_idx += 1;
+            }
+        }
+        self.cache.above_indices.truncate(write_idx);
+
+        let mut write_idx = 0;
+        for i in 0..self.cache.below_indices.len() {
+            let mut index = self.cache.below_indices[i];
+            while not_judge(index) {
                 if self
                     .notes
-                    .get(*index + 1)
-                    .map_or(false, |it| it.speed == self.notes[*index].speed)
+                    .get(index + 1)
+                    .map_or(false, |it| it.speed == self.notes[index].speed)
                 {
-                    *index += 1;
+                    index += 1;
                 } else {
-                    return false;
+                    index = usize::MAX;
+                    break;
                 }
             }
-            true
-        });
+            if index != usize::MAX {
+                self.cache.below_indices[write_idx] = index;
+                write_idx += 1;
+            }
+        }
+        self.cache.below_indices.truncate(write_idx);
     }
 
     pub fn fetch_pos(&self, res: &Resource, lines: &[JudgeLine]) -> Vector {
