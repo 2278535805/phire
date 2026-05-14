@@ -1072,8 +1072,9 @@ impl Scene for GameScene {
     }
 
     fn update(&mut self, tm: &mut TimeManager) -> Result<()> {
+        let time = tm.now();
         self.res.audio.recover_if_needed()?;
-        if matches!(self.state, State::Playing) {
+        if matches!(self.state, State::Playing) && time < self.res.track_length {
             tm.update(self.music.position() as f64);
         }
         if self.mode == GameMode::Exercise && tm.now() > self.exercise_range.end as f64 && self.exercise_range.end < self.res.track_length - 0.1 && !tm.paused() {
@@ -1087,7 +1088,6 @@ impl Scene for GameScene {
         if tm.paused() {
             GYRO.lock().unwrap().reset_gyroscope();
         }
-        let time = tm.now();
         let time = match self.state {
             State::Starting => {
                 #[cfg(target_os = "windows")]
