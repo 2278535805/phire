@@ -496,7 +496,7 @@ impl JudgeLine {
                                 break;
                             }
                         }
-                        note.render(ui, res, &mut config, bpm_list, line_set_debug_alpha, id, height_above);
+                        note.render(ui, res, &mut config, bpm_list, line_set_debug_alpha, id, height_above, height_below);
                     }
                 }
 
@@ -544,7 +544,7 @@ impl JudgeLine {
                                     break;
                                 }
                             }
-                            note.render(ui, res, &mut config, bpm_list, line_set_debug_alpha, id, -height_below);
+                            note.render(ui, res, &mut config, bpm_list, line_set_debug_alpha, id, -height_below, -height_above);
                         }
                     }
                 });

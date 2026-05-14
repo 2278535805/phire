@@ -202,7 +202,7 @@ impl Note {
         self.object.now_rotation().append_nonuniform_scaling(&scale).append_translation(&tr)
     }
 
-    pub fn render(&self, ui: &mut Ui, res: &mut Resource, config: &mut RenderConfig, bpm_list: &mut BpmList, line_set_debug_alpha: bool, line_id: usize, height_above: f64) {
+    pub fn render(&self, ui: &mut Ui, res: &mut Resource, config: &mut RenderConfig, bpm_list: &mut BpmList, line_set_debug_alpha: bool, line_id: usize, height_above: f64, height_below: f64) {
         if config.appear_before.is_finite() {
         //if config.appear_before.is_finite() && !matches!(self.kind, NoteKind::Hold { .. }) {
             let beat = bpm_list.beat(self.time);
@@ -233,15 +233,15 @@ impl Note {
         let base = height - line_height;
 
         let cover_base = if !res.info.hold_partial_cover {
-            height + self.object.translation.1.now() as f64 - line_height
+            height + self.object.translation.1.now() as f64 / aspect_ratio - line_height
         } else {
             match self.kind {
                 NoteKind::Hold { end_time: _,  end_height, end_speed: _ } => {
                     let end_height = end_height / aspect_ratio;
-                    end_height + self.object.translation.1.now() as f64 - line_height
+                    end_height + self.object.translation.1.now() as f64 / aspect_ratio - line_height
                 }
                 _ => {
-                    height + self.object.translation.1.now() as f64 - line_height
+                    height + self.object.translation.1.now() as f64 / aspect_ratio - line_height
                 }
             }
         };
@@ -449,17 +449,14 @@ impl Note {
             }
         }
         if res.config.chart_debug_note > 0. {
-            if base > height_above || res.time <= 0. {
-                return;
-            }
-            let above = if self.above { "" } else { " below" };
-            let fake = if self.fake { " fake" } else { "" };
             match self.kind {
                 NoteKind::Hold { end_time, end_height, end_speed } => {
-                    let bottom = if self.time <= res.time { 0. } else { height - line_height };
-                    if res.time >= end_time {
+                    if cover_base > height_above || res.time >= end_time {
                         return;
                     }
+                    let above = if self.above { "" } else { " below" };
+                    let fake = if self.fake { " fake" } else { "" };
+                    let bottom = if self.time <= res.time { 0. } else { height - line_height };
                     let speed = if self.speed == 1.0 && end_speed.is_none() {
                         String::new()
                     } else {
@@ -472,26 +469,23 @@ impl Note {
                     res.with_model(self.now_transform(res, ctrl_obj, bottom as f32, config.incline_sin, false, false), |res: &mut Resource| {
                         res.with_model(Matrix::new_nonuniform_scaling(&Vector::new(1.0, if self.above { -1.0 } else { 1.0 })), |res: &mut Resource| {
                             res.apply_model(|res| {
-                                ui.text(format!("[{}] t:{:.2}({:.2}) h:{:.2}({:.2})[{:.2}]", line_id, self.time, end_time, self.height, end_height, base))
+                                ui.text(format!("[{}] t:{:.2}({:.2}) h:{:.2}({:.2})[{:.2}]\n{}{}{}", line_id, self.time, end_time, self.height, end_height, base, speed, above, fake))
                                     .pos(0., if self.above { res.config.chart_debug_note * 0.2 } else { -res.config.chart_debug_note * 0.2 })
-                                    .anchor(0.5, 1.)
+                                    .anchor(0.0, 0.)
                                     .size(res.config.chart_debug_note)
                                     .color(Color::new(1., 1., 1., color.a))
-                                    .draw();
-                                ui.text(format!("{}{}{}", speed, above, fake))
-                                    .pos(0., if self.above { res.config.chart_debug_note * 0.3 } else { -res.config.chart_debug_note * 0.3 })
-                                    .anchor(0.5, 1.)
-                                    .size(res.config.chart_debug_note)
-                                    .color(Color::new(1., 1., 1., color.a))
+                                    .centered_multiline()
                                     .draw();
                             });
                         });
                     });
                 }
                 _ => {
-                    if res.time >= self.time {
-                        return
-                    };
+                    if cover_base > height_above || cover_base < height_below || res.time >= self.time {
+                        return;
+                    }
+                    let above = if self.above { "" } else { " below" };
+                    let fake = if self.fake { " fake" } else { "" };
                     let speed = if self.speed == 1. {
                         String::new()
                     } else {
@@ -500,17 +494,12 @@ impl Note {
                     res.with_model(self.now_transform(res, ctrl_obj, base as f32, config.incline_sin, false, false), |res: &mut Resource| {
                         res.with_model(Matrix::new_nonuniform_scaling(&Vector::new(1.0, if self.above { -1.0 } else { 1.0 })), |res: &mut Resource| {
                             res.apply_model(|res| {
-                                ui.text(format!("[{}] t:{:.2} h:{:.2}[{:.2}]", line_id, self.time, self.height, base))
+                                ui.text(format!("[{}] t:{:.2} h:{:.2}[{:.2}]\n{}{}{}", line_id, self.time, self.height, base, speed, above, fake))
                                     .pos(0., res.config.chart_debug_note * 0.15)
-                                    .anchor(0.5, 1.)
+                                    .anchor(0.0, 0.)
                                     .size(res.config.chart_debug_note)
                                     .color(Color::new(1., 1., 1., color.a))
-                                    .draw();
-                                ui.text(format!("{}{}{}", speed, above, fake))
-                                    .pos(0., res.config.chart_debug_note * 0.225)
-                                    .anchor(0.5, 1.)
-                                    .size(res.config.chart_debug_note)
-                                    .color(Color::new(1., 1., 1., color.a))
+                                    .centered_multiline()
                                     .draw();
                             });
                         });
