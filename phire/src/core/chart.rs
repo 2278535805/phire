@@ -32,10 +32,11 @@ pub struct Chart {
     pub bpm_list: RefCell<BpmList>,
     pub settings: ChartSettings,
     pub extra: ChartExtra,
-
-    pub order: Vec<usize>,
-    pub attach_ui: [Option<usize>; 7],
     pub hitsounds: HitSoundMap,
+
+    order: Vec<usize>,
+    attach_ui: [Option<usize>; 7],
+    trs: Vec<Matrix>,
 }
 
 impl Chart {
@@ -52,6 +53,7 @@ impl Chart {
             })
             .collect::<Vec<_>>();
         order.sort_unstable_by_key(|it| (lines[*it].z_index, *it));
+        let trs = Vec::with_capacity(lines.len());
         Self {
             offset,
             lines,
@@ -62,6 +64,7 @@ impl Chart {
             order,
             attach_ui,
             hitsounds,
+            trs,
         }
     }
 
@@ -116,10 +119,10 @@ impl Chart {
         for line in &mut self.lines {
             line.object.set_time(res.time);
         }
-        // TODO optimize
-        let trs = self.lines.iter().map(|it| it.now_transform(res, &self.lines)).collect::<Vec<_>>();
+        self.trs.clear();
+        self.trs.extend(self.lines.iter().map(|it| it.now_transform(res, &self.lines)));
         let mut guard = self.bpm_list.borrow_mut();
-        for (index, (line, tr)) in self.lines.iter_mut().zip(trs).enumerate() {
+        for (index, (line, tr)) in self.lines.iter_mut().zip(self.trs.drain(..)).enumerate() {
             line.update(res, tr, &mut guard, index);
         }
         drop(guard);
