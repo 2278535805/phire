@@ -420,7 +420,7 @@ impl NoteBuffer {
     pub fn push(&mut self, key: (i8, GLuint), vertices: [Vertex; 4]) {
         let meshes = self.0.entry(key).or_default();
         if meshes.last().map_or(true, |it| it.0.len() + 4 > MAX_SIZE * 4) {
-            meshes.push(Default::default());
+            meshes.push((Vec::with_capacity(MAX_SIZE * 4), Vec::with_capacity(MAX_SIZE * 6)));
         }
         let last = meshes.last_mut().unwrap();
         let i = last.0.len() as u16;
@@ -433,10 +433,19 @@ impl NoteBuffer {
         gl.flush();
         let gl = gl.quad_gl;
         gl.draw_mode(DrawMode::Triangles);
-        for ((_, tex_id), meshes) in std::mem::take(&mut self.0).into_iter() {
-            gl.texture(Some(Texture2D::from_miniquad_texture(unsafe { Texture::from_raw_id(tex_id, miniquad::TextureFormat::RGBA8) })));
+        for ((_, tex_id), meshes) in &self.0 {
+            gl.texture(Some(Texture2D::from_miniquad_texture(unsafe { Texture::from_raw_id(*tex_id, miniquad::TextureFormat::RGBA8) })));
             for mesh in meshes {
-                gl.geometry(&mesh.0, &mesh.1);
+                if !mesh.0.is_empty() {
+                    gl.geometry(&mesh.0, &mesh.1);
+                }
+            }
+        }
+        // 清空数据但保留缓冲区容量
+        for (_, meshes) in &mut self.0 {
+            for mesh in meshes.iter_mut() {
+                mesh.0.clear();
+                mesh.1.clear();
             }
         }
     }
