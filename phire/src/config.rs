@@ -119,7 +119,6 @@ pub struct Config {
     pub alpha_tint: bool, // note.alpha <=0.5 blue, note.alpha >0.5 red
 
     pub rotation_mode: bool,
-    pub rotation_flat_mode: bool,
 
     pub play_start_time: f64,
     pub play_end_time: Option<f64>,
@@ -209,7 +208,6 @@ impl Default for Config {
             alpha_tint: false,
 
             rotation_mode: false,
-            rotation_flat_mode: false,
 
             play_start_time: 0.,
             play_end_time: None,

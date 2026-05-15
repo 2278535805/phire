@@ -16,6 +16,17 @@ pub struct Gyro {
     gravity: UnitQuaternion<f32>,
     gyroscope: UnitQuaternion<f32>,
     pub gyro_data: Option<GyroData>,
+    flatness: f32, // 0.0 = 抬起 信任重力, 1.0 = 平放 信任陀螺仪
+}
+
+fn smooth_step(x: f32, edge0: f32, edge1: f32) -> f32 {
+    let t = ((x - edge0) / (edge1 - edge0)).clamp(0.0, 1.0);
+    t * t * (3.0 - 2.0 * t)
+}
+
+fn lerp_angle(a: f32, b: f32, t: f32) -> f32 {
+    let diff = (b - a + std::f32::consts::PI).rem_euclid(std::f32::consts::TAU) - std::f32::consts::PI;
+    a + diff * t
 }
 
 lazy_static! {
@@ -28,6 +39,7 @@ impl Gyro {
             gravity: UnitQuaternion::identity(),
             gyroscope: UnitQuaternion::identity(),
             gyro_data: None,
+            flatness: 0.0,
         }
     }
 
@@ -61,6 +73,8 @@ impl Gyro {
 
         let g_dev = gravity_data / norm;  // 归一化, g_dev 指向重力方向
 
+        self.flatness = smooth_step(g_dev.z.abs(), 0.7, 0.95);
+
         let world_gravity = Vector3::new(0.0, -1.0, 0.0); // 世界坐标系下的重力方向
 
         // g_dev 到 world_gravity 的旋转
@@ -85,15 +99,9 @@ impl Gyro {
     }
 
     pub fn get_angle(&self, config: &Config) -> f32 {
-        if config.rotation_mode {
-            if config.rotation_flat_mode {
-                self.get_gyroscope_angle()
-            } else {
-                self.get_gravity_angle()
-            }
-        } else {
-            0.0
-        }
+        let gravity_angle = self.get_gravity_angle();
+        let gyro_angle = self.get_gyroscope_angle();
+        lerp_angle(gravity_angle, gyro_angle, self.flatness)
     }
 
     pub fn get_current_acceleration(&self) -> f32 {

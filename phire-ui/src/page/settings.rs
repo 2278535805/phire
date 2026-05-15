@@ -704,7 +704,6 @@ struct OtherList {
     roman_btn: DRectButton,
     chinese_btn: DRectButton,
     rotation_mode: DRectButton,
-    rotation_flat_mode: DRectButton,
     #[cfg(feature = "play")]
     shake_play_mode_btn: DRectButton,
 
@@ -724,7 +723,6 @@ impl OtherList {
             roman_btn: DRectButton::new(),
             chinese_btn: DRectButton::new(),
             rotation_mode: DRectButton::new(),
-            rotation_flat_mode: DRectButton::new(),
             #[cfg(feature = "play")]
             shake_play_mode_btn: DRectButton::new(),
             #[cfg(feature = "play")]
@@ -779,16 +777,6 @@ impl OtherList {
         }
         if self.rotation_mode.touch(touch, t) {
             config.rotation_mode ^= true;
-            if !config.rotation_mode && config.rotation_flat_mode {
-                config.rotation_flat_mode = false;
-            }
-            return Ok(Some(true));
-        }
-        if self.rotation_flat_mode.touch(touch, t) {
-            config.rotation_flat_mode ^= true;
-            if config.rotation_flat_mode && !config.rotation_mode {
-                config.rotation_mode = true;
-            }
             return Ok(Some(true));
         }
         #[cfg(feature = "play")]
@@ -908,10 +896,6 @@ impl OtherList {
         item! {
             render_title(ui, c, tl!("item-rotation-mode"), None);
             render_switch(ui, rr, t, c, &mut self.rotation_mode, config.rotation_mode);
-        }
-        item! {
-            render_title(ui, c, tl!("item-rotation-flat-mode"), Some(tl!("item-rotation-flat-mode-sub")));
-            render_switch(ui, rr, t, c, &mut self.rotation_flat_mode, config.rotation_flat_mode);
         }
         #[cfg(feature = "play")]
         item! {
