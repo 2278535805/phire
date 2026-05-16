@@ -1,6 +1,4 @@
-use std::time::Instant;
-use std::sync::Mutex;
-use std::f32;
+use std::{f32, sync::Mutex, time::Instant};
 use nalgebra::{Unit, UnitQuaternion, Vector3};
 use lazy_static::lazy_static;
 
@@ -23,7 +21,7 @@ fn smooth_step(x: f32, edge0: f32, edge1: f32) -> f32 {
 }
 
 fn lerp_angle(a: f32, b: f32, t: f32) -> f32 {
-    let diff = (b - a + std::f32::consts::PI).rem_euclid(std::f32::consts::TAU) - std::f32::consts::PI;
+    let diff = (b - a + f32::consts::PI).rem_euclid(f32::consts::TAU) - f32::consts::PI;
     a + diff * t
 }
 
@@ -69,7 +67,7 @@ impl Gyro {
             return;
         }
 
-        let g_dev = gravity_data / norm; // 归一化, g_dev 指向重力方向
+        let g_dev = gravity_data / norm; // 标准化 指向重力方向
 
         self.flatness = smooth_step(g_dev.z.abs(), 0.75, 0.95);
 
@@ -89,7 +87,6 @@ impl Gyro {
 
     fn get_gravity_angle(&self) -> f32 {
         let world = self.gravity.transform_vector(&Vector3::new(0.0, 1.0, 0.0));
-        //let device = self.rotation.transform_vector(&Vector3::new(1.0, 0.0, 0.0));
 
         let proj = Vector3::new(world.x, world.y, world.z);
         let tan = world.y.atan2(proj.x);
