@@ -32,7 +32,7 @@ use phire::{
     Main,
 };
 use scene::MainScene;
-use std::{collections::VecDeque, sync::{mpsc, Mutex}, time::Instant};
+use std::{collections::VecDeque, sync::{mpsc, Mutex}, time::Duration};
 use nalgebra::{UnitQuaternion, Vector3};
 use tracing::{error, debug, info};
 
@@ -488,10 +488,11 @@ pub unsafe extern "C" fn Java_quad_1native_QuadNative_updateGyroScope(
     x: ndk_sys::jfloat,
     y: ndk_sys::jfloat,
     z: ndk_sys::jfloat,
+    timestamp: ndk_sys::jlong,
 ) {
     let set_gyro_data = GyroData {
         angular_velocity: Vector3::new(x, y, z),
-        timestamp: Instant::now(),
+        timestamp: Duration::from_nanos(timestamp as u64),
     };
     GYRO.lock().unwrap().update_gyroscope(set_gyro_data);
 }

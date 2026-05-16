@@ -1,11 +1,11 @@
-use std::{f32, sync::Mutex, time::Instant};
+use std::{f32, sync::Mutex, time::Duration};
 use nalgebra::{Unit, UnitQuaternion, Vector3};
 use lazy_static::lazy_static;
 
 #[derive(Debug, Clone, Copy)]
 pub struct GyroData {
     pub angular_velocity: Vector3<f32>, // 角速度 (rad/s)
-    pub timestamp: Instant,
+    pub timestamp: Duration,
 }
 
 pub struct Gyro {
@@ -51,7 +51,7 @@ impl Gyro {
     pub fn update_gyroscope(&mut self, gyro_data: GyroData) {
         if let Some(last_gyro_data) = self.gyro_data {
             let dt = gyro_data.timestamp
-                .duration_since(last_gyro_data.timestamp)
+                .saturating_sub(last_gyro_data.timestamp)
                 .as_secs_f32();
 
             let omega = gyro_data.angular_velocity;
