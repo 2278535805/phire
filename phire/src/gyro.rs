@@ -40,7 +40,12 @@ impl Gyro {
     }
 
     pub(crate) fn reset_gyroscope(&mut self) {
-        self.gyroscope = UnitQuaternion::identity();
+        // X轴在世界坐标系中的方向
+        let world_x = self.gravity.transform_vector(&Vector3::new(1.0, 0.0, 0.0));
+        // 绕世界Y轴的yaw
+        let yaw = world_x.z.atan2(world_x.x);
+        // 绕设备Y轴的旋转
+        self.gyroscope = UnitQuaternion::from_euler_angles(0.0, yaw, 0.0);
     }
 
     pub fn update_gyroscope(&mut self, gyro_data: GyroData) {
@@ -70,6 +75,9 @@ impl Gyro {
         let g_dev = gravity_data / norm; // 标准化 指向重力方向
 
         self.flatness = smooth_step(g_dev.z.abs(), 0.75, 0.95);
+        if self.flatness <= 0.0 {
+            self.reset_gyroscope();
+        }
 
         let world_gravity = Vector3::new(0.0, -1.0, 0.0); // 世界坐标系下的重力方向
 
