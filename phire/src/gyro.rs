@@ -54,7 +54,7 @@ impl Gyro {
                 .saturating_sub(last_gyro_data.timestamp)
                 .as_secs_f32();
 
-            let omega = gyro_data.angular_velocity;
+            let omega = (last_gyro_data.angular_velocity + gyro_data.angular_velocity) / 2.0;
             let angle = omega.norm() * dt;
 
             if angle > 0.0 {
@@ -72,7 +72,7 @@ impl Gyro {
             return;
         }
 
-        let g_dev = gravity_data / norm; // 标准化 指向重力方向
+        let g_dev = gravity_data / norm; // 归一化 指向重力方向
 
         self.flatness = smooth_step(g_dev.z.abs(), 0.75, 0.95);
         if self.flatness <= 0.0 {

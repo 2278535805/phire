@@ -1090,7 +1090,7 @@ impl Scene for GameScene {
             tm.pause();
             self.music.pause()?;
         }
-        if tm.paused() {
+        if tm.paused() && self.res.config.rotation_mode {
             GYRO.lock().unwrap().reset_gyroscope();
         }
         let time = match self.state {
@@ -1120,7 +1120,9 @@ impl Scene for GameScene {
                     }
                     tm.now()
                 } else {
-                    GYRO.lock().unwrap().reset_gyroscope();
+                    if self.res.config.rotation_mode {
+                        GYRO.lock().unwrap().reset_gyroscope();
+                    }
                     if self.res.config.enter_animation {
                         self.res.alpha = 1. - (1. - time / Self::BEFORE_TIME).clamp(0., 1.).powi(3) as f32;
                     } else {
@@ -1215,7 +1217,11 @@ impl Scene for GameScene {
         if !tm.paused() && (self.res.config.autoplay() || self.pause_rewind.time.is_none()) && self.mode != GameMode::View {
             self.gl.quad_gl.viewport(self.res.camera.viewport);
 
-            let angle = GYRO.lock().unwrap().get_angle();
+            let angle = if self.res.config.rotation_mode {
+                GYRO.lock().unwrap().get_angle()
+            } else {
+                0.
+            };
 
             self.judge.update(&mut self.res, &mut self.chart, &mut self.bad_notes, -angle);
             #[cfg(feature = "play")]
@@ -1442,7 +1448,11 @@ impl Scene for GameScene {
             draw_rectangle(-1., -h, 2., h * 2., Color::new(0., 0., 0., res.alpha * res.info.background_dim));
         }
 
-        let angle = GYRO.lock().unwrap().get_angle();
+        let angle = if res.config.rotation_mode {
+            GYRO.lock().unwrap().get_angle()
+        } else {
+            0.
+        };
         set_camera( &Camera2D {
             zoom: chart_zoom,
             viewport: chart_viewport.map(|(x, y, w, h)| {
