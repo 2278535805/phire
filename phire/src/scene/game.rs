@@ -1215,7 +1215,7 @@ impl Scene for GameScene {
         if !tm.paused() && (self.res.config.autoplay() || self.pause_rewind.time.is_none()) && self.mode != GameMode::View {
             self.gl.quad_gl.viewport(self.res.camera.viewport);
 
-            let angle = GYRO.lock().unwrap().get_angle(&self.res.config);
+            let angle = GYRO.lock().unwrap().get_angle();
 
             self.judge.update(&mut self.res, &mut self.chart, &mut self.bad_notes, -angle);
             #[cfg(feature = "play")]
@@ -1442,7 +1442,7 @@ impl Scene for GameScene {
             draw_rectangle(-1., -h, 2., h * 2., Color::new(0., 0., 0., res.alpha * res.info.background_dim));
         }
 
-        let angle = GYRO.lock().unwrap().get_angle(&res.config);
+        let angle = GYRO.lock().unwrap().get_angle();
         set_camera( &Camera2D {
             zoom: chart_zoom,
             viewport: chart_viewport.map(|(x, y, w, h)| {

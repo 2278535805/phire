@@ -4,8 +4,6 @@ use std::f32;
 use nalgebra::{Unit, UnitQuaternion, Vector3};
 use lazy_static::lazy_static;
 
-use crate::config::Config;
-
 #[derive(Debug, Clone, Copy)]
 pub struct GyroData {
     pub angular_velocity: Vector3<f32>, // 角速度 (rad/s)
@@ -71,9 +69,9 @@ impl Gyro {
             return;
         }
 
-        let g_dev = gravity_data / norm;  // 归一化, g_dev 指向重力方向
+        let g_dev = gravity_data / norm; // 归一化, g_dev 指向重力方向
 
-        self.flatness = smooth_step(g_dev.z.abs(), 0.7, 0.95);
+        self.flatness = smooth_step(g_dev.z.abs(), 0.75, 0.95);
 
         let world_gravity = Vector3::new(0.0, -1.0, 0.0); // 世界坐标系下的重力方向
 
@@ -93,12 +91,12 @@ impl Gyro {
         let world = self.gravity.transform_vector(&Vector3::new(0.0, 1.0, 0.0));
         //let device = self.rotation.transform_vector(&Vector3::new(1.0, 0.0, 0.0));
 
-        let proj: nalgebra::Matrix<f32, nalgebra::Const<3>, nalgebra::Const<1>, nalgebra::ArrayStorage<f32, 3, 1>> = Vector3::new(world.x, world.y, world.z);
+        let proj = Vector3::new(world.x, world.y, world.z);
         let tan = world.y.atan2(proj.x);
         tan
     }
 
-    pub fn get_angle(&self, config: &Config) -> f32 {
+    pub fn get_angle(&self) -> f32 {
         let gravity_angle = self.get_gravity_angle();
         let gyro_angle = self.get_gyroscope_angle();
         lerp_angle(gravity_angle, gyro_angle, self.flatness)
