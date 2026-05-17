@@ -1,7 +1,7 @@
 use crate::{
     config::Config,
-    core::{BadNote, Chart, Note, NoteKind, Point, Resource, Vector, NOTE_WIDTH_RATIO_BASE},
-    ext::{get_viewport, NotNanExt},
+    core::{BadNote, Chart, NOTE_WIDTH_RATIO_BASE, Note, NoteKind, Point, Resource, Vector},
+    ext::{NotNanExt, get_viewport},
 };
 use macroquad::prelude::{
     utils::{register_input_subscriber, repeat_all_miniquad_input},
@@ -66,12 +66,26 @@ impl HitSound {
     pub fn play(&self, res: &mut Resource) {
         match self {
             HitSound::None => {}
-            HitSound::Click => play_sfx(&mut res.sfx_click, &res.config),
-            HitSound::Flick => play_sfx(&mut res.sfx_flick, &res.config),
-            HitSound::Drag => play_sfx(&mut res.sfx_drag, &res.config),
+            HitSound::Click => {
+                if check_hitsound(&mut res.played_hitsounds_count, "click") {
+                    play_sfx(&mut res.sfx_click, &res.config)
+                }
+            },
+            HitSound::Flick => {
+                if check_hitsound(&mut res.played_hitsounds_count, "flick") {
+                    play_sfx(&mut res.sfx_flick, &res.config)
+                }
+            },
+            HitSound::Drag => {
+                if check_hitsound(&mut res.played_hitsounds_count, "drag") {
+                    play_sfx(&mut res.sfx_drag, &res.config)
+                }
+            },
             HitSound::Custom(s) => {
                 if let Some(sfx) = res.extra_sfxs.get_mut(s) {
-                    play_sfx(sfx, &res.config);
+                    if check_hitsound(&mut res.played_hitsounds_count, s) {
+                        play_sfx(sfx, &res.config)
+                    }
                 }
             }
         }
@@ -84,6 +98,16 @@ impl HitSound {
             NoteKind::Drag => HitSound::Drag,
             NoteKind::Hold { .. } => HitSound::Click,
         }
+    }
+}
+
+fn check_hitsound(map: &mut HashMap<String, u8, rustc_hash::FxBuildHasher>, sfx: &str) -> bool {
+    let count = map.entry(sfx.to_string()).or_insert(0);
+    if *count < 5 {
+        *count += 1;
+        true
+    } else {
+        false
     }
 }
 
@@ -276,7 +300,7 @@ impl Judge {
             .iter()
             .map(|line| {
                 let mut idx: Vec<u32> = (0..(line.notes.len() as u32)).filter(|it| !line.notes[*it as usize].fake).collect();
-                idx.sort_by_key(|id| line.notes[*id as usize].time.not_nan());
+                idx.sort_unstable_by_key(|id| line.notes[*id as usize].time.not_nan());
                 (idx, 0)
             })
             .collect();
@@ -338,13 +362,17 @@ impl Judge {
         )
     }
 
-    fn touch_transform(flip_x: bool, scale: f32, angle: f32) -> impl Fn(&mut Touch) {
+    fn touch_transform(flip_x: bool, scale: f32, angle: f32, low_resolution_mode: bool) -> impl Fn(&mut Touch) {
         let vp = get_viewport();
         move |touch| {
-            let p = touch.position;
+            let p = if low_resolution_mode {
+                vec2(touch.position.x / 2., touch.position.y / 2.)
+            } else {
+                touch.position
+            };
             touch.position = vec2(
                 (p.x - vp.0 as f32) / vp.2 as f32 * 2. - 1.,
-                ((p.y - (screen_height() - (vp.1 + vp.3) as f32)) / vp.3 as f32 * 2. - 1.) / (vp.2 as f32 / vp.3 as f32),
+                ((p.y - (vp.3 as f32 - (vp.1 + vp.3) as f32)) / vp.3 as f32 * 2. - 1.) / (vp.2 as f32 / vp.3 as f32),
             );
             if flip_x {
                 touch.position.x *= -1.;
@@ -354,10 +382,10 @@ impl Judge {
         }
     }
 
-    pub fn get_touches(scale: f32) -> Vec<Touch> {
+    pub fn get_touches(scale: f32, low_resolution_mode: bool) -> Vec<Touch> {
         TOUCHES.with(|it| {
             let guard = it.borrow();
-            let tr = Self::touch_transform(false, scale, 0.);
+            let tr = Self::touch_transform(false, scale, 0., low_resolution_mode);
             guard
                 .0
                 .iter()
@@ -371,6 +399,7 @@ impl Judge {
     }
 
     pub fn update(&mut self, res: &mut Resource, chart: &mut Chart, bad_notes: &mut Vec<BadNote>, angle: f32) {
+        res.played_hitsounds_count.clear();
         if res.config.autoplay() {
             self.auto_play_update(res, chart);
             return;
@@ -415,7 +444,7 @@ impl Judge {
                     time: f64::NEG_INFINITY,
                 });
             }
-            let tr = Self::touch_transform(res.config.flip_x(), res.config.chart_ratio, angle);
+            let tr = Self::touch_transform(res.config.flip_x(), res.config.chart_ratio, angle, res.config.low_resolution_mode);
             touches
                 .into_iter()
                 .map(|mut it| {
@@ -616,6 +645,10 @@ impl Judge {
                             NoteKind::Click => {
                                 note.judge = JudgeStatus::Judged;
                                 judgements.push((if dt <= LIMIT_PERFECT { Judgement::Perfect } else { Judgement::Good }, line_id, id, Some(t)));
+                                #[cfg(feature = "play")]
+                                if res.config.health_mode.is_some() {
+                                    res.health.on_judge(Judgement::Perfect);
+                                }
                             }
                             NoteKind::Hold { .. } => {
                                 play_sfx(&mut res.sfx_click, &res.config);
@@ -630,6 +663,10 @@ impl Judge {
                             // keep the note after bad judgement
                             note.judge = JudgeStatus::PreJudge;
                             judgements.push((Judgement::Bad, line_id, id, None));
+                            #[cfg(feature = "play")]
+                            if res.config.health_mode.is_some() {
+                                res.health.on_judge(Judgement::Bad);
+                            }
                         }
                     }
                 } else {
@@ -666,18 +703,18 @@ impl Judge {
                     match note.kind {
                         NoteKind::Click => {
                             note.judge = JudgeStatus::Judged;
-                            judgements.push((
-                                if dt <= LIMIT_PERFECT {
+                            let judge = if dt <= LIMIT_PERFECT {
                                     Judgement::Perfect
                                 } else if dt <= LIMIT_GOOD {
                                     Judgement::Good
                                 } else {
                                     Judgement::Bad
-                                },
-                                line_id,
-                                id,
-                                None,
-                            ));
+                                };
+                            judgements.push((judge, line_id, id, None));
+                            #[cfg(feature = "play")]
+                            if res.config.health_mode.is_some() {
+                                res.health.on_judge(judge);
+                            }
                         }
                         NoteKind::Hold { .. } => {
                             note.hitsound.play(res);
@@ -709,6 +746,10 @@ impl Judge {
                             if t > *up_time + UP_TOLERANCE {
                                 note.judge = JudgeStatus::Judged;
                                 judgements.push((Judgement::Miss, line_id, *id, None));
+                                #[cfg(feature = "play")]
+                                if res.config.health_mode.is_some() {
+                                    res.health.on_judge(Judgement::Miss);
+                                }
                             } else if up_time.is_infinite() {
                                 *up_time = t;
                             }
@@ -726,6 +767,10 @@ impl Judge {
                 if dt > LIMIT_BAD {
                     note.judge = JudgeStatus::Judged;
                     judgements.push((Judgement::Miss, line_id, *id, None));
+                    #[cfg(feature = "play")]
+                    if res.config.health_mode.is_some() {
+                        res.health.on_judge(Judgement::Miss);
+                    }
                     continue;
                 }
                 if -dt > LIMIT_BAD {
@@ -759,7 +804,12 @@ impl Judge {
                     if let NoteKind::Hold { end_time, .. } = &note.kind {
                         if *end_time <= t {
                             note.judge = JudgeStatus::Judged;
-                            judgements.push((if perfect { Judgement::Perfect } else { Judgement::Good }, line_id, *id, Some(diff)));
+                            let judge = if perfect { Judgement::Perfect } else { Judgement::Good };
+                            judgements.push((judge, line_id, *id, Some(diff)));
+                            #[cfg(feature = "play")]
+                            if res.config.health_mode.is_some() {
+                                res.health.on_judge(judge);
+                            }
                             continue;
                         }
                     }
@@ -782,6 +832,10 @@ impl Judge {
                     note.judge = JudgeStatus::Judged;
                     if !matches!(note.kind, NoteKind::Click) {
                         judgements.push((Judgement::Perfect, line_id, *id, diff));
+                        #[cfg(feature = "play")]
+                        if res.config.health_mode.is_some() {
+                            res.health.on_judge(Judgement::Perfect);
+                        }
                     }
                 }
             }
@@ -891,6 +945,10 @@ impl Judge {
                         if t >= end_time {
                             note.judge = JudgeStatus::Judged;
                             judgements.push((line_id, *id));
+                            #[cfg(feature = "play")]
+                            if res.config.health_mode.is_some() {
+                                res.health.on_judge(Judgement::Perfect);
+                            }
                             continue;
                         }
                     }
@@ -911,6 +969,10 @@ impl Judge {
                     JudgeStatus::Hold(true, t, judge_time, true, f64::INFINITY)
                 } else {
                     judgements.push((line_id, *id));
+                    #[cfg(feature = "play")]
+                    if res.config.health_mode.is_some() {
+                        res.health.on_judge(Judgement::Perfect);
+                    }
                     JudgeStatus::Judged
                 };
             }

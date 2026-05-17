@@ -12,13 +12,13 @@ use super::{
 use crate::{
     bin::BinaryReader,
     config::{Config, Mods},
-    core::{BadNote, Chart, ChartExtra, Effect, Point, Resource, UIElement, BUFFER_SIZE},
-    ext::{draw_text_aligned, draw_text_aligned_opt_width, ease_in_out_quartic, get_latency, parse_time, push_frame_time, screen_aspect, semi_white, validate_combo, RectExt, SafeTexture},
+    core::{BUFFER_SIZE, BadNote, Chart, ChartExtra, Effect, Point, Resource, UIElement},
+    ext::{RectExt, SafeTexture, draw_text_aligned, draw_text_aligned_opt_width, ease_in_out_quartic, get_latency, parse_time, push_frame_time, screen_aspect, semi_white, validate_combo},
     fs::FileSystem,
     gyro::GYRO,
     info::{ChartFormat, ChartInfo},
     judge::Judge,
-    parse::{parse_extra, parse_pec, parse_phigros, parse_rpe},
+    parse::{RPE_WIDTH, parse_extra, parse_pec, parse_phigros, parse_rpe},
     time::TimeManager,
     ui::{RectButton, Ui}
 };
@@ -318,8 +318,9 @@ impl GameScene {
             ChartExtra::default()
         };
         let bytes = Self::load_chart_bytes(fs, info).await.context("Failed to load chart")?;
+        let text = std::str::from_utf8(&bytes);
         let format = info.format.clone().unwrap_or_else(|| {
-            if let Ok(text) = std::str::from_utf8(&bytes) {
+            if let Ok(text) = text {
                 if text.starts_with('{') {
                     if text.contains("\"META\"") {
                         ChartFormat::Rpe
@@ -334,9 +335,9 @@ impl GameScene {
             }
         });
         let mut chart = match format {
-            ChartFormat::Rpe => parse_rpe(&String::from_utf8_lossy(&bytes), fs, extra).await,
-            ChartFormat::Pgr => parse_phigros(&String::from_utf8_lossy(&bytes), extra),
-            ChartFormat::Pec => parse_pec(&String::from_utf8_lossy(&bytes), extra),
+            ChartFormat::Rpe => parse_rpe(&text?, fs, extra).await,
+            ChartFormat::Pgr => parse_phigros(&text?, extra),
+            ChartFormat::Pec => parse_pec(&text?, extra),
             ChartFormat::Pbc => {
                 let mut r = BinaryReader::new(Cursor::new(bytes));
                 r.read()
@@ -366,7 +367,7 @@ impl GameScene {
             }
             _ => {}
         }
-        let (mut chart, _) = if let Some((chart, format)) = preload_chart {
+        let (mut chart, format) = if let Some((chart, format)) = preload_chart {
             (chart, format)
         } else {
             Self::load_chart(fs.deref_mut(), &info, &config).await?
@@ -393,6 +394,11 @@ impl GameScene {
         )
         .await
         .context("Failed to load resources")?;
+
+        if matches!(format, ChartFormat::Rpe) {
+            res.info.line_length *= 4000. / RPE_WIDTH / 6.;
+        }
+
         let offset = chart.offset + info_offset + res.config.offset;
         let exercise_range = offset + res.config.play_start_time..res.track_length;
         
@@ -489,7 +495,7 @@ impl GameScene {
             && !tm.paused()
             && self.pause_rewind.time.is_none()
             && matches!(self.state, State::Playing)
-            && Judge::get_touches(res.config.chart_ratio).iter().any(|touch| {
+            && Judge::get_touches(res.config.chart_ratio, res.config.low_resolution_mode).iter().any(|touch| {
                 touch.phase == TouchPhase::Started && {
                     let p = touch.position;
                     let p = Point::new(p.x * screen_aspect, p.y * screen_aspect);
@@ -604,6 +610,22 @@ impl GameScene {
         }
         let lf = -aspect_ratio + margin;
         let bt = -top - eps * 3.5 + (1. - p) * 0.4;
+        #[cfg(feature = "play")]
+        if res.config.health_mode.is_some() && matches!(self.mode, GameMode::Normal | GameMode::NoRetry | GameMode::View) {
+            let w = aspect_ratio * 0.05;
+            let y = -top - eps * 9.;
+            let h = top * 2. + eps * 23.;
+            let dh = res.health.state.now_health / res.health.config.max_health * h;
+            ui.fill_rect(
+                Rect::new(lf, y, w, h),
+                Color::new(0.4, 0.4, 0.4, c.a),
+            );
+            ui.fill_rect(
+                Rect::new(lf, y, w, dh),
+                Color::new(0.6, 0.6, 0.6, c.a),
+            );
+            draw_text_aligned_opt_width(ui, &format!("{:.0}", &res.health.state.now_health), lf + w * 0.5, y + dh - 0.01, (0.5, 1.), 0.4 * scale_ratio, semi_white(0.8 * c.a), 0.9 * aspect_ratio);
+        }
         if res.config.render_ui_name {
             self.chart.with_element(ui, res, UIElement::Name, Some((lf, bt)), Some((lf, bt)), |ui, color| {
                 draw_text_aligned_opt_width(ui, &res.info.name, lf, bt, (0., 1.), 0.505 * scale_ratio, Color { a: color.a * c.a, ..color }, 0.9 * aspect_ratio);
@@ -710,7 +732,7 @@ impl GameScene {
             );
             if res.config.interactive {
                 let mut clicked = None;
-                for touch in Judge::get_touches(1.0) {
+                for touch in Judge::get_touches(1.0, res.config.low_resolution_mode) {
                     if touch.phase != TouchPhase::Started {
                         continue;
                     }
@@ -794,7 +816,7 @@ impl GameScene {
                 ui.fill_circle(st, -eh, rad, Color::new(0.66, 0.78, 0.98, 1.));
                 if self.exercise_press.is_none() {
                     let r = ui.rect_to_global(Rect::new(st, -eh, 0., 0.).feather(rad));
-                    self.exercise_press = Judge::get_touches(1.0)
+                    self.exercise_press = Judge::get_touches(1.0, self.res.config.low_resolution_mode)
                         .iter()
                         .find(|it| it.phase == TouchPhase::Started && r.contains(it.position))
                         .map(|it| (-1, it.id));
@@ -803,7 +825,7 @@ impl GameScene {
                 ui.fill_circle(en, eh, rad, Color::new(1., 0.34, 0.54, 1.));
                 if self.exercise_press.is_none() {
                     let r = ui.rect_to_global(Rect::new(en, eh, 0., 0.).feather(rad));
-                    self.exercise_press = Judge::get_touches(1.0)
+                    self.exercise_press = Judge::get_touches(1.0, self.res.config.low_resolution_mode)
                         .iter()
                         .find(|it| it.phase == TouchPhase::Started && r.contains(it.position))
                         .map(|it| (1, it.id));
@@ -812,7 +834,7 @@ impl GameScene {
                 ui.fill_circle(cur, 0., rad, Color::new(0.95, 0.95, 0.95, 1.));
                 if self.exercise_press.is_none() {
                     let r = ui.rect_to_global(Rect::new(cur, 0., 0., 0.).feather(rad));
-                    self.exercise_press = Judge::get_touches(1.0)
+                    self.exercise_press = Judge::get_touches(1.0, self.res.config.low_resolution_mode)
                         .iter()
                         .find(|it| it.phase == TouchPhase::Started && r.contains(it.position))
                         .map(|it| (0, it.id));
@@ -822,7 +844,7 @@ impl GameScene {
                     self.exercise_press = None;
                 }
                 if let Some((ctrl, id)) = &self.exercise_press {
-                    if let Some(touch) = Judge::get_touches(1.0).iter().rfind(|it| it.id == *id) {
+                    if let Some(touch) = Judge::get_touches(1.0, self.res.config.low_resolution_mode).iter().rfind(|it| it.id == *id) {
                         let x = touch.position.x;
                         let p = (x + hw) / (hw * 2.) * (self.res.track_length - sp) as f32 + sp as f32;
                         let p = if track_length - sp as f32 <= 3. || *ctrl == 0 {
@@ -1055,8 +1077,9 @@ impl Scene for GameScene {
     }
 
     fn update(&mut self, tm: &mut TimeManager) -> Result<()> {
+        let time = tm.now();
         self.res.audio.recover_if_needed()?;
-        if matches!(self.state, State::Playing) {
+        if matches!(self.state, State::Playing) && time < self.res.track_length {
             tm.update(self.music.position() as f64);
         }
         if self.mode == GameMode::Exercise && tm.now() > self.exercise_range.end as f64 && self.exercise_range.end < self.res.track_length - 0.1 && !tm.paused() {
@@ -1067,10 +1090,9 @@ impl Scene for GameScene {
             tm.pause();
             self.music.pause()?;
         }
-        if tm.paused() {
+        if tm.paused() && self.res.config.rotation_mode {
             GYRO.lock().unwrap().reset_gyroscope();
         }
-        let time = tm.now();
         let time = match self.state {
             State::Starting => {
                 #[cfg(target_os = "windows")]
@@ -1098,7 +1120,9 @@ impl Scene for GameScene {
                     }
                     tm.now()
                 } else {
-                    GYRO.lock().unwrap().reset_gyroscope();
+                    if self.res.config.rotation_mode {
+                        GYRO.lock().unwrap().reset_gyroscope();
+                    }
                     if self.res.config.enter_animation {
                         self.res.alpha = 1. - (1. - time / Self::BEFORE_TIME).clamp(0., 1.).powi(3) as f32;
                     } else {
@@ -1116,7 +1140,10 @@ impl Scene for GameScene {
                 time
             }
             State::Playing => {
-                if time >= self.res.track_length + WAIT_TIME {
+                let is_ending = time >= self.res.track_length + WAIT_TIME;
+                #[cfg(feature = "play")]
+                let is_ending = is_ending || self.res.health.state.track_failed;
+                if is_ending {
                     self.music.pause()?;
                     self.state = State::Ending;
                 }
@@ -1124,7 +1151,10 @@ impl Scene for GameScene {
             }
             State::Ending => {
                 let t = time - self.res.track_length - WAIT_TIME;
-                if t >= Self::WAIT_AFTER_TIME {
+                let is_ending = t >= Self::WAIT_AFTER_TIME;
+                #[cfg(feature = "play")]
+                let is_ending = is_ending || self.res.health.state.track_failed;
+                if is_ending {
                     if self.res.config.autoplay() {
                         self.judge.commit_all(&mut self.chart);
                     }
@@ -1187,9 +1217,17 @@ impl Scene for GameScene {
         if !tm.paused() && (self.res.config.autoplay() || self.pause_rewind.time.is_none()) && self.mode != GameMode::View {
             self.gl.quad_gl.viewport(self.res.camera.viewport);
 
-            let angle = GYRO.lock().unwrap().get_angle(&self.res.config);
+            let angle = if self.res.config.rotation_mode {
+                GYRO.lock().unwrap().get_angle()
+            } else {
+                0.
+            };
 
             self.judge.update(&mut self.res, &mut self.chart, &mut self.bad_notes, -angle);
+            #[cfg(feature = "play")]
+            if self.res.config.health_mode.is_some() && matches!(self.state, State::Playing) && matches!(self.mode, GameMode::Normal | GameMode::NoRetry | GameMode::View) {
+                self.res.health.update(time as f32);
+            }
             self.gl.quad_gl.viewport(None);
         }
         if let Some(update) = &mut self.update_fn {
@@ -1346,18 +1384,23 @@ impl Scene for GameScene {
         let msaa = res.config.sample_count > 1;
 
         // camera setup
-        let vp = res.camera.viewport.unwrap_or(ui.viewport);
-        let asp2_window = ui.viewport.2 as f32 / ui.viewport.3 as f32;
-        let asp2_chart = vp.2 as f32 / vp.3 as f32;
-        let asp2_ui = vp.3 as f32 / vp.2 as f32;
-        let asp2_ui_window = ui.viewport.3 as f32 / ui.viewport.2 as f32;
-
+        let ui_viewport = if res.config.low_resolution_mode {
+            (ui.viewport.0 / 2, ui.viewport.1 / 2, ui.viewport.2 / 2, ui.viewport.3 / 2)
+        } else {
+            ui.viewport
+        };
+        let vp = res.camera.viewport.unwrap_or(ui_viewport);
+        let viewport_window = Some(ui_viewport);
         let viewport_chart = if res.chart_target.is_some() {
-            Some((vp.0 - ui.viewport.0, vp.1 - ui.viewport.1, vp.2, vp.3))
+            Some((vp.0 - ui_viewport.0, vp.1 - ui_viewport.1, vp.2, vp.3))
         } else {
             res.camera.viewport
         };
-        let viewport_window = Some(ui.viewport);
+
+        let asp2_window = ui_viewport.2 as f32 / ui_viewport.3 as f32;
+        let asp2_chart = vp.2 as f32 / vp.3 as f32;
+        let asp2_ui = vp.3 as f32 / vp.2 as f32;
+        let asp2_ui_window = ui_viewport.3 as f32 / ui_viewport.2 as f32;
 
         let chart_onto = res
             .chart_target
@@ -1383,7 +1426,7 @@ impl Scene for GameScene {
             let dim_alpha = 0.7;
             //let alpha = res.alpha * (1. - dim_alpha) + dim_alpha;    
             let dim = Color::new(0.1, 0.1, 0.1, dim_alpha * res.alpha);
-            let x_range = vp.0 as f32 / ui.viewport.2 as f32;
+            let x_range = vp.0 as f32 / ui_viewport.2 as f32;
             let y_range =  vp.1 as f32 / vp.3 as f32;
             draw_rectangle(-1., -h,x_range * 2., h * 2., dim); // Left
             draw_rectangle(1., -h,-x_range * 2., h * 2., dim); // Right
@@ -1405,7 +1448,11 @@ impl Scene for GameScene {
             draw_rectangle(-1., -h, 2., h * 2., Color::new(0., 0., 0., res.alpha * res.info.background_dim));
         }
 
-        let angle = GYRO.lock().unwrap().get_angle(&res.config);
+        let angle = if res.config.rotation_mode {
+            GYRO.lock().unwrap().get_angle()
+        } else {
+            0.
+        };
         set_camera( &Camera2D {
             zoom: chart_zoom,
             viewport: chart_viewport.map(|(x, y, w, h)| {
@@ -1497,7 +1544,7 @@ impl Scene for GameScene {
                 self.tweak_offset(ui, Self::interactive(&self.res, &self.state), tm);
             }
             if self.res.config.touch_debug {
-                for touch in Judge::get_touches(1.0) {
+                for touch in Judge::get_touches(1.0, self.res.config.low_resolution_mode) {
                     ui.fill_circle(touch.position.x, touch.position.y, 0.04, Color { a: 0.4, ..RED });
                 }
             }
@@ -1513,7 +1560,7 @@ impl Scene for GameScene {
             self.overlay_ui(ui, tm)?;
         }
 
-        if msaa || !self.res.no_effect {
+        if !self.res.no_effect || msaa || self.res.config.low_resolution_mode {
             // render the texture onto screen
             if let Some(target) = &self.res.chart_target {
                 self.gl.flush();
@@ -1521,7 +1568,7 @@ impl Scene for GameScene {
                 set_camera(&Camera2D {
                     zoom: vec2(1., asp2_window),
                     render_target: self.res.camera.render_target,
-                    viewport: viewport_window,
+                    viewport: Some(ui.viewport),
                     ..Default::default()
                 });
                 draw_texture_ex(

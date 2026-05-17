@@ -19,6 +19,8 @@ item-mp-addr-sub = Server address, 'host:port'
 item-mp-addr-invalid = Invalid server address
 item-lowq = Low quality mode
 item-lowq-sub = Enable this if the UI is laggy
+item-anti-aliasing = Anti-aliasing
+item-low-resolution = Low resolution mode
 item-insecure = Insecure mode
 item-insecure-sub = Enable this if you can't use online functionalities. Makes your connection insecure!
 
@@ -67,8 +69,15 @@ item-rotation-flat-mode = Rotation Mode - Lay Flat
 item-rotation-flat-mode-sub = Orientation calibrates when the game starts. If its wrong, tap reset on the pause screen.
 item-shake-play-mode = Shake Mode
 
+item-health-mode = Health Mode
+item-health-mode-example = Health Mode Example
+item-health-mode-sub = classic | comboHeal | speedBased
+item-max-health = Max Health
+item-initial-health = Initial Health
+
 load-cali-failed = Failed to load audio
 not-combo = Cannot be COMBO
+illegal-input = Illegal input
 
 about-content =
   Phira v{ $version }

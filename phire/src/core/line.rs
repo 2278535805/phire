@@ -93,7 +93,7 @@ pub struct JudgeLineCache {
 
 impl JudgeLineCache {
     pub fn new(notes: &mut Vec<Note>) -> Self {
-        notes.sort_by_key(|it| {
+        notes.sort_unstable_by_key(|it| {
             (
                 !it.above,
                 it.speed.not_nan(),
@@ -102,7 +102,7 @@ impl JudgeLineCache {
         });
         
         let mut res = Self {
-            update_order: Vec::new(),
+            update_order: Vec::with_capacity(notes.len()),
             above_indices: Vec::new(),
             below_indices: Vec::new(),
         };
@@ -111,7 +111,8 @@ impl JudgeLineCache {
     }
 
     pub(crate) fn reset(&mut self, notes: &mut Vec<Note>) {
-        self.update_order = (0..notes.len() as u32).collect();
+        self.update_order.clear();
+        self.update_order.extend(0..notes.len() as u32);        
         self.above_indices.clear();
         self.below_indices.clear();
         let mut index = 0;
@@ -166,11 +167,25 @@ impl JudgeLine {
         self.height.set_time(res.time);
         let line_height = self.height.now();
         let mut ctrl_obj = self.ctrl_obj.borrow_mut();
-        self.cache.update_order.retain(|id| {
-            let note = &mut self.notes[*id as usize];
+
+        //   self.cache.update_order.retain(|id| {
+        //       let note = &mut self.notes[*id as usize];
+        //       note.update(...);
+        //       !note.dead()
+        //   });
+        //   retain 在删除元素时需要将后续所有元素前移（memmove），开销为 O(n)
+
+        let mut i = 0;
+        while i < self.cache.update_order.len() {
+            let id = self.cache.update_order[i];
+            let note = &mut self.notes[id as usize];
             note.update(res, rot, &tr, &mut ctrl_obj, line_height, bpm_list, index);
-            !note.dead()
-        });
+            if note.dead() {
+                self.cache.update_order.swap_remove(i); // update_order 顺序不影响功能
+            } else {
+                i += 1;
+            }
+        }
         drop(ctrl_obj);
         match &mut self.kind {
             JudgeLineKind::Text(anim) => {
@@ -196,34 +211,56 @@ impl JudgeLine {
                 },
             }
         };
-        self.cache.above_indices.retain_mut(|index| {
-            while not_judge(*index) {
+
+        //   self.cache.above_indices.retain_mut(|index| {
+        //       while not_judge(*index) { ... }
+        //       true/false
+        //   });
+        //   retain_mut 在删除元素时需要将后续元素前移，产生内存拷贝开销
+
+        let mut write_idx = 0;
+        for i in 0..self.cache.above_indices.len() {
+            let mut index = self.cache.above_indices[i];
+            while not_judge(index) {
                 if self
                     .notes
-                    .get(*index + 1)
-                    .map_or(false, |it| it.above && it.speed == self.notes[*index].speed)
+                    .get(index + 1)
+                    .map_or(false, |it| it.above && it.speed == self.notes[index].speed)
                 {
-                    *index += 1;
+                    index += 1;
                 } else {
-                    return false;
+                    index = usize::MAX; // 标记删除
+                    break;
                 }
             }
-            true
-        });
-        self.cache.below_indices.retain_mut(|index| {
-            while not_judge(*index) {
+            if index != usize::MAX {
+                self.cache.above_indices[write_idx] = index;
+                write_idx += 1;
+            }
+        }
+        self.cache.above_indices.truncate(write_idx);
+
+        let mut write_idx = 0;
+        for i in 0..self.cache.below_indices.len() {
+            let mut index = self.cache.below_indices[i];
+            while not_judge(index) {
                 if self
                     .notes
-                    .get(*index + 1)
-                    .map_or(false, |it| it.speed == self.notes[*index].speed)
+                    .get(index + 1)
+                    .map_or(false, |it| it.speed == self.notes[index].speed)
                 {
-                    *index += 1;
+                    index += 1;
                 } else {
-                    return false;
+                    index = usize::MAX;
+                    break;
                 }
             }
-            true
-        });
+            if index != usize::MAX {
+                self.cache.below_indices[write_idx] = index;
+                write_idx += 1;
+            }
+        }
+        self.cache.below_indices.truncate(write_idx);
     }
 
     pub fn fetch_pos(&self, res: &Resource, lines: &[JudgeLine]) -> Vector {
@@ -264,12 +301,12 @@ impl JudgeLine {
                             if color.a == 0.0 {
                                 return;
                             }
-                            let len = if res.info.line_reference_y_axis {
-                                res.info.line_length() / res.aspect_ratio
+                            let len = if settings.line_reference_y_axis {
+                                res.info.line_length / res.aspect_ratio
                             } else {
-                                res.info.line_length()
+                                res.info.line_length
                             };
-                            let thickness = if res.info.line_reference_y_axis {
+                            let thickness = if settings.line_reference_y_axis {
                                 0.0150 / res.aspect_ratio
                             } else {
                                 0.0100
@@ -280,9 +317,6 @@ impl JudgeLine {
                     JudgeLineKind::Texture(texture, _) => {
                         if res.config.render_line_extra {
                             let mut color = color.unwrap_or(WHITE);
-                            if res.time <= 0. && matches!(color, WHITE) { // some image show pure white before play
-                                color = BLACK;
-                            }
                             color.a = parse_alpha(alpha.max(0.0), res.alpha, 0.15, res.config.chart_debug_line > 0.);
                             if color.a == 0.0 {
                                 return;
@@ -442,7 +476,7 @@ impl JudgeLine {
                     _ => {}
                 }
             }
-            let (vw, vh) = (1.0 / res.config.chart_ratio, 1.0 / res.config.chart_ratio);
+            let (vw, vh) = (1.0 / res.config.chart_ratio, 1.0 / res.aspect_ratio / res.config.chart_ratio);
             let p = [
                 res.screen_to_world(Point::new(-vw, -vh)),
                 res.screen_to_world(Point::new(-vw, vh)),
@@ -479,9 +513,10 @@ impl JudgeLine {
                                     config.line_height
                                 }
                             };
-                            let note_height = (note.height - line_height + note.object.translation.1.now() as f64) / aspect_ratio * speed;
+                            let note_height = ((note.height - line_height) * speed + note.object.translation.1.now() as f64) / aspect_ratio;
                             match note.kind {   
                                 NoteKind::Hold { end_height, .. } => {
+                                    let end_height = ((end_height - line_height) * speed + note.object.translation.1.now() as f64) / aspect_ratio;
                                     if end_height < height_below {
                                         continue;
                                     }
@@ -497,7 +532,7 @@ impl JudgeLine {
                                 break;
                             }
                         }
-                        note.render(ui, res, &mut config, bpm_list, line_set_debug_alpha, id, height_above);
+                        note.render(ui, res, &mut config, bpm_list, line_set_debug_alpha, id, height_above, height_below);
                     }
                 }
 
@@ -526,16 +561,17 @@ impl JudgeLine {
                                         config.line_height
                                     }
                                 };
-                                let note_height = (note.height - line_height + note.object.translation.1.now() as f64) / aspect_ratio * speed;
+                                let note_height = ((note.height - line_height) * speed + note.object.translation.1.now() as f64) / aspect_ratio;
                                 match note.kind {   
                                     NoteKind::Hold { end_height, .. } => {
-                                        if end_height < height_below {
+                                        let end_height = ((end_height - line_height) * speed + note.object.translation.1.now() as f64) / aspect_ratio;
+                                        if end_height < -height_above {
                                             continue;
                                         }
                                         
                                     },
                                     _ => {
-                                        if note_height < height_below {
+                                        if note_height < -height_above {
                                             continue;
                                         }
                                     }
@@ -544,7 +580,7 @@ impl JudgeLine {
                                     break;
                                 }
                             }
-                            note.render(ui, res, &mut config, bpm_list, line_set_debug_alpha, id, -height_below);
+                            note.render(ui, res, &mut config, bpm_list, line_set_debug_alpha, id, -height_below, -height_above);
                         }
                     }
                 });

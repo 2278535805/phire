@@ -5,10 +5,11 @@ use crate::{get_data, get_data_mut, popup::ChooseButton, save_data, scene::BGM_V
 use anyhow::Result;
 use macroquad::prelude::*;
 use phire::{
-    ext::{poll_future, semi_black, validate_combo, LocalTask, RectExt, SafeTexture, ScaleType},
-    l10n::{LanguageIdentifier, LANG_IDENTS, LANG_NAMES},
+    ext::{LocalTask, RectExt, SafeTexture, ScaleType, poll_future, semi_black, validate_combo},
+    health::{HealthConfig, HealthType},
+    l10n::{LANG_IDENTS, LANG_NAMES, LanguageIdentifier},
     scene::{request_input, return_input, show_error, show_message, take_input},
-    ui::{DRectButton, Scroll, Slider, Ui},
+    ui::{DRectButton, Scroll, Slider, Ui}
 };
 use std::{borrow::Cow, net::ToSocketAddrs, sync::atomic::Ordering};
 
@@ -280,7 +281,8 @@ struct GeneralList {
     fullscreen_btn: DRectButton,
     mp_btn: DRectButton,
     mp_addr_btn: DRectButton,
-    lowq_btn: DRectButton,
+    anti_aliasing_btn: DRectButton,
+    low_resolution_btn: DRectButton,
     insecure_btn: DRectButton,
 }
 
@@ -304,7 +306,8 @@ impl GeneralList {
             fullscreen_btn: DRectButton::new(),
             mp_btn: DRectButton::new(),
             mp_addr_btn: DRectButton::new(),
-            lowq_btn: DRectButton::new(),
+            anti_aliasing_btn: DRectButton::new(),
+            low_resolution_btn: DRectButton::new(),
             insecure_btn: DRectButton::new(),
         }
     }
@@ -340,8 +343,12 @@ impl GeneralList {
             request_input("mp_addr", &config.mp_address, tl!("item-mp-addr"));
             return Ok(Some(true));
         }
-        if self.lowq_btn.touch(touch, t) {
+        if self.anti_aliasing_btn.touch(touch, t) {
             config.sample_count = if config.sample_count == 1 { 2 } else { 1 };
+            return Ok(Some(true));
+        }
+        if self.low_resolution_btn.touch(touch, t) {
+            config.low_resolution_mode ^= true;
             return Ok(Some(true));
         }
         if self.insecure_btn.touch(touch, t) {
@@ -414,8 +421,12 @@ impl GeneralList {
             self.mp_addr_btn.render_text(ui, rr, t, c.a, &config.mp_address, 0.4, false);
         }
         item! {
-            render_title(ui, c, tl!("item-lowq"), Some(tl!("item-lowq-sub")));
-            render_switch(ui, rr, t, c, &mut self.lowq_btn, config.sample_count == 1);
+            render_title(ui, c, tl!("item-anti-aliasing"), None);
+            render_switch(ui, rr, t, c, &mut self.anti_aliasing_btn, config.sample_count == 2);
+        }
+        item! {
+            render_title(ui, c, tl!("item-low-resolution"), None);
+            render_switch(ui, rr, t, c, &mut self.low_resolution_btn, config.low_resolution_mode);
         }
         item! {
             render_title(ui, c, tl!("item-insecure"), Some(tl!("item-insecure-sub")));
@@ -693,9 +704,10 @@ struct OtherList {
     roman_btn: DRectButton,
     chinese_btn: DRectButton,
     rotation_mode: DRectButton,
-    rotation_flat_mode: DRectButton,
     #[cfg(feature = "play")]
     shake_play_mode_btn: DRectButton,
+
+    health_mode_btn: DRectButton,
 }
 
 impl OtherList {
@@ -711,9 +723,10 @@ impl OtherList {
             roman_btn: DRectButton::new(),
             chinese_btn: DRectButton::new(),
             rotation_mode: DRectButton::new(),
-            rotation_flat_mode: DRectButton::new(),
             #[cfg(feature = "play")]
             shake_play_mode_btn: DRectButton::new(),
+            #[cfg(feature = "play")]
+            health_mode_btn: DRectButton::new(),
         }
     }
 
@@ -764,21 +777,21 @@ impl OtherList {
         }
         if self.rotation_mode.touch(touch, t) {
             config.rotation_mode ^= true;
-            if !config.rotation_mode && config.rotation_flat_mode {
-                config.rotation_flat_mode = false;
-            }
-            return Ok(Some(true));
-        }
-        if self.rotation_flat_mode.touch(touch, t) {
-            config.rotation_flat_mode ^= true;
-            if config.rotation_flat_mode && !config.rotation_mode {
-                config.rotation_mode = true;
-            }
             return Ok(Some(true));
         }
         #[cfg(feature = "play")]
         if self.shake_play_mode_btn.touch(touch, t) {
             config.shake_play_mode ^= true;
+            return Ok(Some(true));
+        }
+        #[cfg(feature = "play")]
+        if self.health_mode_btn.touch(touch, t) {
+            let text = if let Some(health_mode) = config.health_mode.clone() {
+                health_mode.to_json()?
+            } else {
+                String::new()
+            };
+            request_input("health-mode", &text, tl!("item-health-mode"));
             return Ok(Some(true));
         }
         Ok(None)
@@ -802,6 +815,27 @@ impl OtherList {
                 }
                 data.config.combo = text;
                 return Ok(true);
+            } else {
+                return_input(id, text);
+            }
+        }
+        #[cfg(feature = "play")]
+        if let Some((id, text)) = take_input() {
+            if id == "health-mode" {
+                if text.trim().is_empty() {
+                    data.config.health_mode = None;
+                    return Ok(true);
+                }
+                match HealthConfig::from_json(&text) {
+                    Ok(health_mode) => {
+                        data.config.health_mode = Some(health_mode);
+                        return Ok(true);
+                    }
+                    Err(_) => {
+                        show_message(tl!("illegal-input")).error();
+                        return Ok(false);
+                    }
+                }
             } else {
                 return_input(id, text);
             }
@@ -863,14 +897,21 @@ impl OtherList {
             render_title(ui, c, tl!("item-rotation-mode"), None);
             render_switch(ui, rr, t, c, &mut self.rotation_mode, config.rotation_mode);
         }
-        item! {
-            render_title(ui, c, tl!("item-rotation-flat-mode"), Some(tl!("item-rotation-flat-mode-sub")));
-            render_switch(ui, rr, t, c, &mut self.rotation_flat_mode, config.rotation_flat_mode);
-        }
         #[cfg(feature = "play")]
         item! {
             render_title(ui, c, tl!("item-shake-play-mode"), None);
             render_switch(ui, rr, t, c, &mut self.shake_play_mode_btn, config.shake_play_mode);
+        }
+        #[cfg(feature = "play")]
+        item! {
+            render_title(ui, c, tl!("item-health-mode"), Some(tl!("item-health-mode-sub")));
+            let text = match config.health_mode.clone().map(|it| it.mode) {
+                None => "OFF",
+                Some(HealthType::Classic{}) => "classic",
+                Some(HealthType::ComboHeal{ .. }) => "comboHeal",
+                Some(HealthType::SpeedBased{ .. }) => "speedBased",
+            };
+            self.health_mode_btn.render_text(ui, rr, t, c.a, text, 0.4, false);
         }
         (w, h)
     }

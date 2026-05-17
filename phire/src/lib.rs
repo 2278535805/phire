@@ -14,6 +14,7 @@ pub mod task;
 pub mod time;
 pub mod ui;
 pub mod gyro;
+pub mod health;
 
 #[cfg(feature = "log")]
 pub mod log;

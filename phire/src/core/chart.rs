@@ -20,6 +20,7 @@ pub struct ChartExtra {
 #[derive(Default)]
 pub struct ChartSettings {
     pub pe_alpha_extension: bool,
+    pub line_reference_y_axis: bool,
 }
 
 pub type HitSoundMap = FxHashMap<String, AudioClip>;
@@ -31,10 +32,11 @@ pub struct Chart {
     pub bpm_list: RefCell<BpmList>,
     pub settings: ChartSettings,
     pub extra: ChartExtra,
-
-    pub order: Vec<usize>,
-    pub attach_ui: [Option<usize>; 7],
     pub hitsounds: HitSoundMap,
+
+    order: Vec<usize>,
+    attach_ui: [Option<usize>; 7],
+    trs: Vec<Matrix>,
 }
 
 impl Chart {
@@ -50,7 +52,8 @@ impl Chart {
                 }
             })
             .collect::<Vec<_>>();
-        order.sort_by_key(|it| (lines[*it].z_index, *it));
+        order.sort_unstable_by_key(|it| (lines[*it].z_index, *it));
+        let trs = Vec::with_capacity(lines.len());
         Self {
             offset,
             lines,
@@ -61,6 +64,7 @@ impl Chart {
             order,
             attach_ui,
             hitsounds,
+            trs,
         }
     }
 
@@ -115,10 +119,10 @@ impl Chart {
         for line in &mut self.lines {
             line.object.set_time(res.time);
         }
-        // TODO optimize
-        let trs = self.lines.iter().map(|it| it.now_transform(res, &self.lines)).collect::<Vec<_>>();
+        self.trs.clear();
+        self.trs.extend(self.lines.iter().map(|it| it.now_transform(res, &self.lines)));
         let mut guard = self.bpm_list.borrow_mut();
-        for (index, (line, tr)) in self.lines.iter_mut().zip(trs).enumerate() {
+        for (index, (line, tr)) in self.lines.iter_mut().zip(self.trs.drain(..)).enumerate() {
             line.update(res, tr, &mut guard, index);
         }
         drop(guard);
@@ -140,15 +144,21 @@ impl Chart {
                 if let Some(attach) = attach {
                     let line = &self.lines[attach.line];
                     let color = line.color.now_opt().unwrap_or(res.judge_line_color);
+                    let line_scale = line.object.scale.now_with_def(1.0, 1.0);
                     let mat = Rotation2::new(
                         self.lines[attach.line].fetch_rot(&self.lines).to_radians() * attach.rotation_factor).to_homogeneous()
                         .append_translation(&self.lines[attach.line].fetch_pos(res, &self.lines).component_mul(&Vector::new(attach.position_x_factor, attach.position_y_factor)));
                     res.apply_model_of(&mat.append_nonuniform_scaling(&Vector::new(1., -1.)), |res| {
-                        video.render(res.time, res.aspect_ratio, color);
+                        video.render(
+                            res.time,
+                            res.aspect_ratio,
+                            color,
+                            Some((line_scale.x, line_scale.y, attach.scale_x_mode, attach.scale_y_mode)),
+                        );
                     });
                 } else {
                     res.apply_model_of(&Matrix::identity().append_nonuniform_scaling(&Vector::new(1., -1.)), |res| {
-                        video.render(res.time, res.aspect_ratio, WHITE);
+                        video.render(res.time, res.aspect_ratio, WHITE, None);
                     });
                 }
             }

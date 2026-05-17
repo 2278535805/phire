@@ -402,9 +402,9 @@ struct CpuParticle {
     now_angular_velocity: f32,
     lived: f32,
     lifetime: f32,
-    frame: u16,
     initial_size: f32,
     color: Color,
+    frame: u16,
 }
 
 pub struct Emitter {
@@ -590,35 +590,28 @@ impl Emitter {
                 rand::gen_range(-spread / 2.0, spread / 2.0)
             };
 
-            let quat = glam::Quat::from_rotation_z(angle);
-            let dir = quat * vec3(dir.x, dir.y, 0.0);
-            let res = dir * velocity;
-
-            vec2(res.x, res.y)
+            let (sin, cos) = angle.sin_cos();
+            vec2(dir.x * cos - dir.y * sin, dir.x * sin + dir.y * cos) * velocity
         };
 
         let r = self.config.size - self.config.size * rand::gen_range(0.0, self.config.size_randomness);
 
         let rotation = self.config.initial_rotation - self.config.initial_rotation * rand::gen_range(0.0, self.config.initial_rotation_randomness);
 
-        let particle = if self.config.local_coords {
-            GpuParticle {
-                pos: vec4(offset.x, offset.y, rotation, r),
-                uv: vec4(1.0, 1.0, 0.0, 0.0),
-                data: vec4(self.particles_spawned as f32, 0.0, 0.0, 0.0),
-                color: self.config.colors_curve.start.to_vec(),
-            }
+        let (bx, by) = if self.config.local_coords {
+            (0.0, 0.0)
         } else {
-            GpuParticle {
-                pos: vec4(self.position.x + offset.x, self.position.y + offset.y, rotation, r),
-                uv: vec4(1.0, 1.0, 0.0, 0.0),
-                data: vec4(self.particles_spawned as f32, 0.0, 0.0, 0.0),
-                color: self.config.colors_curve.start.to_vec(),
-            }
+            (self.position.x, self.position.y)
+        };
+        let particle = GpuParticle {
+            pos: vec4(bx + offset.x, by + offset.y, rotation, r),
+            uv: vec4(0.0, 0.0, 1.0, 1.0),
+            data: vec4(self.particles_spawned as f32, 0.0, 0.0, 0.0),
+            color: self.config.colors_curve.start.to_vec(),
         };
 
         let velocity = random_initial_vector(
-            vec2(self.config.initial_direction.x, self.config.initial_direction.y),
+            self.config.initial_direction,
             self.config.initial_direction_spread,
             self.config.initial_velocity - self.config.initial_velocity * rand::gen_range(0.0, self.config.initial_velocity_randomness),
         );
@@ -629,9 +622,9 @@ impl Emitter {
         self.particles_spawned += 1;
         self.gpu_particles.push(particle);
         self.cpu_counterpart.push(CpuParticle {
-            velocity: velocity,
+            velocity,
             now_velocity: velocity,
-            angular_velocity: angular_velocity,
+            angular_velocity,
             now_angular_velocity: angular_velocity,
             lived: 0.0,
             lifetime: self.config.lifetime - self.config.lifetime * rand::gen_range(0.0, self.config.lifetime_randomness),
@@ -681,27 +674,48 @@ impl Emitter {
             self.config.emitting = false;
         }
 
+        // 预计算颜色 Vec4，避免每粒子每帧调用 to_vec()
+        let start_color = self.config.colors_curve.start.to_vec();
+        let mid_color = self.config.colors_curve.mid.to_vec();
+        let end_color = self.config.colors_curve.end.to_vec();
+        let has_size_curve = self.batched_size_curve.is_some();
+        let inv_n = self.config.atlas.as_ref().map_or(0.0, |a| 1.0 / a.n as f32);
+        let inv_m = self.config.atlas.as_ref().map_or(0.0, |a| 1.0 / a.m as f32);
+        let gravity_dt = vec2(self.config.gravity.x * dt, self.config.gravity.y * dt);
+
+        let angular_damping = 1.0 - self.config.angular_damping;
+        let angular_damping = if self.config.angular_damping == 0.0 { 1.0 } else { angular_damping.powf(dt) };
+
         for (gpu, cpu) in self.gpu_particles.iter_mut().zip(&mut self.cpu_counterpart) {
             let t = cpu.lived / cpu.lifetime;
             // TODO: this is not quite the way to apply acceleration, this is not
             // fps independent and just wrong
             cpu.now_velocity += cpu.velocity * (self.config.linear_accel)(t) * dt;
             cpu.now_angular_velocity += cpu.angular_velocity * self.config.angular_accel * dt;
-            cpu.now_angular_velocity *= (1.0 - self.config.angular_damping).powf(dt);
+            if angular_damping != 1.0 {
+                cpu.now_angular_velocity *= angular_damping;
+            }
 
-            gpu.color = {
-                if t < 0.5 {
-                    let t = t * 2.;
-                    self.config.colors_curve.start.to_vec() * (1.0 - t) + self.config.colors_curve.mid.to_vec() * t
-                } else {
-                    let t = (t - 0.5) * 2.;
-                    self.config.colors_curve.mid.to_vec() * (1.0 - t) + self.config.colors_curve.end.to_vec() * t
-                }
+            // 使用预计算的颜色 Vec4
+            let color_vec = if t < 0.5 {
+                let t2 = t * 2.0;
+                start_color * (1.0 - t2) + mid_color * t2
+            } else {
+                let t2 = (t - 0.5) * 2.0;
+                mid_color * (1.0 - t2) + end_color * t2
             };
-            gpu.color *= cpu.color.to_vec();
-            gpu.pos += vec4(cpu.now_velocity.x, cpu.now_velocity.y, cpu.now_angular_velocity, 0.0) * dt;
+            gpu.color = color_vec * cpu.color.to_vec();
 
-            gpu.pos.w = cpu.initial_size * self.batched_size_curve.as_ref().map_or(1.0, |curve| curve.get(t));
+            // 直接操作字段，避免创建临时 vec4
+            gpu.pos.x += cpu.now_velocity.x * dt;
+            gpu.pos.y += cpu.now_velocity.y * dt;
+            gpu.pos.z += cpu.now_angular_velocity * dt;
+
+            gpu.pos.w = cpu.initial_size * if has_size_curve {
+                self.batched_size_curve.as_ref().unwrap().get(t)
+            } else {
+                1.0
+            };
 
             if cpu.lifetime != 0.0 {
                 gpu.data.y = t;
@@ -709,8 +723,10 @@ impl Emitter {
 
             //cpu.lived = f32::min(cpu.lived + dt, cpu.lifetime);
             cpu.lived += dt;
-            cpu.now_velocity += self.config.gravity * dt;
+            cpu.now_velocity.x += gravity_dt.x;
+            cpu.now_velocity.y += gravity_dt.y;
 
+            // 只在有 atlas 时才更新 UV
             if let Some(atlas) = &self.config.atlas {
                 if cpu.lifetime != 0.0 {
                     cpu.frame = (t * (atlas.end_index - atlas.start_index) as f32) as u16 + atlas.start_index;
@@ -719,21 +735,23 @@ impl Emitter {
                 let x = cpu.frame % atlas.n;
                 let y = cpu.frame / atlas.n;
 
-                gpu.uv = vec4(x as f32 / atlas.n as f32, y as f32 / atlas.m as f32, 1.0 / atlas.n as f32, 1.0 / atlas.m as f32);
-            } else {
-                gpu.uv = vec4(0.0, 0.0, 1.0, 1.0);
+                gpu.uv.x = x as f32 * inv_n;
+                gpu.uv.y = y as f32 * inv_m;
+                gpu.uv.z = inv_n;
+                gpu.uv.w = inv_m;
             }
         }
 
-        for i in (0..self.gpu_particles.len()).rev() {
-            // second if clause is just for the case when lifetime was changed in the editor
-            // normally particle lifetime is always less or equal config lifetime
-            if self.cpu_counterpart[i].lived >= self.cpu_counterpart[i].lifetime || self.cpu_counterpart[i].lived > self.config.lifetime {
-                if self.cpu_counterpart[i].lived != self.cpu_counterpart[i].lifetime {
-                    self.particles_spawned -= 1;
-                }
+        // 正序删除死亡粒子
+        let mut i = 0;
+        while i < self.gpu_particles.len() {
+            let cpu = &self.cpu_counterpart[i];
+            if cpu.lived >= cpu.lifetime || cpu.lived > self.config.lifetime {
+                self.particles_spawned -= 1;
                 self.gpu_particles.swap_remove(i);
                 self.cpu_counterpart.swap_remove(i);
+            } else {
+                i += 1;
             }
         }
 
@@ -744,7 +762,6 @@ impl Emitter {
     pub fn emit(&mut self, pos: Vec2, n: usize) {
         for _ in 0..n {
             self.emit_particle(pos);
-            self.particles_spawned += 1;
         }
     }
 

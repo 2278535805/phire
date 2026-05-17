@@ -19,6 +19,8 @@ item-mp-addr-sub = 服务器地址，'主机:端口'
 item-mp-addr-invalid = 无效的服务器地址
 item-lowq = 低画质模式
 item-lowq-sub = 建议在画面卡顿时启用
+item-anti-aliasing = 抗锯齿
+item-low-resolution = 低分辨率模式
 item-insecure = 不安全模式
 item-insecure-sub = 当无法使用在线功能时可尝试该功能。这会使得你的连接不安全！
 
@@ -67,8 +69,14 @@ item-rotation-flat-mode = 旋转模式 - 平放
 item-rotation-flat-mode-sub = 此模式会根据开始游戏时的方向来矫正方向。如果方向错误，可在暂停游戏页重置方位
 item-shake-play-mode = 摇一摇模式
 
+item-health-mode = 生存模式
+item-health-mode-example = 生存模式示例
+item-max-health = 最大血量
+item-initial-health = 初始血量
+
 load-cali-failed = 加载音频失败
 not-combo = 不能是 COMBO
+illegal-input = 非法输入
 
 about-content =
   Phire v{ $version }

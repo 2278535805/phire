@@ -5,7 +5,7 @@ use crate::{
 };
 use glyph_brush::{
     ab_glyph::{Font, FontArc, Glyph, ScaleFont},
-    BrushAction, BrushError, FontId, GlyphBrush, GlyphBrushBuilder, GlyphCruncher, Layout, Section, SectionGlyph, Text,
+    BrushAction, BrushError, FontId, GlyphBrush, GlyphBrushBuilder, GlyphCruncher, HorizontalAlign, Layout, Section, SectionGlyph, Text,
 };
 use macroquad::{
     miniquad::{Texture, TextureParams},
@@ -26,6 +26,7 @@ pub struct DrawText<'a, 's, 'ui> {
     max_width: Option<f32>,
     baseline: bool,
     multiline: bool,
+    h_align: HorizontalAlign,
     scale: Matrix,
 }
 
@@ -41,6 +42,7 @@ impl<'a, 's, 'ui> DrawText<'a, 's, 'ui> {
             max_width: None,
             baseline: true,
             multiline: false,
+            h_align: HorizontalAlign::Left,
             scale: Matrix::identity(),
         }
     }
@@ -84,6 +86,12 @@ impl<'a, 's, 'ui> DrawText<'a, 's, 'ui> {
         self
     }
 
+    pub fn centered_multiline(mut self) -> Self {
+        self.multiline = true;
+        self.h_align = HorizontalAlign::Center;
+        self
+    }
+
     pub fn scale(mut self, scale: Matrix) -> Self {
         self.scale = scale;
         self
@@ -103,6 +111,8 @@ impl<'a, 's, 'ui> DrawText<'a, 's, 'ui> {
         }
         if !self.multiline {
             section = section.with_layout(Layout::default_single_line());
+        } else {
+            section = section.with_layout(Layout::default_wrap().h_align(self.h_align));
         }
         macro_rules! painter {
             ($t:expr) => {

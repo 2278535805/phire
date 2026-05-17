@@ -3,6 +3,8 @@ use std::fmt;
 use bitflags::bitflags;
 use serde::{Deserialize, Serialize};
 
+use crate::health::HealthConfig;
+
 bitflags! {
     #[derive(Clone, Copy, Default, Deserialize, Serialize, PartialEq, Eq, Debug)]
     #[serde(transparent)]
@@ -76,6 +78,7 @@ pub struct Config {
     pub player_rks: f32,
     pub res_pack_path: Option<String>,
     pub sample_count: u32,
+    pub low_resolution_mode: bool,
     pub show_acc: bool,
     pub speed: f32,
     pub touch_debug: bool,
@@ -116,12 +119,13 @@ pub struct Config {
     pub alpha_tint: bool, // note.alpha <=0.5 blue, note.alpha >0.5 red
 
     pub rotation_mode: bool,
-    pub rotation_flat_mode: bool,
 
     pub play_start_time: f64,
     pub play_end_time: Option<f64>,
     #[cfg(feature = "play")]
     pub shake_play_mode: bool,
+    #[cfg(feature = "play")]
+    pub health_mode: Option<HealthConfig>,
 }
 
 impl Default for Config {
@@ -164,6 +168,7 @@ impl Default for Config {
             player_rks: 15.,
             res_pack_path: None,
             sample_count: 1,
+            low_resolution_mode: false,
             show_acc: false,
             speed: 1.0,
             touch_debug: false,
@@ -203,12 +208,13 @@ impl Default for Config {
             alpha_tint: false,
 
             rotation_mode: false,
-            rotation_flat_mode: false,
 
             play_start_time: 0.,
             play_end_time: None,
             #[cfg(feature = "play")]
             shake_play_mode: false,
+            #[cfg(feature = "play")]
+            health_mode: None,
         }
     }
 }

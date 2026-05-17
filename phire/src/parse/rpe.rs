@@ -3,7 +3,7 @@ crate::tl_file!("parser" ptl);
 use super::{process_lines, RPE_TWEEN_MAP};
 use crate::{
     core::{
-        Anim, AnimFloat, AnimFloatF64, AnimVector, BezierTween, BpmList, Chart, ChartExtra, ChartSettings, ClampedTween, CtrlObject, EPS, GifFrames, HEIGHT_RATIO, HitSoundMap, JudgeLine, JudgeLineCache, JudgeLineKind, Keyframe, Note, NoteKind, Object, StaticTween, Triple, TweenFunction, Tweenable, UIElement
+        Anim, AnimFloat, AnimFloatF64, AnimVector, BezierTween, BpmList, Chart, ChartExtra, ChartSettings, ClampedTween, CtrlObject, EPS, GifFrames, HEIGHT_RATIO, HitSoundMap, JudgeLine, JudgeLineCache, JudgeLineKind, Keyframe, Note, NoteKind, Object, StaticTween, Triple, TweenFunction, Tweenable, UIElement, Vector
     },
     ext::{NotNanExt, SafeTexture},
     fs::FileSystem,
@@ -217,9 +217,9 @@ fn parse_events<T: Tweenable, V: Clone + Into<T>>(
     default: Option<T>,
     bezier_map: &BezierMap,
 ) -> Result<Anim<T>> {
-    let mut kfs = Vec::new();
+    let mut kfs = Vec::with_capacity(rpe.len() * 2 + 1);
     if let Some(default) = default {
-        if !rpe.is_empty() && rpe[0].start_time.beats() != 0.0 {
+        if !rpe.is_empty() && rpe[0].start_time.beats() > 0.0 {
             kfs.push(Keyframe::new(0.0, default, 0));
         }
     }
@@ -252,7 +252,7 @@ fn parse_speed_events(r: &mut BpmList, rpe: &[RPEEventLayer], max_time: f64) -> 
     let anis: Vec<AnimFloatF64> = rpe
         .into_iter()
         .map(|it| {
-            let mut kfs = Vec::new();
+            let mut kfs = Vec::with_capacity(it.len() * 2);
             for e in it {
                 let start_beats = e.start_time.beats();
                 let end_beats = e.end_time.beats();
@@ -300,7 +300,7 @@ fn parse_speed_events(r: &mut BpmList, rpe: &[RPEEventLayer], max_time: f64) -> 
     }
     pts.sort();
     pts.dedup();
-    let mut kfs = Vec::new();
+    let mut kfs = Vec::with_capacity(pts.len());
     let mut height = 0.0;
     for i in 0..(pts.len() - 1) {
         let now_time = *pts[i];
@@ -333,7 +333,7 @@ fn parse_speed_events(r: &mut BpmList, rpe: &[RPEEventLayer], max_time: f64) -> 
 }
 
 fn parse_gif_events<V: Clone + Into<f32>>(r: &mut BpmList, rpe: &[RPEEvent<V>], bezier_map: &BezierMap, gif: &GifFrames) -> Result<AnimFloat> {
-    let mut kfs = Vec::new();
+    let mut kfs = Vec::with_capacity(rpe.len() * 3);
     kfs.push(Keyframe::new(0.0, 0.0, 2));
     let mut next_rep_time: u128 = 0;
     for e in rpe {
@@ -379,7 +379,7 @@ async fn parse_notes(
     height: &mut AnimFloatF64,
     hitsounds: &mut HitSoundMap,
 ) -> Result<Vec<Note>> {
-    let mut notes = Vec::new();
+    let mut notes = Vec::with_capacity(rpe.len());
     for note in rpe {
         let time: f64 = r.time(&note.start_time);
         height.set_time(time);
@@ -493,7 +493,7 @@ async fn parse_judge_line(
     bezier_map: &BezierMap,
     hitsounds: &mut HitSoundMap,
 ) -> Result<JudgeLine> {
-    let mut line_texture_map: HashMap<String, SafeTexture> = Default::default();
+    let mut line_texture_map: FxHashMap<String, SafeTexture> = FxHashMap::default();
     let event_layers: Vec<_> = rpe.event_layers.into_iter().flatten().collect();
     let r = &mut BpmList::new(bpm_list.into_iter().map(|it| (it.start_time.beats(), it.bpm / rpe.bpm_factor)).collect());
 
@@ -544,7 +544,7 @@ async fn parse_judge_line(
                     res.map_value(|v| v * factor);
                     Ok(res)
                 }
-                let factor = if rpe.texture == "line.png" { 1. } else { 2. / RPE_WIDTH };
+                let image_factor = if rpe.texture == "line.png" { 1. } else { 2. / RPE_WIDTH };
                 rpe.extended
                     .as_ref()
                     .map(|e| -> Result<_> {
@@ -552,25 +552,14 @@ async fn parse_judge_line(
                             parse(
                                 r,
                                 &e.scale_x_events,
-                                factor
-                                    * if rpe.texture == "line.png"
-                                        && rpe
-                                            .extended
-                                            .as_ref()
-                                            .map_or(true, |it| it.text_events.as_ref().map_or(true, |it| it.is_empty()))
-                                        && rpe.attach_ui.is_none()
-                                    {
-                                        0.5
-                                    } else {
-                                        1.
-                                    },
+                                image_factor,
                                 bezier_map,
                             )?,
-                            parse(r, &e.scale_y_events, factor, bezier_map)?,
+                            parse(r, &e.scale_y_events, image_factor, bezier_map)?,
                         ))
                     })
                     .transpose()?
-                    .unwrap_or_default()
+                    .unwrap_or(AnimVector::fixed(Vector::new(image_factor, image_factor)))
             },
         },
         color: if let Some(events) = rpe.extended.as_ref().and_then(|e| e.color_events.as_ref()) {
@@ -752,7 +741,7 @@ pub async fn parse_rpe(source: &str, fs: &mut dyn FileSystem, extra: ChartExtra)
         })
         .max().unwrap_or_default() + 1.;
     // don't want to add a whole crate for a mere join_all...
-    let mut lines = Vec::new();
+    let mut lines = Vec::with_capacity(rpe.judge_line_list.len());
     for (id, line) in rpe.judge_line_list.into_iter().enumerate() {
         let name = line.name.clone();
         lines.push(
