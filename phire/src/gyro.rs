@@ -2,6 +2,9 @@ use std::{f32, sync::Mutex, time::Duration};
 use nalgebra::{Unit, UnitQuaternion, Vector3};
 use lazy_static::lazy_static;
 
+const GRAVITY_FLAT_THRESHOLD_LOW: f32 = 0.75;
+const GRAVITY_FLAT_THRESHOLD_HIGH: f32 = 0.95;
+
 #[derive(Debug, Clone, Copy)]
 pub struct GyroData {
     pub angular_velocity: Vector3<f32>, // 角速度 (rad/s)
@@ -40,12 +43,21 @@ impl Gyro {
     }
 
     pub(crate) fn reset_gyroscope(&mut self) {
-        // X轴在世界坐标系中的方向
-        let world_x = self.gravity.transform_vector(&Vector3::new(1.0, 0.0, 0.0));
-        // 绕世界Y轴的yaw
-        let yaw = world_x.z.atan2(world_x.x);
-        // 绕设备Y轴的旋转
-        self.gyroscope = UnitQuaternion::from_euler_angles(0.0, yaw, 0.0);
+        let pitch = {
+            // X轴在世界坐标系中的方向
+            let world_x = self.gravity.transform_vector(&Vector3::new(1.0, 0.0, 0.0));
+            // 绕Y轴的yaw
+            world_x.z.atan2(world_x.x)
+        };
+
+        let yaw = if self.flatness <= 0.0 {
+            let world_y = self.gravity.transform_vector(&Vector3::new(0.0, 1.0, 0.0));
+            world_y.y.atan2(world_y.x)
+        } else {
+            0.0
+        };
+
+        self.gyroscope = UnitQuaternion::from_euler_angles(0.0, pitch, yaw);
     }
 
     pub fn update_gyroscope(&mut self, gyro_data: GyroData) {
@@ -74,7 +86,7 @@ impl Gyro {
 
         let g_dev = gravity_data / norm; // 归一化 指向重力方向
 
-        self.flatness = smooth_step(g_dev.z.abs(), 0.75, 0.95);
+        self.flatness = smooth_step(g_dev.z.abs(), GRAVITY_FLAT_THRESHOLD_LOW, GRAVITY_FLAT_THRESHOLD_HIGH);
         if self.flatness <= 0.0 {
             self.reset_gyroscope();
         }
