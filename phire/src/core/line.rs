@@ -476,7 +476,12 @@ impl JudgeLine {
                     _ => {}
                 }
             }
-            let (vw, vh) = (1.0 / res.config.chart_ratio, 1.0 / res.aspect_ratio / res.config.chart_ratio);
+            let vw = 1.0 / res.config.chart_ratio;
+            let (vw, vh) = if res.config.rotation_mode {
+                (vw, vw.max(vw / res.aspect_ratio))
+            } else {
+                (vw, vw / res.aspect_ratio)
+            };
             let p = [
                 res.screen_to_world(Point::new(-vw, -vh)),
                 res.screen_to_world(Point::new(-vw, vh)),
