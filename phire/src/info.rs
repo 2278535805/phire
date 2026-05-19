@@ -29,6 +29,7 @@ pub struct ChartInfo {
     pub format: Option<ChartFormat>,
     pub music: String,
     pub illustration: String,
+    pub unlock_video: Option<String>,
 
     pub preview_start: f64,
     pub preview_end: Option<f64>,
@@ -65,6 +66,7 @@ impl Default for ChartInfo {
             charter: "UK".to_string(),
             composer: "UK".to_string(),
             illustrator: "UK".to_string(),
+            unlock_video: None,
 
             chart: "chart.json".to_string(),
             format: None,

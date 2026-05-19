@@ -34,6 +34,8 @@ pub struct BriefChartInfo {
     pub created: Option<DateTime<Utc>>,
     pub updated: Option<DateTime<Utc>>,
     pub chart_updated: Option<DateTime<Utc>>,
+    #[serde(default)]
+    pub has_unlock: bool,
 }
 
 impl BriefChartInfo {
@@ -52,6 +54,7 @@ impl BriefChartInfo {
             created: Some(chart.created),
             updated: Some(chart.updated),
             chart_updated: Some(chart.chart_updated),
+            has_unlock: false,
         }
     }
 }
@@ -72,6 +75,7 @@ impl From<ChartInfo> for BriefChartInfo {
             created: info.created,
             updated: info.updated,
             chart_updated: info.chart_updated,
+            has_unlock: info.unlock_video.is_some(),
         }
     }
 }
@@ -84,6 +88,8 @@ pub struct LocalChart {
     pub record: Option<SimpleRecord>,
     #[serde(default)]
     pub mods: Mods,
+    #[serde(default)]
+    pub played_unlock: bool,
 }
 
 #[derive(Default, Serialize, Deserialize)]
@@ -125,6 +131,7 @@ impl Data {
                     local_path: filename,
                     record: None,
                     mods: Mods::default(),
+                    played_unlock: false,
                 });
             }
         }
@@ -148,6 +155,7 @@ impl Data {
                     local_path: filename,
                     record: None,
                     mods: Mods::default(),
+                    played_unlock: false,
                 });
             }
         }
