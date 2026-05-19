@@ -15,6 +15,9 @@ pub use song::{Downloading, SongScene, RECORD_ID};
 mod profile;
 pub use profile::ProfileScene;
 
+mod unlock;
+pub use unlock::UnlockScene;
+
 use crate::{client::UserManager, data::LocalChart, dir, get_data, page::Fader};
 use anyhow::{bail, Context, Result};
 use phire::{
@@ -83,6 +86,7 @@ pub async fn import_chart(path: String) -> Result<LocalChart> {
             local_path,
             record: None,
             mods: Mods::default(),
+            played_unlock: false,
         })
     }
     let dir = dir::custom_charts()?;
