@@ -612,14 +612,24 @@ impl ChartList {
         }
         if self.aggressive_chart_btn.touch(touch, t) {
             config.aggressive_chart ^= true;
+            if !config.aggressive_chart {
+                config.aggressive_note = false;
+                config.aggressive_particle = false;
+            }
             return Ok(Some(true));
         }
         if self.aggressive_note_btn.touch(touch, t) {
             config.aggressive_note ^= true;
+            if config.aggressive_note {
+                config.aggressive_chart = true;
+            }
             return Ok(Some(true));
         }
         if self.aggressive_particle_btn.touch(touch, t) {
             config.aggressive_particle ^= true;
+            if config.aggressive_particle {
+                config.aggressive_chart = true;
+            }
             return Ok(Some(true));
         }
         if let wt @ Some(_) = self.speed_slider.touch(touch, t, &mut config.speed) {
