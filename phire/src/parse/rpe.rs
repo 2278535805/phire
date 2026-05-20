@@ -53,6 +53,7 @@ pub struct RPEEvent<T = f32> {
     bezier: u8,
     #[serde(default)]
     bezier_points: [f32; 4],
+    #[serde(default)]
     easing_type: i32,
     start: T,
     end: T,
