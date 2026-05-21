@@ -313,6 +313,9 @@ impl Note {
             res.with_model(self.now_transform(res, ctrl_obj, base as f32, config.incline_sin, true, true), |res| {
                 if res.config.aggressive_note {
                     let pt = res.world_to_screen(Point::default());
+                    if pt.x.abs() > 1.15 * res.config.chart_ratio || pt.y.abs() * res.config.chart_ratio * res.aspect_ratio > 1.01 {
+                        return;
+                    }
                     let roughly_pos = ((pt.x * 200.0).round() as i32, (pt.y * 200.0).round() as i32);
                     let count = res.note_pos_map.entry(roughly_pos).or_insert(0);
                     if *count < 2 {

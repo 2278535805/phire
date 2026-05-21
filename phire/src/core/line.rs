@@ -476,7 +476,7 @@ impl JudgeLine {
                     _ => {}
                 }
             }
-            let vw = 1.0 / res.config.chart_ratio;
+            let vw = 1.01 / res.config.chart_ratio;
             let (vw, vh) = if res.config.rotation_mode {
                 (vw, vw.max(vw / res.aspect_ratio))
             } else {
