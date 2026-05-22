@@ -83,7 +83,7 @@ fn draw_tex(res: &Resource, texture: Texture2D, order: i8, x: f32, y: f32, color
             params.source = Some(source);
         }
     }
-    params.flip_y = true;
+    params.flip_y ^= true;
     draw_tex_pts(res, texture, order, p, color, params);
 }
 fn draw_tex_pts(res: &Resource, texture: Texture2D, order: i8, p: [Point; 4], color: Color, params: DrawTextureParams) {
@@ -376,6 +376,9 @@ impl Note {
 
                     let tex = &style.hold;
                     let ratio = style.hold_ratio();
+                    let flip_y = top - bottom < 0.;
+                    let body_h = if flip_y { bottom - top } else { top - bottom } as f32;
+                    let body_y = if flip_y { bottom as f32 - body_h } else { bottom as f32 };
                     // body
                     draw_tex(
                         res,
@@ -386,7 +389,7 @@ impl Note {
                         }),
                         order,
                         -scale,
-                        bottom as f32,
+                        body_y,
                         color,
                         DrawTextureParams {
                             source: Some({
@@ -394,12 +397,13 @@ impl Note {
                                     let hold_body = style.hold_body.as_ref().unwrap();
                                     let width = hold_body.width();
                                     let height = hold_body.height();
-                                    Rect::new(0., 0., 1., (top - bottom) as f32 / scale / 2. * width / height)
+                                    Rect::new(0., 0., 1., body_h/ scale / 2. * width / height)
                                 } else {
                                     style.hold_body_rect()
                                 }
                             }),
-                            dest_size: Some(vec2(scale * 2., (top - bottom) as f32)),
+                            dest_size: Some(vec2(scale * 2., body_h)),
+                            flip_y,
                             ..Default::default()
                         },
                         clip,
@@ -408,16 +412,18 @@ impl Note {
                     if res.time < self.time || res.res_pack.info.hold_keep_head {
                         let r = style.hold_head_rect();
                         let hf = vec2(scale, r.h / r.w * scale * ratio);
+                        let head_y = if flip_y { bottom as f32 + hf.y * 2. } else { bottom as f32 };
                         draw_tex(
                             res,
                             **tex,
                             order,
                             -scale,
-                            bottom as f32 - if res.res_pack.info.hold_compact { hf.y } else { hf.y * 2. },
+                            head_y - if res.res_pack.info.hold_compact { hf.y } else { hf.y * 2. },
                             color,
                             DrawTextureParams {
                                 source: Some(r),
                                 dest_size: Some(hf * 2.),
+                                flip_y,
                                 ..Default::default()
                             },
                             clip,
@@ -426,16 +432,18 @@ impl Note {
                     // tail
                     let r = style.hold_tail_rect();
                     let hf = vec2(scale, r.h / r.w * scale * ratio);
+                    let tail_y = if flip_y { top as f32 - hf.y * 2. } else { top as f32 };
                     draw_tex(
                         res,
                         **tex,
                         order,
                         -scale,
-                        top as f32 - if res.res_pack.info.hold_compact { hf.y } else { 0. },
+                        tail_y - if res.res_pack.info.hold_compact { hf.y } else { 0. },
                         color,
                         DrawTextureParams {
                             source: Some(r),
                             dest_size: Some(hf * 2.),
+                            flip_y,
                             ..Default::default()
                         },
                         clip,
