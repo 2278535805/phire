@@ -47,6 +47,8 @@ pub use tween::{
 mod video;
 #[cfg(feature = "video")]
 pub use video::{Video, VideoAttach};
+#[cfg(feature = "video")]
+pub use prpr_avc::demux_audio;
 
 pub fn init_assets() {
     if let Ok(mut exe) = std::env::current_exe() {

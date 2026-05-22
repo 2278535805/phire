@@ -679,6 +679,9 @@ impl Resource {
         let pt = self.world_to_screen(Point::default());
 
         if self.config.aggressive_particle {
+            if pt.x.abs() > 1.2 * self.config.chart_ratio || pt.y.abs() * self.config.chart_ratio * self.aspect_ratio > 1.2 {
+                return;
+            }
             let roughly_pos = ((pt.x * 200.0).round() as i32, (pt.y * 200.0).round() as i32);
             let now = self.time;
             let duration = self.res_pack.info.hit_fx_duration as f64;
