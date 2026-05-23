@@ -377,7 +377,8 @@ impl Note {
 
                     let tex = &style.hold;
                     let ratio = style.hold_ratio();
-                    let flip_y = res.info.negative_length_hold && (config.draw_below || !is_covered) && top - bottom < 0.;
+                    let is_negative_length = top - bottom < 0.;
+                    let flip_y = res.info.negative_length_hold && (config.draw_below || !is_covered) && is_negative_length;
                     let body_h = if flip_y { bottom - top } else { top - bottom } as f32;
                     let body_y = if flip_y { bottom as f32 - body_h } else { bottom as f32 };
                     // body
@@ -431,6 +432,9 @@ impl Note {
                         );
                     }
                     // tail
+                    if !flip_y && is_negative_length { // only render head
+                        return;
+                    }
                     let r = style.hold_tail_rect();
                     let hf = vec2(scale, r.h / r.w * scale * ratio);
                     let tail_y = if flip_y { top as f32 - hf.y * 2. } else { top as f32 };
