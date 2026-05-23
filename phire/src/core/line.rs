@@ -97,7 +97,12 @@ impl JudgeLineCache {
             (
                 !it.above,
                 it.speed.not_nan(),
-                (it.height + it.object.translation.1.now() as f64 * it.speed).not_nan(),
+                (
+                    match it.kind {
+                        NoteKind::Hold { end_height, .. } => { it.height.min(end_height) },
+                        _ => { it.height },
+                    } + it.object.translation.1.now() as f64 * it.speed
+                ).not_nan(),
             )
         });
         
@@ -476,7 +481,12 @@ impl JudgeLine {
                     _ => {}
                 }
             }
-            let (vw, vh) = (1.0 / res.config.chart_ratio, 1.0 / res.aspect_ratio / res.config.chart_ratio);
+            let vw = 1.01 / res.config.chart_ratio;
+            let (vw, vh) = if res.config.rotation_mode {
+                (vw, vw.max(vw / res.aspect_ratio))
+            } else {
+                (vw, vw / res.aspect_ratio)
+            };
             let p = [
                 res.screen_to_world(Point::new(-vw, -vh)),
                 res.screen_to_world(Point::new(-vw, vh)),
@@ -517,19 +527,21 @@ impl JudgeLine {
                             match note.kind {   
                                 NoteKind::Hold { end_height, .. } => {
                                     let end_height = ((end_height - line_height) * speed + note.object.translation.1.now() as f64) / aspect_ratio;
-                                    if end_height < height_below {
+                                    if note_height < height_below && end_height < height_below {
                                         continue;
                                     }
-                                    
+                                    if note_height > height_above && end_height > height_above {
+                                        break;
+                                    }
                                 },
                                 _ => {
                                     if note_height < height_below {
                                         continue;
                                     }
+                                    if note_height > height_above {
+                                        break;
+                                    }
                                 }
-                            }
-                            if note_height > height_above {
-                                break;
                             }
                         }
                         note.render(ui, res, &mut config, bpm_list, line_set_debug_alpha, id, height_above, height_below);
@@ -565,19 +577,21 @@ impl JudgeLine {
                                 match note.kind {   
                                     NoteKind::Hold { end_height, .. } => {
                                         let end_height = ((end_height - line_height) * speed + note.object.translation.1.now() as f64) / aspect_ratio;
-                                        if end_height < -height_above {
+                                        if note_height < -height_above && end_height < -height_above {
                                             continue;
                                         }
-                                        
+                                        if note_height > -height_below && end_height > -height_below {
+                                            break;
+                                        }
                                     },
                                     _ => {
                                         if note_height < -height_above {
                                             continue;
                                         }
+                                        if note_height > -height_below {
+                                            break;
+                                        }
                                     }
-                                }
-                                if note_height > -height_below {
-                                    break;
                                 }
                             }
                             note.render(ui, res, &mut config, bpm_list, line_set_debug_alpha, id, -height_below, -height_above);

@@ -38,12 +38,17 @@ mod smooth;
 pub use smooth::Smooth;
 
 mod tween;
-pub use tween::{easing_from, BezierTween, ClampedTween, StaticTween, TweenFunction, TweenId, TweenMajor, TweenMinor, Tweenable, TWEEN_FUNCTIONS};
+pub use tween::{
+    easing_from, BezierTween, ClampedTween, GeneralIntegralTween, IntegralClampedTween, IntegralStaticTween, SpeedIntegralTween, StaticTween, TweenFunction, TweenId, TweenMajor,
+    TweenMinor, Tweenable, TWEEN_FUNCTIONS,
+};
 
 #[cfg(feature = "video")]
 mod video;
 #[cfg(feature = "video")]
 pub use video::{Video, VideoAttach};
+#[cfg(feature = "video")]
+pub use prpr_avc::demux_audio;
 
 pub fn init_assets() {
     if let Ok(mut exe) = std::env::current_exe() {

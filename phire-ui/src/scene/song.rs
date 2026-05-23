@@ -2,16 +2,7 @@ phire::tl_file!("song");
 
 use super::{confirm_delete, confirm_dialog, fs_from_path, render_ldb, LdbDisplayItem, ProfileScene};
 use crate::{
-    charts_view::NEED_UPDATE,
-    client::{basic_client_builder, recv_raw, Chart, Client, Permissions, Ptr, Record, UserManager, CLIENT_TOKEN},
-    data::{BriefChartInfo, LocalChart},
-    dir, get_data, get_data_mut,
-    icons::Icons,
-    page::{thumbnail_path, ChartItem, Fader, Illustration, SFader},
-    popup::Popup,
-    rate::RateDialog,
-    save_data,
-    tags::TagsDialog,
+    charts_view::NEED_UPDATE, client::{CLIENT_TOKEN, Chart, Client, Permissions, Ptr, Record, UserManager, basic_client_builder, recv_raw}, data::{BriefChartInfo, LocalChart}, dir, get_data, get_data_mut, icons::Icons, page::{ChartItem, Fader, Illustration, SFader, thumbnail_path}, popup::Popup, rate::RateDialog, save_data, scene::UnlockScene, tags::TagsDialog
 };
 use ::rand::{rng, Rng};
 use anyhow::{anyhow, bail, Context, Result};
@@ -22,17 +13,16 @@ use phira_mp_common::{ClientCommand, CompactPos, JudgeEvent, TouchFrame};
 use phire::{
     config::Mods,
     core::Tweenable,
-    ext::{poll_future, semi_black, semi_white, unzip_into, JoinToString, LocalTask, RectExt, SafeTexture, ScaleType},
+    ext::{JoinToString, LocalTask, RectExt, SafeTexture, ScaleType, poll_future, semi_black, semi_white, unzip_into},
     fs,
     info::ChartInfo,
-    judge::{icon_index, Judge},
+    judge::{Judge, icon_index},
     scene::{
-        request_input, return_input, show_error, show_message, take_input, BasicPlayer, GameMode, LoadingScene, LocalSceneTask, NextScene,
-        RecordUpdateState, Scene, SimpleRecord, UpdateFn,
+        BasicPlayer, GameMode, LoadingScene, LocalSceneTask, NextScene, RecordUpdateState, Scene, SimpleRecord, UpdateFn, UploadFn, request_input, return_input, show_error, show_message, take_input
     },
     task::Task,
     time::TimeManager,
-    ui::{button_hit, render_chart_info, ChartInfoEdit, DRectButton, Dialog, LoadingParams, RectButton, Scroll, Ui, UI_AUDIO},
+    ui::{ChartInfoEdit, DRectButton, Dialog, LoadingParams, RectButton, Scroll, UI_AUDIO, Ui, button_hit, render_chart_info},
 };
 use reqwest::Method;
 use sasa::{AudioClip, Frame, Music, MusicParams};
@@ -540,6 +530,7 @@ impl SongScene {
                         local_path,
                         record: None,
                         mods: Mods::default(),
+                        played_unlock: false,
                     })
                 }
             }),
@@ -594,9 +585,17 @@ impl SongScene {
         if self.info.id.is_some() {
             self.menu_options.push("rate");
         }
-        if self.local_path.is_some() {
+        if let Some(local_path) = &self.local_path {
             self.menu_options.push("exercise");
             self.menu_options.push("offset");
+            if get_data()
+                .charts
+                .iter()
+                .find(|it| it.local_path == *local_path)
+                .is_some_and(|it| it.played_unlock)
+            {
+                self.menu_options.push("unlock");
+            }
         }
         let perms = get_data().me.as_ref().map(|it| it.perms()).unwrap_or_default();
         let is_uploader = get_data()
@@ -633,8 +632,16 @@ impl SongScene {
         self.menu.set_options(self.menu_options.iter().map(|it| tl!(it).into_owned()).collect());
     }
 
-    fn launch(&mut self, mode: GameMode) -> Result<()> {
-        self.scene_task = Self::global_launch(self.info.id, self.local_path.as_ref().unwrap(), self.mods, mode, None)?;
+    fn launch(&mut self, mode: GameMode, force_unlock: bool) -> Result<()> {
+        let local_path = self.local_path.as_ref().unwrap();
+        let is_unlock = force_unlock
+            || (mode == GameMode::Normal
+                && get_data()
+                    .charts
+                    .iter()
+                    .find(|it| it.local_path == *local_path)
+                    .is_some_and(|it| it.info.has_unlock && !it.played_unlock));
+        self.scene_task = Self::global_launch(self.info.id, local_path, self.mods, mode, None, is_unlock)?;
         Ok(())
     }
 
@@ -645,8 +652,10 @@ impl SongScene {
         mods: Mods,
         mode: GameMode,
         client: Option<Arc<phira_mp_client::Client>>,
+        is_unlock: bool,
     ) -> Result<LocalSceneTask> {
         let mut fs = fs_from_path(local_path)?;
+        let local_path = local_path.to_owned();
         #[cfg(feature = "closed")]
         let rated = {
             let config = &get_data().config;
@@ -775,59 +784,64 @@ impl SongScene {
             };
             let chart_updated = info.chart_updated;
             config.mods = mods;
-            LoadingScene::new(
-                None,
-                mode,
-                info,
-                &config,
-                fs,
-                get_data().me.as_ref().map(|it| BasicPlayer {
-                    avatar: UserManager::get_avatar(it.id).flatten(),
-                    id: it.id,
-                    rks: it.rks,
-                }),
-                Some(Arc::new(move |data| {
-                    Task::new(async move {
-                        #[derive(Serialize)]
-                        #[serde(rename_all = "camelCase")]
-                        struct Req {
-                            chart: i32,
-                            token: String,
-                            chart_updated: Option<DateTime<Utc>>,
-                        }
-                        #[derive(Deserialize)]
-                        #[serde(rename_all = "camelCase")]
-                        struct Resp {
-                            id: i32,
-                            exp_delta: f64,
-                            new_best: bool,
-                            improvement: u32,
-                            new_rks: f32,
-                        }
-                        let resp: Resp = recv_raw(Client::post(
-                            "/play/upload",
-                            &Req {
-                                chart: id.unwrap(),
-                                token: base64::Engine::encode(&base64::engine::general_purpose::STANDARD, data),
-                                chart_updated,
-                            },
-                        ))
-                        .await?
-                        .json()
-                        .await?;
-                        RECORD_ID.store(resp.id, Ordering::Relaxed);
-                        Ok(RecordUpdateState {
-                            best: resp.new_best,
-                            improvement: resp.improvement,
-                            gain_exp: resp.exp_delta as f32,
-                            new_rks: resp.new_rks,
-                        })
+            let player = get_data().me.as_ref().map(|it| BasicPlayer {
+                avatar: UserManager::get_avatar(it.id).flatten(),
+                id: it.id,
+                rks: it.rks,
+            });
+            let upload_fn: Option<UploadFn> = Some(Arc::new(move |data| {
+                Task::new(async move {
+                    #[derive(Serialize)]
+                    #[serde(rename_all = "camelCase")]
+                    struct Req {
+                        chart: i32,
+                        token: String,
+                        chart_updated: Option<DateTime<Utc>>,
+                    }
+                    #[derive(Deserialize)]
+                    #[serde(rename_all = "camelCase")]
+                    struct Resp {
+                        id: i32,
+                        exp_delta: f64,
+                        new_best: bool,
+                        improvement: u32,
+                        new_rks: f32,
+                    }
+                    let resp: Resp = recv_raw(Client::post(
+                        "/play/upload",
+                        &Req {
+                            chart: id.unwrap(),
+                            token: base64::Engine::encode(&base64::engine::general_purpose::STANDARD, data),
+                            chart_updated,
+                        },
+                    ))
+                    .await?
+                    .json()
+                    .await?;
+                    RECORD_ID.store(resp.id, Ordering::Relaxed);
+                    Ok(RecordUpdateState {
+                        best: resp.new_best,
+                        improvement: resp.improvement,
+                        gain_exp: resp.exp_delta as f32,
+                        new_rks: resp.new_rks,
                     })
-                })),
-                update_fn,
-            )
-            .await
-            .map(|it| NextScene::Overlay(Box::new(it)))
+                })
+            }));
+            if is_unlock {
+                let chart = get_data_mut().charts.iter_mut().find(|it| it.local_path == local_path).unwrap();
+                if !chart.played_unlock {
+                    chart.played_unlock = true;
+                    save_data()?;
+                }
+
+                UnlockScene::new(mode, info, config, fs, player, upload_fn, update_fn)
+                    .await
+                    .map(|it| NextScene::Overlay(Box::new(it)))
+            } else {
+                LoadingScene::new(None, mode, info, &config, fs, player, upload_fn, update_fn)
+                    .await
+                    .map(|it| NextScene::Overlay(Box::new(it)))
+            }
         })))
     }
 
@@ -1306,7 +1320,7 @@ impl Scene for SongScene {
         }
         if self.play_btn.touch(touch, t) {
             if self.local_path.is_some() {
-                self.launch(GameMode::Normal)?;
+                self.launch(GameMode::Normal, false)?;
             } else {
                 self.start_download()?;
             }
@@ -1508,10 +1522,13 @@ impl Scene for SongScene {
                     self.rate_dialog.enter(tm.real_time() as _);
                 }
                 "exercise" => {
-                    self.launch(GameMode::Exercise)?;
+                    self.launch(GameMode::Exercise, false)?;
                 }
                 "offset" => {
-                    self.launch(GameMode::TweakOffset)?;
+                    self.launch(GameMode::TweakOffset, false)?;
+                }
+                "unlock" => {
+                    self.launch(GameMode::Normal, true)?;
                 }
                 "review-approve" => {
                     let id = self.info.id.unwrap();

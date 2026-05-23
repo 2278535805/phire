@@ -29,6 +29,7 @@ pub struct ChartInfo {
     pub format: Option<ChartFormat>,
     pub music: String,
     pub illustration: String,
+    pub unlock_video: Option<String>,
 
     pub preview_start: f64,
     pub preview_end: Option<f64>,
@@ -43,6 +44,7 @@ pub struct ChartInfo {
     pub intro: String,
 
     pub hold_partial_cover: bool,
+    pub negative_length_hold: bool,
     pub note_uniform_scale: bool,
     pub score_total: u32,
     pub hold_particle_interval_ratio: f32,
@@ -65,6 +67,7 @@ impl Default for ChartInfo {
             charter: "UK".to_string(),
             composer: "UK".to_string(),
             illustrator: "UK".to_string(),
+            unlock_video: None,
 
             chart: "chart.json".to_string(),
             format: None,
@@ -84,6 +87,7 @@ impl Default for ChartInfo {
             intro: String::new(),
 
             hold_partial_cover: false,
+            negative_length_hold: true,
             note_uniform_scale: false,
             score_total: 1_000_000,
             hold_particle_interval_ratio: 1.0,

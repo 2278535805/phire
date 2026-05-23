@@ -211,6 +211,8 @@ pub fn render_chart_info(ui: &mut Ui, edit: &mut ChartInfoEdit, width: f32) -> (
         dy!(r.h + s);
         let r = ui.checkbox(tl!("hold-partial-cover"), &mut info.hold_partial_cover);
         dy!(r.h + s);
+        let r = ui.checkbox(tl!("negative-length-hold"), &mut info.negative_length_hold);
+        dy!(r.h + s);
         let r = ui.checkbox(tl!("note-uniform-scale"), &mut info.note_uniform_scale);
         dy!(r.h + s);
         let r = ui.checkbox(tl!("fold-animation"), &mut info.fold_animation);
