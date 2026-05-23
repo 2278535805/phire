@@ -261,9 +261,10 @@ impl Note {
             color.a *= parse_alpha(ctrl_obj.alpha.now_opt().unwrap_or(1.), res.alpha, 0.2, res.config.chart_debug_note > 0.);
         }
 
+        let is_covered = cover_base <= -0.001;
         // && ((res.time - FADEOUT_TIME >= self.time) || (self.fake && res.time >= self.time) || (self.time > res.time && base <= -1e-5))
         if !config.draw_below
-            && ((res.time - FADEOUT_TIME >= self.time && !matches!(self.kind, NoteKind::Hold { .. })) || (self.time > res.time && cover_base <= -0.001))
+            && ((res.time - FADEOUT_TIME >= self.time && !matches!(self.kind, NoteKind::Hold { .. })) || (self.time > res.time && is_covered))
             // && self.speed != 0.
         {
             if res.config.chart_debug_note > 0. {
@@ -376,7 +377,7 @@ impl Note {
 
                     let tex = &style.hold;
                     let ratio = style.hold_ratio();
-                    let flip_y = top - bottom < 0.;
+                    let flip_y = (config.draw_below || !is_covered) && top - bottom < 0.;
                     let body_h = if flip_y { bottom - top } else { top - bottom } as f32;
                     let body_y = if flip_y { bottom as f32 - body_h } else { bottom as f32 };
                     // body
