@@ -377,7 +377,7 @@ impl Note {
 
                     let tex = &style.hold;
                     let ratio = style.hold_ratio();
-                    let flip_y = (config.draw_below || !is_covered) && top - bottom < 0.;
+                    let flip_y = res.info.negative_length_hold && (config.draw_below || !is_covered) && top - bottom < 0.;
                     let body_h = if flip_y { bottom - top } else { top - bottom } as f32;
                     let body_y = if flip_y { bottom as f32 - body_h } else { bottom as f32 };
                     // body
