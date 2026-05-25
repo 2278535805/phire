@@ -437,6 +437,7 @@ pub fn create_audio_manger(config: &Config) -> Result<AudioManager> {
             performance_mode: PerformanceMode::LowLatency,
             sharing_mode,
             usage,
+            ..Default::default()
         }))
     }
     #[cfg(not(target_os = "android"))]
