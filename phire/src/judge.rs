@@ -398,10 +398,10 @@ impl Judge {
         })
     }
 
-    pub fn update(&mut self, res: &mut Resource, chart: &mut Chart, bad_notes: &mut Vec<BadNote>, angle: f32) {
+    pub fn update(&mut self, music: &mut sasa::Music, tm: &mut crate::time::TimeManager, res: &mut Resource, chart: &mut Chart, bad_notes: &mut Vec<BadNote>, angle: f32) {
         res.played_hitsounds_count.clear();
         if res.config.autoplay() {
-            self.auto_play_update(res, chart);
+            self.auto_play_update(music, tm, res, chart);
             return;
         }
         let x_diff_max: f64 = if res.config.full_scrrn_judge() {
@@ -926,7 +926,7 @@ impl Judge {
         self.last_time = t / spd;
     }
 
-    fn auto_play_update(&mut self, res: &mut Resource, chart: &mut Chart) {
+    fn auto_play_update(&mut self, music: &mut sasa::Music, tm: &mut crate::time::TimeManager, res: &mut Resource, chart: &mut Chart) {
         let t = res.time - res.config.judge_offset;
         let (judge_type, judge_type_hold, judge_time, fx_color) = if res.config.all_bad {
             (Judgement::Bad, Judgement::Good, LIMIT_BAD, Color::new(0., 0., 0., 0.))
@@ -940,6 +940,14 @@ impl Judge {
         for (line_id, (line, (idx, st))) in chart.lines.iter_mut().zip(self.notes.iter_mut()).enumerate() {
             for id in &idx[*st..] {
                 let note = &mut line.notes[*id as usize];
+                if note.time - LIMIT_PERFECT < t && note.time + LIMIT_PERFECT > t {
+                    let seek = match note.kind {
+                        NoteKind::Hold { end_time,  .. } => { end_time + LIMIT_PERFECT }
+                        _ => { note.time + LIMIT_PERFECT },
+                    };
+                    tm.seek_to(seek);
+                    let _ = music.seek_to(seek);
+                };
                 if let JudgeStatus::Hold(..) = note.judge {
                     if let NoteKind::Hold { end_time, .. } = note.kind {
                         if t >= end_time {
