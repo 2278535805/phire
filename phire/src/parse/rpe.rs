@@ -46,6 +46,8 @@ fn i32_one() -> i32 {
     1
 }
 
+type BezierMap = FxHashMap<(u16, i16, i16), Rc<dyn TweenFunction>>;
+
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RPEEvent<T = f32> {
@@ -209,14 +211,6 @@ pub struct RPEChart {
     judge_line_list: Vec<RPEJudgeLine>,
 }
 
-type BezierMap = FxHashMap<(u16, i16, i16), Rc<dyn TweenFunction>>;
-
-fn bezier_key<T>(event: &RPEEvent<T>) -> (u16, i16, i16) {
-    let p = &event.bezier_points;
-    let int = |p: f32| (p * 100.).round() as i16;
-    ((int(p[0]) * 100 + int(p[1])) as u16, int(p[2]), int(p[3]))
-}
-
 fn parse_events<T: Tweenable, V: Clone + Into<T>>(
     r: &mut BpmList,
     rpe: &[RPEEvent<V>],
@@ -233,16 +227,7 @@ fn parse_events<T: Tweenable, V: Clone + Into<T>>(
         kfs.push(Keyframe {
             time: r.time(&e.start_time),
             value: e.start.clone().into(),
-            tween: {
-                let tween = RPE_TWEEN_MAP.get(e.easing_type.max(1) as usize).copied().unwrap_or(RPE_TWEEN_MAP[0]);
-                if e.bezier != 0 {
-                    Rc::clone(&bezier_map[&bezier_key(e)])
-                } else if e.easing_left.abs() < EPS as f32 && (e.easing_right - 1.0).abs() < EPS as f32 {
-                    StaticTween::get_rc(tween)
-                } else {
-                    Rc::new(ClampedTween::new(tween, e.easing_left..e.easing_right))
-                }
-            },
+            tween: e.tween(&bezier_map),
         });
         kfs.push(Keyframe::new(r.time(&e.end_time), e.end.clone().into(), 0));
     }
@@ -372,16 +357,7 @@ fn parse_gif_events<V: Clone + Into<f32>>(r: &mut BpmList, rpe: &[RPEEvent<V>], 
         kfs.push(Keyframe {
             time: r.time(&e.start_time),
             value: e.start.clone().into(),
-            tween: {
-                let tween = RPE_TWEEN_MAP.get(e.easing_type.max(1) as usize).copied().unwrap_or(RPE_TWEEN_MAP[0]);
-                if e.bezier != 0 {
-                    Rc::clone(&bezier_map[&bezier_key(e)])
-                } else if e.easing_left.abs() < EPS as f32 && (e.easing_right - 1.0).abs() < EPS as f32 {
-                    StaticTween::get_rc(tween)
-                } else {
-                    Rc::new(ClampedTween::new(tween, e.easing_left..e.easing_right))
-                }
-            },
+            tween: e.tween(&bezier_map),
         });
         kfs.push(Keyframe::new(r.time(&e.end_time), e.end.clone().into(), 2));
         next_rep_time = (r.time(&e.end_time) as f32 * 1000. + gif.total_time() as f32 * (1. - e.end.clone().into())).round() as u128;
@@ -706,20 +682,24 @@ fn add_bezier<T>(map: &mut BezierMap, event: &RPEEvent<T>) {
     }
 }
 
+macro_rules! process_bezier {
+    ($event_layer:expr, $map:expr, $($field:ident),*) => {
+        $(
+            for event in $event_layer.$field.iter().flatten() {
+                add_bezier($map, event);
+            }
+        )*
+    };
+}
+
 fn get_bezier_map(rpe: &RPEChart) -> BezierMap {
     let mut map = FxHashMap::default();
     for line in &rpe.judge_line_list {
         for event_layer in line.event_layers.iter().flatten() {
-            for event in event_layer
-                .alpha_events
-                .iter()
-                .chain(event_layer.move_x_events.iter())
-                .chain(event_layer.move_y_events.iter())
-                .chain(event_layer.rotate_events.iter())
-                .flatten()
-            {
-                add_bezier(&mut map, event);
-            }
+            process_bezier!(event_layer, &mut map, alpha_events, move_x_events, move_y_events, rotate_events);
+        }
+        if let Some(ext_layer) = &line.extended {
+            process_bezier!(ext_layer, &mut map, paint_events, scale_x_events, scale_y_events, gif_events, incline_events, text_events, color_events);
         }
     }
     map
