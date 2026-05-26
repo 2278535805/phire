@@ -620,19 +620,13 @@ impl Tweenable for String {
         if x.contains("%P%") && y.contains("%P%") {
             let x = x.replace("%P%", "");
             let y = y.replace("%P%", "");
-            if t >= 1. {
-                y
-            } else if t <= 0. {
-                x
+            let x_val: f32 = x.parse().unwrap_or(0.0);
+            let y_val: f32 = y.parse().unwrap_or(0.0);
+            let value = x_val + t * (y_val - x_val);
+            if x_val.fract() == 0.0 && y_val.fract() == 0.0 {
+                format!("{:.0}", value)
             } else {
-                let x: f32 = x.parse().unwrap_or(0.0);
-                let y: f32 = y.parse().unwrap_or(0.0);
-                let value = x + t * (y - x);
-                if x.fract() == 0.0 && y.fract() == 0.0 {
-                    format!("{:.0}", value)
-                } else {
-                    format!("{:.3}", value)
-                }
+                format!("{:.3}", value)
             }
         } else if x.is_empty() && y.is_empty() {
             Self::new()
