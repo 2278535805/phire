@@ -3,6 +3,7 @@ use once_cell::sync::Lazy;
 use std::{any::Any, ops::Range, rc::Rc};
 
 use crate::core::EPS;
+use super::TextData;
 
 pub type TweenId = u8;
 
@@ -660,6 +661,15 @@ impl Tweenable for String {
                     x.clone()
                 }
             }
+        }
+    }
+}
+
+impl Tweenable for TextData {
+    fn tween(x: &Self, y: &Self, t: f32) -> Self {
+        Self {
+            text: String::tween(&x.text, &y.text, t),
+            font_id: x.font_id,
         }
     }
 }

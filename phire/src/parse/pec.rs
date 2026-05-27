@@ -500,5 +500,6 @@ pub fn parse_pec(source: &str, extra: ChartExtra) -> Result<Chart> {
         },
         extra,
         FxHashMap::default(),
+        Vec::new(),
     ))
 }
