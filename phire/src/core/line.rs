@@ -345,13 +345,12 @@ impl JudgeLine {
                             let hf = vec2(texture.width(), texture.height()); // Sync RPE
                             draw_texture_ex(
                                 **texture,
-                                -hf.x / 2.,
-                                -hf.y / 2.,
+                                -hf.x * self.anchor[0],
+                                -hf.y * self.anchor[1],
                                 color,
                                 DrawTextureParams {
                                     dest_size: Some(hf),
                                     flip_y: true,
-                                    pivot: Some(Vec2::new(self.anchor[0], -self.anchor[1] + 1.)),
                                     ..Default::default()
                                 },
                             );
@@ -369,13 +368,12 @@ impl JudgeLine {
                             let hf = vec2(frame.width(), frame.height());
                             draw_texture_ex(
                                 **frame,
-                                -hf.x / 2.,
-                                -hf.y / 2.,
+                                -hf.x * self.anchor[0],
+                                -hf.y * self.anchor[1],
                                 color,
                                 DrawTextureParams {
                                     dest_size: Some(hf),
                                     flip_y: true,
-                                    pivot: Some(Vec2::new(self.anchor[0], -self.anchor[1] + 1.)),
                                     ..Default::default()
                                 },
                             );
