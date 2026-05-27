@@ -3,11 +3,12 @@ crate::tl_file!("parser" ptl);
 use super::{process_lines, RPE_TWEEN_MAP};
 use crate::{
     core::{
-        Anim, AnimFloat, AnimFloatF64, AnimVector, BezierTween, BpmList, Chart, ChartExtra, ChartSettings, ClampedTween, CtrlObject, EPS, GeneralIntegralTween, GifFrames, HEIGHT_RATIO, HitSoundMap, IntegralClampedTween, IntegralStaticTween, JudgeLine, JudgeLineCache, JudgeLineKind, Keyframe, Note, NoteKind, Object, SpeedIntegralTween, StaticTween, Triple, TweenFunction, Tweenable, UIElement, Vector
+        Anim, AnimFloat, AnimFloatF64, AnimVector, BezierTween, BpmList, Chart, ChartExtra, ChartSettings, ClampedTween, CtrlObject, EPS, GeneralIntegralTween, GifFrames, HEIGHT_RATIO, HitSoundMap, IntegralClampedTween, IntegralStaticTween, JudgeLine, JudgeLineCache, JudgeLineKind, Keyframe, Note, NoteKind, Object, SpeedIntegralTween, StaticTween, TextData, Triple, TweenFunction, Tweenable, UIElement, Vector
     },
     ext::{NotNanExt, SafeTexture},
     fs::FileSystem,
-    judge::{HitSound, JudgeStatus}
+    judge::{HitSound, JudgeStatus},
+    ui::{FontArc, TextPainter},
 };
 use anyhow::{Context, Result};
 use image::{codecs::gif, AnimationDecoder, DynamicImage, ImageError};
@@ -90,6 +91,48 @@ impl<T> RPEEvent<T> {
 
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct RPETextEvent {
+    #[serde(default = "f32_zero")]
+    easing_left: f32,
+    #[serde(default = "f32_one")]
+    easing_right: f32,
+    #[serde(default)]
+    bezier: u8,
+    #[serde(default)]
+    bezier_points: [f32; 4],
+    #[serde(default = "i32_one")]
+    easing_type: i32,
+    start: String,
+    end: String,
+    start_time: Triple,
+    end_time: Triple,
+    #[serde(default)]
+    font: Option<String>,
+}
+
+impl RPETextEvent {
+    fn bezier_key(&self) -> (u16, i16, i16) {
+        let p = &self.bezier_points;
+        let int = |p: f32| (p * 100.).round() as i16;
+        ((int(p[0]) * 100 + int(p[1])) as u16, int(p[2]), int(p[3]))
+    }
+
+    pub fn tween(&self, bezier_map: &BezierMap) -> Rc<dyn TweenFunction> {
+        let tween = RPE_TWEEN_MAP.get(self.easing_type.max(1) as usize).copied().unwrap_or(RPE_TWEEN_MAP[0]);
+        let left = self.easing_left.clamp(0., 1.);
+        let right = self.easing_right.clamp(0., 1.);
+        if self.bezier != 0 {
+            Rc::clone(&bezier_map[&self.bezier_key()])
+        } else if tween <= 2 || (left.abs() < EPS as f32 && (right - 1.0).abs() < EPS as f32) || left >= right {
+            StaticTween::get_rc(tween)
+        } else {
+            Rc::new(ClampedTween::new(tween, left..right))
+        }
+    }
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RPECtrlEvent {
     easing: u8,
     x: f64,
@@ -126,7 +169,7 @@ impl From<RGBColor> for Color {
 #[serde(rename_all = "camelCase")]
 pub struct RPEExtendedEvents {
     color_events: Option<Vec<RPEEvent<RGBColor>>>,
-    text_events: Option<Vec<RPEEvent<String>>>,
+    text_events: Option<Vec<RPETextEvent>>,
     scale_x_events: Option<Vec<RPEEvent>>,
     scale_y_events: Option<Vec<RPEEvent>>,
     incline_events: Option<Vec<RPEEvent>>,
@@ -230,6 +273,31 @@ fn parse_events<T: Tweenable, V: Clone + Into<T>>(
             tween: e.tween(&bezier_map),
         });
         kfs.push(Keyframe::new(r.time(&e.end_time), e.end.clone().into(), 0));
+    }
+    Ok(Anim::new(kfs))
+}
+
+fn parse_text_events(
+    r: &mut BpmList,
+    rpe: &[RPETextEvent],
+    default: Option<TextData>,
+    bezier_map: &BezierMap,
+    font_cache: &HashMap<String, usize>,
+) -> Result<Anim<TextData>> {
+    let mut kfs = Vec::with_capacity(rpe.len() * 2 + 1);
+    if let Some(default) = default {
+        if !rpe.is_empty() && rpe[0].start_time.beats() > 0.0 {
+            kfs.push(Keyframe::new(0.0, default, 0));
+        }
+    }
+    for e in rpe {
+        let font_id = e.font.as_ref().and_then(|path| font_cache.get(path)).copied();
+        kfs.push(Keyframe {
+            time: r.time(&e.start_time),
+            value: TextData { text: e.start.clone(), font_id },
+            tween: e.tween(&bezier_map),
+        });
+        kfs.push(Keyframe::new(r.time(&e.end_time), TextData { text: e.end.clone(), font_id }, 0));
     }
     Ok(Anim::new(kfs))
 }
@@ -493,10 +561,29 @@ async fn parse_judge_line(
     fs: &mut dyn FileSystem,
     bezier_map: &BezierMap,
     hitsounds: &mut HitSoundMap,
+    font_cache: &mut HashMap<String, usize>,
+    fonts: &mut Vec<RefCell<TextPainter>>,
 ) -> Result<JudgeLine> {
     let mut line_texture_map: FxHashMap<String, SafeTexture> = FxHashMap::default();
     let event_layers: Vec<_> = rpe.event_layers.into_iter().flatten().collect();
     let r = &mut BpmList::new(bpm_list.into_iter().map(|it| (it.start_time.beats(), it.bpm / rpe.bpm_factor)).collect());
+
+    if let Some(extended) = &rpe.extended {
+        if let Some(text_events) = &extended.text_events {
+            for event in text_events {
+                if let Some(font_path) = &event.font {
+                    if !font_cache.contains_key(font_path) {
+                        let font_data = fs.load_file(font_path).await.with_context(|| format!("failed to load font: {font_path}"))?;
+                        let font_arc = FontArc::try_from_vec(font_data).map_err(|err| anyhow::anyhow!("failed to parse font: {err}"))?;
+                        let painter = TextPainter::new(font_arc);
+                        let id = fonts.len();
+                        fonts.push(RefCell::new(painter));
+                        font_cache.insert(font_path.clone(), id);
+                    }
+                }
+            }
+        }
+    }
 
     fn events_with_factor(
         r: &mut BpmList,
@@ -589,7 +676,7 @@ async fn parse_judge_line(
                 )
             } else if let Some(extended) = rpe.extended.as_ref() {
                 if let Some(events) = extended.text_events.as_ref() {
-                    JudgeLineKind::Text(parse_events(r, events, Some(String::new()), bezier_map).with_context(|| ptl!("text-events-parse-failed"))?)
+                    JudgeLineKind::Text(parse_text_events(r, events, Some(TextData::default()), bezier_map, font_cache).with_context(|| ptl!("text-events-parse-failed"))?)
                 } else {
                     JudgeLineKind::Normal
                 }
@@ -682,6 +769,15 @@ fn add_bezier<T>(map: &mut BezierMap, event: &RPEEvent<T>) {
     }
 }
 
+fn add_text_bezier(map: &mut BezierMap, event: &RPETextEvent) {
+    if event.bezier != 0 {
+        let p = &event.bezier_points;
+        let int = |p: f32| (p * 100.).round() as i16;
+        map.entry(((int(p[0]) * 100 + int(p[1])) as u16, int(p[2]), int(p[3])))
+            .or_insert_with(|| Rc::new(BezierTween::new((p[0], p[1]), (p[2], p[3]))));
+    }
+}
+
 macro_rules! process_bezier {
     ($event_layer:expr, $map:expr, $($field:ident),*) => {
         $(
@@ -699,7 +795,10 @@ fn get_bezier_map(rpe: &RPEChart) -> BezierMap {
             process_bezier!(event_layer, &mut map, alpha_events, move_x_events, move_y_events, rotate_events);
         }
         if let Some(ext_layer) = &line.extended {
-            process_bezier!(ext_layer, &mut map, paint_events, scale_x_events, scale_y_events, gif_events, incline_events, text_events, color_events);
+            process_bezier!(ext_layer, &mut map, paint_events, scale_x_events, scale_y_events, gif_events, incline_events, color_events);
+            for event in ext_layer.text_events.iter().flatten() {
+                add_text_bezier(&mut map, event);
+            }
         }
     }
     map
@@ -747,14 +846,16 @@ pub async fn parse_rpe(source: &str, fs: &mut dyn FileSystem, extra: ChartExtra)
         .max().unwrap_or_default() + 1.;
     // don't want to add a whole crate for a mere join_all...
     let mut lines = Vec::with_capacity(rpe.judge_line_list.len());
+    let mut font_cache: HashMap<String, usize> = HashMap::new();
+    let mut fonts: Vec<RefCell<TextPainter>> = Vec::new();
     for (id, line) in rpe.judge_line_list.into_iter().enumerate() {
         let name = line.name.clone();
         lines.push(
-            parse_judge_line(bpm_list.clone(), line, max_time, fs, &bezier_map, &mut hitsounds)
+            parse_judge_line(bpm_list.clone(), line, max_time, fs, &bezier_map, &mut hitsounds, &mut font_cache, &mut fonts)
                 .await
                 .with_context(move || ptl!("judge-line-location-name", "jlid" => id, "name" => name))?,
         );
     }
     process_lines(&mut lines);
-    Ok(Chart::new(rpe.meta.offset as f64 / 1000.0, lines, r, ChartSettings::default(), extra, hitsounds))
+    Ok(Chart::new(rpe.meta.offset as f64 / 1000.0, lines, r, ChartSettings::default(), extra, hitsounds, fonts))
 }

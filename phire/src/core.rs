@@ -19,7 +19,7 @@ mod effect;
 pub use effect::{Effect, Uniform};
 
 mod line;
-pub use line::{GifFrames, JudgeLine, JudgeLineCache, JudgeLineKind, UIElement};
+pub use line::{GifFrames, JudgeLine, JudgeLineCache, JudgeLineKind, TextData, UIElement};
 
 mod note;
 use macroquad::prelude::set_pc_assets_folder;

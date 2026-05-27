@@ -408,6 +408,7 @@ impl GameScene {
                 res.extra_sfxs.insert(name, clip);
             }
         });
+        res.fonts = std::mem::take(&mut chart.fonts);
 
         let music = Self::new_music(&mut res)?;
         Ok(Self {
