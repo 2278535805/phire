@@ -294,7 +294,7 @@ impl Scene for EndingScene {
         cam.render_target = self.target.clone();
         set_camera(&cam);
         if self.config.render_bg {
-            draw_background(Texture2D::clone(&self.background), self.config.render_bg_dim);
+            draw_background(&self.background, self.config.render_bg_dim);
         }
 
         fn ran(t: f32, l: f32, r: f32) -> f32 {
@@ -306,7 +306,7 @@ impl Scene for EndingScene {
 
         let p_main = (1. - ran(t, MAIN_POS_START, MAIN_POS_END) + 0.15).powi(10);
         tran(gl, p_main);
-        let r = draw_illustration(Texture2D::clone(&self.illustration), -0.372, -0.002, 1.052, 1.22, WHITE, true); // 曲绘
+        let r = draw_illustration(&self.illustration, -0.372, -0.002, 1.052, 1.22, WHITE, true); // 曲绘
         let main = Rect::new(r.right() - 0.053, r.y, r.w * 0.782, r.h / 2.); // 右边的矩形
         let slope = PARALLELOGRAM_SLOPE; // 斜率
         let ratio = 0.2;
@@ -506,7 +506,7 @@ impl Scene for EndingScene {
             Color::new(0., 0., 0., alpha),
             0.10
         );
-        let r = draw_illustration(Texture2D::clone(&self.player), 1. - 0.21, main.center().y, 0.12 / (0.076 * 7.), 0.12 / (0.076 * 7.), color, true);
+        let r = draw_illustration(&self.player, 1. - 0.21, main.center().y, 0.12 / (0.076 * 7.), 0.12 / (0.076 * 7.), color, true);
         let mut text = ui.text(&self.player_name).pos(r.x - 0.015, r.center().y - 0.002).anchor(1., 0.5).size(0.54).color(color);
         let text_rect = text.measure();
         draw_parallelogram(

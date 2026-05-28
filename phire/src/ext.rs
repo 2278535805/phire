@@ -236,11 +236,11 @@ pub fn source_of_image(tex: &Texture2D, rect: Rect, scale_type: ScaleType) -> Op
     }
 }
 
-pub fn draw_image(tex: Texture2D, rect: Rect, scale_type: ScaleType) {
+pub fn draw_image(tex: &Texture2D, rect: Rect, scale_type: ScaleType) {
     let source = source_of_image(&tex, rect, scale_type);
     let (w, h) = (tex.width(), tex.height());
     draw_texture_ex(
-        &tex,
+        tex,
         rect.x,
         rect.y,
         WHITE,
@@ -254,11 +254,11 @@ pub fn draw_image(tex: Texture2D, rect: Rect, scale_type: ScaleType) {
 
 pub const PARALLELOGRAM_SLOPE: f32 = 15.0 * std::f32::consts::PI / 180.0;
 
-pub fn draw_parallelogram(rect: Rect, texture: Option<(Texture2D, Rect)>, color: Color, shadow: bool) {
+pub fn draw_parallelogram(rect: Rect, texture: Option<(&Texture2D, Rect)>, color: Color, shadow: bool) {
     draw_parallelogram_ex(rect, texture, color, color, shadow);
 }
 
-pub fn draw_parallelogram_ex(rect: Rect, texture: Option<(Texture2D, Rect)>, top: Color, bottom: Color, shadow: bool) {
+pub fn draw_parallelogram_ex(rect: Rect, texture: Option<(&Texture2D, Rect)>, top: Color, bottom: Color, shadow: bool) {
     let l = rect.h * PARALLELOGRAM_SLOPE;
     let gl = unsafe { get_internal_gl() }.quad_gl;
     let p = [
@@ -269,7 +269,7 @@ pub fn draw_parallelogram_ex(rect: Rect, texture: Option<(Texture2D, Rect)>, top
     ];
     let v = if let Some((tex, tex_rect)) = texture {
         let lt = tex_rect.h * tex.height() * PARALLELOGRAM_SLOPE / tex.width();
-        gl.texture(Some(&tex));
+        gl.texture(Some(tex));
         [
             Vertex::new(p[0].x, p[0].y, 0., tex_rect.x + lt, tex_rect.y, top),
             Vertex::new(p[1].x, p[1].y, 0., tex_rect.right(), tex_rect.y, top),
@@ -293,7 +293,7 @@ pub fn draw_parallelogram_ex(rect: Rect, texture: Option<(Texture2D, Rect)>, top
     }
 }
 
-pub fn draw_illustration(tex: Texture2D, x: f32, y: f32, w: f32, h: f32, color: Color, shadow: bool) -> Rect {
+pub fn draw_illustration(tex: &Texture2D, x: f32, y: f32, w: f32, h: f32, color: Color, shadow: bool) -> Rect {
     let scale = 0.076;
     let w = scale * 13. * w;
     let h = scale * 7. * h;

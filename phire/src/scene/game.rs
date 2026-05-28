@@ -1420,7 +1420,7 @@ impl Scene for GameScene {
             clear_background(BLACK);
         }
         if res.config.render_bg {
-            draw_background(Texture2D::clone(&res.background), res.config.render_bg_dim);
+            draw_background(&res.background, res.config.render_bg_dim);
         }
 
         if res.config.render_bg_dim && res.config.chart_ratio >= 1. {

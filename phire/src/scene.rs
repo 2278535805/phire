@@ -541,7 +541,7 @@ impl Main {
     }
 }
 
-fn draw_background(tex: Texture2D, dim: bool) {
+fn draw_background(tex: &Texture2D, dim: bool) {
     let asp = screen_aspect();
     let top = 1. / asp;
     draw_image(tex, Rect::new(-1., -top, 2., top * 2.), ScaleType::CropCenter);
