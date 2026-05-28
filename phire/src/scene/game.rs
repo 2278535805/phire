@@ -1498,6 +1498,7 @@ impl Scene for GameScene {
             set_camera(&Camera2D {
                 zoom: vec2(1., asp2_chart),
                 render_target: chart_onto.clone(),
+                viewport: Some(ui_viewport),
                 ..Default::default()
             });
             for effect in &self.chart.extra.effects {
@@ -1519,6 +1520,7 @@ impl Scene for GameScene {
             set_camera(&Camera2D {
                 zoom: vec2(1., asp2_window),
                 render_target: chart_onto.clone(),
+                viewport: Some(ui_viewport),
                 ..Default::default()
             });
             for effect in &self.effects {
