@@ -22,14 +22,6 @@ pub const UP_TOLERANCE: f64 = 0.05;
 pub const DIST_FACTOR: f64 = 0.2;
 const LATE_OFFSET: f64 = 0.13;
 
-#[derive(Clone)]
-struct TouchWithTime {
-    id: u64,
-    phase: TouchPhase,
-    position: Vec2,
-    time: f64,
-}
-
 pub fn play_sfx(sfx: &mut Sfx, config: &Config) {
     if config.volume_sfx <= 1e-2 {
         return;
@@ -300,7 +292,7 @@ pub struct Judge {
 
 static SUBSCRIBER_ID: Lazy<usize> = Lazy::new(register_input_subscriber);
 thread_local! {
-    static TOUCHES: RefCell<(Vec<TouchWithTime>, i32, u32)> = RefCell::default();
+    static TOUCHES: RefCell<(Vec<Touch>, i32, u32)> = RefCell::default();
 }
 
 impl Judge {
@@ -372,7 +364,7 @@ impl Judge {
         )
     }
 
-    fn touch_transform(flip_x: bool, scale: f32, angle: f32, low_resolution_mode: bool) -> impl Fn(&mut TouchWithTime) {
+    fn touch_transform(flip_x: bool, scale: f32, angle: f32, low_resolution_mode: bool) -> impl Fn(&mut Touch) {
         let vp = get_viewport();
         move |touch| {
             let p = if low_resolution_mode {
@@ -402,11 +394,7 @@ impl Judge {
                 .cloned()
                 .map(|mut it| {
                     tr(&mut it);
-                    Touch {
-                        id: it.id,
-                        phase: it.phase,
-                        position: it.position,
-                    }
+                    it
                 })
                 .collect()
         })
@@ -429,13 +417,13 @@ impl Judge {
 
         let t = res.time;
         // TODO optimize
-        let mut touches: HashMap<u64, TouchWithTime> = {
-            let mut touches: Vec<TouchWithTime> = touches().into_iter().map(|t| TouchWithTime { id: t.id, phase: t.phase, position: t.position, time: f64::NEG_INFINITY }).collect();
+        let mut touches: HashMap<u64, Touch> = {
+            let mut touches: Vec<Touch> = touches().into_iter().map(|t| Touch { id: t.id, phase: t.phase, position: t.position, time: f64::NEG_INFINITY }).collect();
             let btn = MouseButton::Left;
             let id = button_to_id(btn);
             if is_mouse_button_pressed(btn) {
                 let p = mouse_position();
-                touches.push(TouchWithTime {
+                touches.push(Touch {
                     id,
                     phase: TouchPhase::Started,
                     position: vec2(p.0, p.1),
@@ -443,7 +431,7 @@ impl Judge {
                 });
             } else if is_mouse_button_down(btn) {
                 let p = mouse_position();
-                touches.push(TouchWithTime {
+                touches.push(Touch {
                     id,
                     phase: TouchPhase::Moved,
                     position: vec2(p.0, p.1),
@@ -451,7 +439,7 @@ impl Judge {
                 });
             } else if is_mouse_button_released(btn) {
                 let p = mouse_position();
-                touches.push(TouchWithTime {
+                touches.push(Touch {
                     id,
                     phase: TouchPhase::Ended,
                     position: vec2(p.0, p.1),
@@ -478,7 +466,7 @@ impl Judge {
             }
             let delta = (t / spd - self.last_time) as f64 / (events.len() + 1) as f64;
             let mut t = self.last_time as f64;
-            for TouchWithTime {
+            for Touch {
                 id,
                 phase,
                 position: p,
@@ -493,7 +481,7 @@ impl Judge {
                         self.trackers.insert(id, FlickTracker::new(res.dpi, t, p));
                         touches
                             .entry(id)
-                            .or_insert_with(|| TouchWithTime {
+                            .or_insert_with(|| Touch {
                                 id,
                                 phase: TouchPhase::Started,
                                 position: vec2(p.x, p.y),
@@ -512,7 +500,7 @@ impl Judge {
                 }
             }
         }
-        let touches: Vec<TouchWithTime> = touches
+        let touches: Vec<Touch> = touches
             .into_values()
             .map(|mut it| {
                 it.time = if it.time.is_infinite() {
@@ -546,7 +534,7 @@ impl Judge {
                     .collect(),
             );
         }
-        let time_of = |touch: &TouchWithTime| {
+        let time_of = |touch: &Touch| {
             if touch.time.is_infinite() {
                 t
             } else {
@@ -1074,11 +1062,11 @@ impl Judge {
     }
 }
 
-struct Handler(Vec<TouchWithTime>, i32, u32);
+struct Handler(Vec<Touch>, i32, u32);
 impl Handler {
     fn finalize(&mut self) {
         if is_mouse_button_down(MouseButton::Left) {
-            self.0.push(TouchWithTime {
+            self.0.push(Touch {
                 id: button_to_id(MouseButton::Left),
                 phase: TouchPhase::Moved,
                 position: mouse_position().into(),
@@ -1101,17 +1089,17 @@ fn button_to_id(button: MouseButton) -> u64 {
 impl EventHandler for Handler {
     fn update(&mut self) {}
     fn draw(&mut self) {}
-    fn touch_event(&mut self, phase: miniquad::TouchPhase, id: u64, x: f32, y: f32) {
-        self.0.push(TouchWithTime {
+    fn touch_event(&mut self, phase: miniquad::TouchPhase, id: u64, x: f32, y: f32, time: f64) {
+        self.0.push(Touch {
             id,
             phase: phase.into(),
             position: vec2(x, y),
-            time: f64::NEG_INFINITY,
+            time,
         });
     }
 
     fn mouse_button_down_event(&mut self, button: MouseButton, x: f32, y: f32) {
-        self.0.push(TouchWithTime {
+        self.0.push(Touch {
             id: button_to_id(button),
             phase: TouchPhase::Started,
             position: vec2(x, y),
@@ -1120,7 +1108,7 @@ impl EventHandler for Handler {
     }
 
     fn mouse_button_up_event(&mut self, button: MouseButton, x: f32, y: f32) {
-        self.0.push(TouchWithTime {
+        self.0.push(Touch {
             id: button_to_id(button),
             phase: TouchPhase::Ended,
             position: vec2(x, y),

@@ -27,7 +27,7 @@ hex = "0.4.3"
 image = "*"
 lru = "0.16.0"
 lyon = "*"
-macroquad = "0.4.15"
+macroquad = { git = "https://github.com/2278535805/macroquad" }
 md5 = "0.7"
 nalgebra = "*"
 once_cell = "*"
