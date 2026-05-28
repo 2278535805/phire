@@ -1,5 +1,5 @@
 use macroquad::{
-    texture::{render_target, render_target_ex, RenderTarget, RenderTargetParams},
+    texture::{RenderTarget, Texture2D},
     window::get_internal_gl,
 };
 use macroquad::miniquad::{self as miniquad, gl::GLuint};
@@ -38,17 +38,52 @@ pub fn internal_id(target: RenderTarget) -> GLuint {
     get_fbo(&target)
 }
 
+fn create_render_target_rgb8(width: u32, height: u32, sample_count: i32) -> RenderTarget {
+    let gl = unsafe { get_internal_gl() };
+    let ctx = gl.quad_context;
+
+    let color_texture = ctx.new_render_texture(miniquad::TextureParams {
+        width,
+        height,
+        format: miniquad::TextureFormat::RGB8,
+        sample_count,
+        ..Default::default()
+    });
+
+    let render_pass = if sample_count > 1 {
+        let resolve_texture = ctx.new_render_texture(miniquad::TextureParams {
+            width,
+            height,
+            format: miniquad::TextureFormat::RGB8,
+            sample_count: 1,
+            ..Default::default()
+        });
+        ctx.new_render_pass_mrt(&[color_texture], Some(&[resolve_texture]), None)
+    } else {
+        ctx.new_render_pass(color_texture, None)
+    };
+
+    // Get the texture that contains the final result (resolve texture for MSAA, color texture otherwise)
+    let result_texture_id = if sample_count > 1 {
+        ctx.render_pass_color_attachments(render_pass)[0]
+    } else {
+        color_texture
+    };
+
+    RenderTarget {
+        texture: Texture2D::from_miniquad_texture(result_texture_id),
+        render_pass: macroquad::texture::RenderPass {
+            color_texture: Texture2D::from_miniquad_texture(result_texture_id),
+            depth_texture: None,
+            render_pass: std::sync::Arc::new(render_pass),
+        },
+    }
+}
+
 impl MSRenderTarget {
     pub fn new(dim: (u32, u32), samples: u32) -> Self {
-        let input = render_target_ex(
-            dim.0,
-            dim.1,
-            RenderTargetParams {
-                sample_count: samples as i32,
-                ..Default::default()
-            },
-        );
-        let output = render_target(dim.0, dim.1);
+        let input = create_render_target_rgb8(dim.0, dim.1, samples as i32);
+        let output = create_render_target_rgb8(dim.0, dim.1, 1);
         let fbo = get_fbo(&input);
         Self {
             dim,
@@ -68,8 +103,7 @@ impl MSRenderTarget {
     pub fn swap(&mut self) {
         self.output.swap(0, 1);
         if self.output[0].is_none() {
-            self.output[0] = Some(render_target(self.dim.0, self.dim.1));
-            // TODO: copy content from old output to new output
+            self.output[0] = Some(create_render_target_rgb8(self.dim.0, self.dim.1, 1));
         }
     }
 
