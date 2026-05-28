@@ -12,7 +12,7 @@
 use macroquad::prelude::*;
 use macroquad::window::miniquad::{
     self, Bindings, BlendFactor, BlendState, BlendValue, BufferId, BufferLayout, BufferSource, BufferType, BufferUsage, Context, Equation, FilterMode,
-    PassAction, Pipeline, PipelineParams, ShaderMeta, ShaderSource, TextureFormat, TextureId, TextureParams, UniformBlockLayout, UniformDesc,
+    PassAction, Pipeline, PipelineParams, ShaderMeta, ShaderSource, TextureFormat, TextureParams, UniformBlockLayout, UniformDesc,
     UniformsSource, UniformType, VertexAttribute, VertexFormat, VertexStep,
 };
 use rand_pcg::rand_core::RngCore;
@@ -415,7 +415,6 @@ pub struct Emitter {
     pipeline: Pipeline,
     bindings: Bindings,
     post_processing_pass: miniquad::RenderPass,
-    post_processing_texture: TextureId,
     post_processing_pipeline: Pipeline,
     post_processing_bindings: Bindings,
 
@@ -430,7 +429,6 @@ pub struct Emitter {
 
     batched_size_curve: Option<BatchedCurve>,
 
-    blend_mode: BlendMode,
     mesh_dirty: bool,
 
     pub config: EmitterConfig,
@@ -548,10 +546,8 @@ impl Emitter {
         let max_particles = config.max_particles;
 
         Emitter {
-            blend_mode: config.blend_mode,
             batched_size_curve: config.size_curve.as_ref().map(|curve| curve.batch()),
             post_processing_pass,
-            post_processing_texture,
             post_processing_pipeline,
             post_processing_bindings,
             config,

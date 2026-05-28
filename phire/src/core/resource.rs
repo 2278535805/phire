@@ -434,7 +434,11 @@ impl NoteBuffer {
         let gl = gl.quad_gl;
         gl.draw_mode(DrawMode::Triangles);
         for ((_, tex_id), meshes) in &self.0 {
-            gl.texture(Some(&Texture2D::from_miniquad_texture(unsafe { TextureId::from_raw_id(macroquad::miniquad::RawId::OpenGl(*tex_id)) })));
+            gl.texture(
+                Some(&Texture2D::from_miniquad_texture(
+                    TextureId::from_raw_id(macroquad::miniquad::RawId::OpenGl(*tex_id))
+                ))
+            );
             for mesh in meshes {
                 if !mesh.0.is_empty() {
                     gl.geometry(&mesh.0, &mesh.1);

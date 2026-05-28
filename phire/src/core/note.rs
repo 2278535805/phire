@@ -115,7 +115,18 @@ fn draw_tex_pts(res: &Resource, texture: Texture2D, order: i8, p: [Point; 4], co
     ];
     res.note_buffer
         .borrow_mut()
-        .push((order, { let gl = unsafe { get_internal_gl() }; match unsafe { gl.quad_context.texture_raw_id(texture.raw_miniquad_id()) } { miniquad::RawId::OpenGl(id) => id, _ => 0 } }), vertices);
+        .push(
+            (
+                order,
+                { let gl = unsafe { get_internal_gl() };
+                    match unsafe { gl.quad_context.texture_raw_id(texture.raw_miniquad_id()) }
+                    {
+                        miniquad::RawId::OpenGl(id) => id,
+                    }
+                }
+            ),
+            vertices
+        );
 }
 
 fn draw_center(res: &Resource, tex: Texture2D, order: i8, scale: f32, color: Color) {
