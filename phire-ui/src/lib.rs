@@ -34,6 +34,13 @@ use scene::MainScene;
 use std::sync::{mpsc, Mutex};
 use tracing::{error, info};
 
+#[cfg(any(target_os = "android", target_os = "ios"))]
+use phire::gyro::{GYRO, GyroData};
+#[cfg(any(target_os = "android", target_os = "ios"))]
+use std::time::Duration;
+#[cfg(any(target_os = "android", target_os = "ios"))]
+use nalgebra::Vector3;
+
 static ACTIVITY_LIFECYCLE: Mutex<Option<mpsc::Sender<bool>>> = Mutex::new(None);
 static ACTIVITY_FOUCUS: Mutex<Option<mpsc::Sender<bool>>> = Mutex::new(None);
 static ANTI_ADDICTION_CALLBACK: Mutex<Option<mpsc::Sender<i32>>> = Mutex::new(None);
