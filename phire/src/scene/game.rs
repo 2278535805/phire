@@ -1443,6 +1443,7 @@ impl Scene for GameScene {
             set_camera( &Camera2D {
                 zoom: chart_zoom,
                 viewport: chart_viewport,
+                render_target: chart_onto.clone(),
                 ..Default::default()
             });
             self.gl.quad_gl.render_pass(chart_onto.as_ref().map(|it| it.render_pass.raw_miniquad_id()));
@@ -1473,6 +1474,7 @@ impl Scene for GameScene {
                 }
             }),
             rotation: angle.to_degrees(),
+            render_target: chart_onto.clone(),
             ..Default::default()
         });
         self.gl.quad_gl.render_pass(chart_onto.as_ref().map(|it| it.render_pass.raw_miniquad_id()));
@@ -1494,7 +1496,8 @@ impl Scene for GameScene {
 
         if !res.no_effect {
             set_camera(&Camera2D {
-                zoom: vec2(1., -asp2_chart),
+                zoom: vec2(1., asp2_chart),
+                render_target: chart_onto.clone(),
                 ..Default::default()
             });
             for effect in &self.chart.extra.effects {
@@ -1514,7 +1517,8 @@ impl Scene for GameScene {
 
         if !self.res.no_effect && !self.effects.is_empty() {
             set_camera(&Camera2D {
-                zoom: vec2(1., -asp2_window),
+                zoom: vec2(1., asp2_window),
+                render_target: chart_onto.clone(),
                 ..Default::default()
             });
             for effect in &self.effects {
@@ -1524,7 +1528,7 @@ impl Scene for GameScene {
 
         {
             set_camera(&Camera2D {
-                zoom: vec2(1., -1.),
+                zoom: vec2(1., 1.),
                 viewport: viewport_window,
                 render_target: self.res.chart_target.as_ref().map(|it| it.output()).or(self.res.camera.render_target.clone()),
                 ..Default::default()
@@ -1536,7 +1540,7 @@ impl Scene for GameScene {
 
         {
             set_camera(&Camera2D {
-                zoom: vec2(1., -asp2_window),
+                zoom: vec2(1., asp2_window),
                 viewport: viewport_window,
                 render_target: self.res.chart_target.as_ref().map(|it| it.output()).or(self.res.camera.render_target.clone()),
                 ..Default::default()
@@ -1567,7 +1571,7 @@ impl Scene for GameScene {
                 self.gl.flush();
                 self.gl.quad_gl.viewport(None);
                 set_camera(&Camera2D {
-                    zoom: vec2(1., -asp2_window),
+                    zoom: vec2(1., asp2_window),
                     render_target: self.res.camera.render_target.clone(),
                     viewport: Some(ui.viewport),
                     ..Default::default()
