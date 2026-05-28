@@ -10,7 +10,11 @@
 // 5. Remove EmittersCache
 
 use macroquad::prelude::*;
-use macroquad::window::miniquad::*;
+use macroquad::window::miniquad::{
+    self, Bindings, BlendFactor, BlendState, BlendValue, BufferId, BufferLayout, BufferSource, BufferType, BufferUsage, Context, Equation, FilterMode,
+    PassAction, Pipeline, PipelineParams, ShaderMeta, ShaderSource, TextureFormat, TextureId, TextureParams, UniformBlockLayout, UniformDesc,
+    UniformsSource, UniformType, VertexAttribute, VertexFormat, VertexStep,
+};
 use rand_pcg::rand_core::RngCore;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -224,7 +228,7 @@ pub enum ParticleShape {
 }
 
 impl ParticleShape {
-    fn build_bindings(&self, ctx: &mut miniquad::Context, positions_vertex_buffer: Buffer, texture: Option<Texture2D>) -> Bindings {
+    fn build_bindings(&self, ctx: &mut miniquad::Context, positions_vertex_buffer: BufferId, texture: Option<Texture2D>) -> Bindings {
         let (geometry_vertex_buffer, index_buffer) = match self {
             ParticleShape::Rectangle { aspect_ratio } => {
                 #[rustfmt::skip]
@@ -236,13 +240,13 @@ impl ParticleShape {
                     -1.0 * aspect_ratio,  1.0, 0.0,   0.0, 1.0,  1.0, 1.0, 1.0, 1.0,
                 ];
 
-                let vertex_buffer = Buffer::immutable(ctx, BufferType::VertexBuffer, vertices);
+                let vertex_buffer = ctx.new_buffer(BufferType::VertexBuffer, BufferUsage::Immutable, BufferSource::slice(vertices));
 
                 #[rustfmt::skip]
                 let indices: &[u16] = &[
                     0, 1, 2, 0, 2, 3
                 ];
-                let index_buffer = Buffer::immutable(ctx, BufferType::IndexBuffer, indices);
+                let index_buffer = ctx.new_buffer(BufferType::IndexBuffer, BufferUsage::Immutable, BufferSource::slice(indices));
 
                 (vertex_buffer, index_buffer)
             }
@@ -262,13 +266,13 @@ impl ParticleShape {
                     }
                 }
 
-                let vertex_buffer = Buffer::immutable(ctx, BufferType::VertexBuffer, &vertices);
-                let index_buffer = Buffer::immutable(ctx, BufferType::IndexBuffer, &indices);
+                let vertex_buffer = ctx.new_buffer(BufferType::VertexBuffer, BufferUsage::Immutable, BufferSource::slice(&vertices));
+                let index_buffer = ctx.new_buffer(BufferType::IndexBuffer, BufferUsage::Immutable, BufferSource::slice(&indices));
                 (vertex_buffer, index_buffer)
             }
             ParticleShape::CustomMesh { vertices, indices } => {
-                let vertex_buffer = Buffer::immutable(ctx, BufferType::VertexBuffer, vertices);
-                let index_buffer = Buffer::immutable(ctx, BufferType::IndexBuffer, indices);
+                let vertex_buffer = ctx.new_buffer(BufferType::VertexBuffer, BufferUsage::Immutable, BufferSource::slice(vertices));
+                let index_buffer = ctx.new_buffer(BufferType::IndexBuffer, BufferUsage::Immutable, BufferSource::slice(indices));
                 (vertex_buffer, index_buffer)
             }
         };
@@ -277,7 +281,7 @@ impl ParticleShape {
             vertex_buffers: vec![geometry_vertex_buffer, positions_vertex_buffer],
             index_buffer,
             images: vec![
-                texture.map_or_else(|| Texture::from_rgba8(ctx, 1, 1, &[255, 255, 255, 255]), |texture| texture.raw_miniquad_texture_handle())
+                texture.map_or_else(|| ctx.new_texture_from_rgba8(1, 1, &[255, 255, 255, 255]), |texture| texture.raw_miniquad_id())
             ],
         }
     }
@@ -410,7 +414,8 @@ struct CpuParticle {
 pub struct Emitter {
     pipeline: Pipeline,
     bindings: Bindings,
-    post_processing_pass: RenderPass,
+    post_processing_pass: miniquad::RenderPass,
+    post_processing_texture: TextureId,
     post_processing_pipeline: Pipeline,
     post_processing_bindings: Bindings,
 
@@ -436,9 +441,9 @@ impl Emitter {
         let InternalGlContext { quad_context: ctx, .. } = unsafe { get_internal_gl() };
 
         // empty, dynamic instance-data vertex buffer
-        let positions_vertex_buffer = Buffer::stream(ctx, BufferType::VertexBuffer, config.max_particles * std::mem::size_of::<GpuParticle>());
+        let positions_vertex_buffer = ctx.new_buffer(BufferType::VertexBuffer, BufferUsage::Stream, BufferSource::empty::<u8>(config.max_particles * std::mem::size_of::<GpuParticle>()));
 
-        let bindings = config.shape.build_bindings(ctx, positions_vertex_buffer, config.texture);
+        let bindings = config.shape.build_bindings(ctx, positions_vertex_buffer, config.texture.clone());
 
         let (vertex, fragment) = config
             .material
@@ -455,12 +460,11 @@ impl Emitter {
             let vertex = preprocess_shader(vertex, &config);
             let fragment = preprocess_shader(fragment, &config);
 
-            Shader::new(ctx, &vertex, &fragment, shader::meta()).unwrap()
+            ctx.new_shader(ShaderSource::Glsl { vertex: &vertex, fragment: &fragment }, shader::meta()).unwrap()
         };
 
         let blend_mode = config.blend_mode.blend_state();
-        let pipeline = Pipeline::with_params(
-            ctx,
+        let pipeline = ctx.new_pipeline(
             &[
                 BufferLayout::default(),
                 BufferLayout {
@@ -486,10 +490,9 @@ impl Emitter {
         );
 
         let post_processing_shader =
-            Shader::new(ctx, post_processing_shader::VERTEX, post_processing_shader::FRAGMENT, post_processing_shader::meta()).unwrap();
+            ctx.new_shader(ShaderSource::Glsl { vertex: post_processing_shader::VERTEX, fragment: post_processing_shader::FRAGMENT }, post_processing_shader::meta()).unwrap();
 
-        let post_processing_pipeline = Pipeline::with_params(
-            ctx,
+        let post_processing_pipeline = ctx.new_pipeline(
             &[BufferLayout::default(), BufferLayout::default()],
             &[
                 VertexAttribute::with_buffer("pos", VertexFormat::Float2, 0),
@@ -505,9 +508,8 @@ impl Emitter {
                 ..Default::default()
             },
         );
-        let post_processing_pass = {
-            let color_img = Texture::new_render_texture(
-                ctx,
+        let (post_processing_pass, post_processing_texture) = {
+            let color_img = ctx.new_render_texture(
                 TextureParams {
                     width: 320,
                     height: 200,
@@ -515,9 +517,9 @@ impl Emitter {
                     ..Default::default()
                 },
             );
-            color_img.set_filter(ctx, FilterMode::Nearest);
+            ctx.texture_set_filter(color_img, FilterMode::Nearest, miniquad::MipmapFilterMode::None);
 
-            RenderPass::new(ctx, color_img, None)
+            (ctx.new_render_pass(color_img, None), color_img)
         };
 
         let post_processing_bindings = {
@@ -530,17 +532,17 @@ impl Emitter {
                 -1.0,  1.0,    0.0, 1.0,
             ];
 
-            let vertex_buffer = Buffer::immutable(ctx, BufferType::VertexBuffer, vertices);
+            let vertex_buffer = ctx.new_buffer(BufferType::VertexBuffer, BufferUsage::Immutable, BufferSource::slice(vertices));
 
             #[rustfmt::skip]
             let indices: &[u16] = &[
                 0, 1, 2, 0, 2, 3
             ];
-            let index_buffer = Buffer::immutable(ctx, BufferType::IndexBuffer, indices);
+            let index_buffer = ctx.new_buffer(BufferType::IndexBuffer, BufferUsage::Immutable, BufferSource::slice(indices));
             Bindings {
                 vertex_buffers: vec![vertex_buffer],
                 index_buffer,
-                images: vec![post_processing_pass.texture(ctx)],
+                images: vec![post_processing_texture],
             }
         };
         let max_particles = config.max_particles;
@@ -549,6 +551,7 @@ impl Emitter {
             blend_mode: config.blend_mode,
             batched_size_curve: config.size_curve.as_ref().map(|curve| curve.batch()),
             post_processing_pass,
+            post_processing_texture,
             post_processing_pipeline,
             post_processing_bindings,
             config,
@@ -639,7 +642,7 @@ impl Emitter {
             self.bindings = self
                 .config
                 .shape
-                .build_bindings(ctx, self.bindings.vertex_buffers[1], self.config.texture);
+                .build_bindings(ctx, self.bindings.vertex_buffers[1], self.config.texture.clone());
             self.mesh_dirty = false;
         }
         if self.config.emitting {
@@ -755,7 +758,7 @@ impl Emitter {
             }
         }
 
-        self.bindings.vertex_buffers[1].update(ctx, &self.gpu_particles[..]);
+        ctx.buffer_update(self.bindings.vertex_buffers[1], BufferSource::slice(&self.gpu_particles[..]));
     }
 
     /// Immediately emit N particles, ignoring "emitting" and "amount" params of EmitterConfig
@@ -767,37 +770,31 @@ impl Emitter {
 
     fn perform_render_pass(&mut self, quad_gl: &QuadGl, ctx: &mut Context) {
         ctx.apply_bindings(&self.bindings);
-        ctx.apply_uniforms(&shader::Uniforms {
+        ctx.apply_uniforms(UniformsSource::table(&shader::Uniforms {
             mvp: quad_gl.get_projection_matrix(),
             emitter_position: vec3(self.position.x, self.position.y, 0.0),
             local_coords: if self.config.local_coords { 1.0 } else { 0.0 },
-        });
+        }));
 
-        ctx.draw(0, self.bindings.index_buffer.size() as i32 / std::mem::size_of::<u16>() as i32, self.gpu_particles.len() as i32);
+        let num_elements = ctx.buffer_size(self.bindings.index_buffer) as i32 / std::mem::size_of::<u16>() as i32;
+        ctx.draw(0, num_elements, self.gpu_particles.len() as i32);
     }
 
     pub fn setup_render_pass(&mut self, quad_gl: &QuadGl, ctx: &mut Context) {
-        if self.config.blend_mode != self.blend_mode {
-            self.pipeline.set_blend(ctx, Some(self.config.blend_mode.blend_state()));
-            self.blend_mode = self.config.blend_mode;
-        }
-
         if self.config.post_processing.is_none() {
             let pass = quad_gl.get_active_render_pass();
             if let Some(pass) = pass {
-                ctx.begin_pass(pass, PassAction::Nothing);
+                ctx.begin_pass(Some(pass), PassAction::Nothing);
             } else {
                 ctx.begin_default_pass(PassAction::Nothing);
             }
         } else {
-            ctx.begin_pass(self.post_processing_pass, PassAction::clear_color(0.0, 0.0, 0.0, 0.0));
+            ctx.begin_pass(Some(self.post_processing_pass), PassAction::clear_color(0.0, 0.0, 0.0, 0.0));
         };
 
         ctx.apply_pipeline(&self.pipeline);
         // This is made
-        let (x, y, w, h) = quad_gl
-            .get_viewport()
-            .unwrap_or_else(|| (0, 0, screen_width() as _, screen_height() as _));
+        let (x, y, w, h) = quad_gl.get_viewport();
         ctx.apply_viewport(x, y, w, h);
     }
 
@@ -807,15 +804,13 @@ impl Emitter {
         if self.config.post_processing.is_some() {
             let pass = quad_gl.get_active_render_pass();
             if let Some(pass) = pass {
-                ctx.begin_pass(pass, PassAction::Nothing);
+                ctx.begin_pass(Some(pass), PassAction::Nothing);
             } else {
                 ctx.begin_default_pass(PassAction::Nothing);
             }
 
             ctx.apply_pipeline(&self.post_processing_pipeline);
-            let (x, y, w, h) = quad_gl
-                .get_viewport()
-                .unwrap_or_else(|| (0, 0, screen_width() as _, screen_height() as _));
+            let (x, y, w, h) = quad_gl.get_viewport();
             ctx.apply_viewport(x, y, w, h);
 
             ctx.apply_bindings(&self.post_processing_bindings);

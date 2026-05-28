@@ -196,7 +196,7 @@ pub fn request_input_full(id: impl Into<String>, #[allow(unused_variables)] text
                 ];
             }
         } else {
-            INPUT_TEXT.lock().unwrap().1 = Some(unsafe { get_internal_gl() }.quad_context.clipboard_get().unwrap_or_default());
+            INPUT_TEXT.lock().unwrap().1 = Some(macroquad::miniquad::window::clipboard_get().unwrap_or_default());
             show_message(ttl!("pasted")).ok();
         }
     }
@@ -341,7 +341,7 @@ pub trait RenderTargetChooser {
 }
 impl RenderTargetChooser for Option<RenderTarget> {
     fn choose(&mut self) -> Option<RenderTarget> {
-        *self
+        self.clone()
     }
 }
 impl<F: FnMut() -> Option<RenderTarget>> RenderTargetChooser for F {

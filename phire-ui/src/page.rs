@@ -8,7 +8,6 @@ mod library;
 pub use library::LibraryPage;
 
 mod message;
-pub use message::MessagePage;
 
 mod offset;
 pub use offset::OffsetPage;
@@ -40,7 +39,11 @@ use phire::{
     ui::{FontArc, IntoShading, Shading, TextPainter, Ui},
 };
 use std::{
-    any::Any, borrow::Cow, ops::DerefMut, path::PathBuf, sync::{Arc, Mutex}
+    any::Any,
+    borrow::Cow,
+    ops::DerefMut,
+    path::PathBuf,
+    sync::{Arc, Mutex},
 };
 use tracing::warn;
 
@@ -195,7 +198,7 @@ impl Illustration {
     }
 
     pub fn shading(&self, r: Rect, t: f32, alpha: f32) -> impl Shading {
-        (*self.texture.0, r, ScaleType::CropCenter, semi_white(alpha * self.alpha(t))).into_shading()
+        (Texture2D::clone(&self.texture.0), r, ScaleType::CropCenter, semi_white(alpha * self.alpha(t))).into_shading()
     }
 }
 

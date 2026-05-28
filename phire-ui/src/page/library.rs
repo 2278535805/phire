@@ -462,11 +462,11 @@ impl Page for LibraryPage {
                     let mut r = r.feather(-0.01);
                     r.w = r.h;
                     if !empty {
-                        ui.fill_rect(r, (*self.icons.close, r, ScaleType::Fit, c));
+                        ui.fill_rect(r, (Texture2D::clone(&self.icons.close), r, ScaleType::Fit, c));
                         self.search_clr_btn.set(ui, r);
                         r.x += r.w;
                     }
-                    ui.fill_rect(r, (*self.icons.search, r, ScaleType::Fit, c));
+                    ui.fill_rect(r, (Texture2D::clone(&self.icons.search), r, ScaleType::Fit, c));
                     ui.text(&self.search_str)
                         .pos(r.right() + 0.01, r.center().y)
                         .anchor(0., 0.5)
@@ -481,7 +481,7 @@ impl Page for LibraryPage {
                         r.x += r.w;
                     }
                     let (cr, _) = self.order_btn.render_shadow(ui, r, t, c.a, |_| semi_black(0.4 * c.a));
-                    ui.fill_rect(cr, (*self.icons.order, cr, ScaleType::Fit, c));
+                    ui.fill_rect(cr, (Texture2D::clone(&self.icons.order), cr, ScaleType::Fit, c));
                     if self.need_show_order_menu {
                         self.need_show_order_menu = false;
                         self.order_menu.set_bottom(true);
@@ -491,7 +491,7 @@ impl Page for LibraryPage {
                     r.x -= r.w + 0.02;
                     let (cr, _) = self.filter_btn.render_shadow(ui, r, t, c.a, |_| semi_black(0.4 * c.a));
                     let cr = cr.feather(-0.005);
-                    ui.fill_rect(cr, (*self.icons.filter, cr, ScaleType::Fit, c));
+                    ui.fill_rect(cr, (Texture2D::clone(&self.icons.filter), cr, ScaleType::Fit, c));
                 });
             }
             ChartListType::Popular => {}

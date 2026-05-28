@@ -286,15 +286,15 @@ impl Scene for EndingScene {
             
 
         let mut cam = ui.camera();
-        let asp = -cam.zoom.y;
+        let asp = cam.zoom.y;
         let top = 1. / asp;
         let t = tm.now() as f32;
         let gl = unsafe { get_internal_gl() }.quad_gl;
         let res = &self.result;
-        cam.render_target = self.target;
+        cam.render_target = self.target.clone();
         set_camera(&cam);
         if self.config.render_bg {
-            draw_background(*self.background, self.config.render_bg_dim);
+            draw_background(Texture2D::clone(&self.background), self.config.render_bg_dim);
         }
 
         fn ran(t: f32, l: f32, r: f32) -> f32 {
@@ -306,7 +306,7 @@ impl Scene for EndingScene {
 
         let p_main = (1. - ran(t, MAIN_POS_START, MAIN_POS_END) + 0.15).powi(10);
         tran(gl, p_main);
-        let r = draw_illustration(*self.illustration, -0.372, -0.002, 1.052, 1.22, WHITE, true); // 曲绘
+        let r = draw_illustration(Texture2D::clone(&self.illustration), -0.372, -0.002, 1.052, 1.22, WHITE, true); // 曲绘
         let main = Rect::new(r.right() - 0.053, r.y, r.w * 0.782, r.h / 2.); // 右边的矩形
         let slope = PARALLELOGRAM_SLOPE; // 斜率
         let ratio = 0.2;
@@ -373,7 +373,7 @@ impl Scene for EndingScene {
             let ct = (main.right() + 0.015 - main.h * slope - s / 2., r.bottom() + 0.033 - s / 2.);
             let s = s + s * (1. - ps) * 0.3;
             draw_texture_ex( // 成绩等级图标
-                *self.icon,
+                &*self.icon,
                 ct.0 - s * 0.99 / 2.,
                 ct.1 - s * 1.05 / 2.,
                 Color::new(1., 1., 1., pa),
@@ -454,7 +454,7 @@ impl Scene for EndingScene {
         draw_parallelogram(r, None, c, true);
         draw_parallelogram(Rect::new(r.x + r.w * (1. - s), r.y, r.w * s, r.h), None, WHITE, false);
         let ct = r.center();
-        draw_texture_ex(*self.icon_retry, ct.x - hs * 0.9, ct.y - hs, WHITE, params.clone());
+        draw_texture_ex(&*self.icon_retry, ct.x - hs * 0.9, ct.y - hs, WHITE, params.clone());
         gl.pop_model_matrix();
         if p <= 0. {
             self.btn_retry.set(ui, r);
@@ -465,7 +465,7 @@ impl Scene for EndingScene {
         draw_parallelogram(r, None, c, true);
         draw_parallelogram(Rect::new(r.x, r.y, r.w * s, r.h), None, WHITE, false);
         let ct = r.center();
-        draw_texture_ex(*self.icon_proceed, ct.x - hs * 0.8 - r.w * s / 2., ct.y - hs, WHITE, params);
+        draw_texture_ex(&*self.icon_proceed, ct.x - hs * 0.8 - r.w * s / 2., ct.y - hs, WHITE, params);
         gl.pop_model_matrix();
         if p <= 0. {
             self.btn_proceed.set(ui, r);
@@ -506,7 +506,7 @@ impl Scene for EndingScene {
             Color::new(0., 0., 0., alpha),
             0.10
         );
-        let r = draw_illustration(*self.player, 1. - 0.21, main.center().y, 0.12 / (0.076 * 7.), 0.12 / (0.076 * 7.), color, true);
+        let r = draw_illustration(Texture2D::clone(&self.player), 1. - 0.21, main.center().y, 0.12 / (0.076 * 7.), 0.12 / (0.076 * 7.), color, true);
         let mut text = ui.text(&self.player_name).pos(r.x - 0.015, r.center().y - 0.002).anchor(1., 0.5).size(0.54).color(color);
         let text_rect = text.measure();
         draw_parallelogram(
@@ -520,7 +520,7 @@ impl Scene for EndingScene {
         let ct = (1. - 0.1 + 0.043, main.center().y - 0.034 + 0.02);
         let (w, h) = (0.09 * self.challenge_texture.width() / 78., 0.04 * self.challenge_texture.height() / 38.);
         let r = Rect::new(ct.0 - w / 2., ct.1 - h / 2., w, h);
-        ui.fill_rect(r, (*self.challenge_texture, r, ScaleType::Fit, color));
+        ui.fill_rect(r, (Texture2D::clone(&self.challenge_texture), r, ScaleType::Fit, color));
         let ct = r.center();
         let challenge_rank = if self.config.roman {GameScene::int_to_roman(self.challenge_rank)} else if self.config.chinese {GameScene::int_to_chinese(self.challenge_rank)} else {self.challenge_rank.to_string()};
         let mut text_size = 0.46;

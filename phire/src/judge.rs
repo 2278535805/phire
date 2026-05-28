@@ -7,7 +7,7 @@ use macroquad::prelude::{
     utils::{register_input_subscriber, repeat_all_miniquad_input},
     *,
 };
-use miniquad::{EventHandler, MouseButton};
+use macroquad::miniquad::{EventHandler, MouseButton};
 use once_cell::sync::Lazy;
 use rustc_hash::FxHashMap;
 use sasa::{PlaySfxParams, Sfx};
@@ -21,6 +21,14 @@ pub const LIMIT_BAD: f64 = 0.22;
 pub const UP_TOLERANCE: f64 = 0.05;
 pub const DIST_FACTOR: f64 = 0.2;
 const LATE_OFFSET: f64 = 0.13;
+
+#[derive(Clone)]
+struct TouchWithTime {
+    id: u64,
+    phase: TouchPhase,
+    position: Vec2,
+    time: f64,
+}
 
 pub fn play_sfx(sfx: &mut Sfx, config: &Config) {
     if config.volume_sfx <= 1e-2 {
@@ -50,7 +58,9 @@ fn get_uptime() -> f64 {
 
 #[cfg(target_os = "windows")]
 fn get_uptime() -> f64 {
-    miniquad::native::windows::get_uptime()
+    static START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+    let start = START.get_or_init(std::time::Instant::now);
+    start.elapsed().as_secs_f64()
 }
 
 #[derive(Debug, Clone)]
@@ -290,7 +300,7 @@ pub struct Judge {
 
 static SUBSCRIBER_ID: Lazy<usize> = Lazy::new(register_input_subscriber);
 thread_local! {
-    static TOUCHES: RefCell<(Vec<Touch>, i32, u32)> = RefCell::default();
+    static TOUCHES: RefCell<(Vec<TouchWithTime>, i32, u32)> = RefCell::default();
 }
 
 impl Judge {
@@ -362,7 +372,7 @@ impl Judge {
         )
     }
 
-    fn touch_transform(flip_x: bool, scale: f32, angle: f32, low_resolution_mode: bool) -> impl Fn(&mut Touch) {
+    fn touch_transform(flip_x: bool, scale: f32, angle: f32, low_resolution_mode: bool) -> impl Fn(&mut TouchWithTime) {
         let vp = get_viewport();
         move |touch| {
             let p = if low_resolution_mode {
@@ -392,7 +402,11 @@ impl Judge {
                 .cloned()
                 .map(|mut it| {
                     tr(&mut it);
-                    it
+                    Touch {
+                        id: it.id,
+                        phase: it.phase,
+                        position: it.position,
+                    }
                 })
                 .collect()
         })
@@ -415,13 +429,13 @@ impl Judge {
 
         let t = res.time;
         // TODO optimize
-        let mut touches: HashMap<u64, Touch> = {
-            let mut touches = touches();
+        let mut touches: HashMap<u64, TouchWithTime> = {
+            let mut touches: Vec<TouchWithTime> = touches().into_iter().map(|t| TouchWithTime { id: t.id, phase: t.phase, position: t.position, time: f64::NEG_INFINITY }).collect();
             let btn = MouseButton::Left;
             let id = button_to_id(btn);
             if is_mouse_button_pressed(btn) {
                 let p = mouse_position();
-                touches.push(Touch {
+                touches.push(TouchWithTime {
                     id,
                     phase: TouchPhase::Started,
                     position: vec2(p.0, p.1),
@@ -429,7 +443,7 @@ impl Judge {
                 });
             } else if is_mouse_button_down(btn) {
                 let p = mouse_position();
-                touches.push(Touch {
+                touches.push(TouchWithTime {
                     id,
                     phase: TouchPhase::Moved,
                     position: vec2(p.0, p.1),
@@ -437,7 +451,7 @@ impl Judge {
                 });
             } else if is_mouse_button_released(btn) {
                 let p = mouse_position();
-                touches.push(Touch {
+                touches.push(TouchWithTime {
                     id,
                     phase: TouchPhase::Ended,
                     position: vec2(p.0, p.1),
@@ -464,7 +478,7 @@ impl Judge {
             }
             let delta = (t / spd - self.last_time) as f64 / (events.len() + 1) as f64;
             let mut t = self.last_time as f64;
-            for Touch {
+            for TouchWithTime {
                 id,
                 phase,
                 position: p,
@@ -479,7 +493,7 @@ impl Judge {
                         self.trackers.insert(id, FlickTracker::new(res.dpi, t, p));
                         touches
                             .entry(id)
-                            .or_insert_with(|| Touch {
+                            .or_insert_with(|| TouchWithTime {
                                 id,
                                 phase: TouchPhase::Started,
                                 position: vec2(p.x, p.y),
@@ -498,7 +512,7 @@ impl Judge {
                 }
             }
         }
-        let touches: Vec<Touch> = touches
+        let touches: Vec<TouchWithTime> = touches
             .into_values()
             .map(|mut it| {
                 it.time = if it.time.is_infinite() {
@@ -532,7 +546,7 @@ impl Judge {
                     .collect(),
             );
         }
-        let time_of = |touch: &Touch| {
+        let time_of = |touch: &TouchWithTime| {
             if touch.time.is_infinite() {
                 t
             } else {
@@ -1060,11 +1074,11 @@ impl Judge {
     }
 }
 
-struct Handler(Vec<Touch>, i32, u32);
+struct Handler(Vec<TouchWithTime>, i32, u32);
 impl Handler {
     fn finalize(&mut self) {
         if is_mouse_button_down(MouseButton::Left) {
-            self.0.push(Touch {
+            self.0.push(TouchWithTime {
                 id: button_to_id(MouseButton::Left),
                 phase: TouchPhase::Moved,
                 position: mouse_position().into(),
@@ -1085,19 +1099,19 @@ fn button_to_id(button: MouseButton) -> u64 {
 }
 
 impl EventHandler for Handler {
-    fn update(&mut self, _: &mut miniquad::Context) {}
-    fn draw(&mut self, _: &mut miniquad::Context) {}
-    fn touch_event(&mut self, _: &mut miniquad::Context, phase: miniquad::TouchPhase, id: u64, x: f32, y: f32, time: f64) {
-        self.0.push(Touch {
+    fn update(&mut self) {}
+    fn draw(&mut self) {}
+    fn touch_event(&mut self, phase: miniquad::TouchPhase, id: u64, x: f32, y: f32) {
+        self.0.push(TouchWithTime {
             id,
             phase: phase.into(),
             position: vec2(x, y),
-            time,
+            time: f64::NEG_INFINITY,
         });
     }
 
-    fn mouse_button_down_event(&mut self, _ctx: &mut miniquad::Context, button: MouseButton, x: f32, y: f32) {
-        self.0.push(Touch {
+    fn mouse_button_down_event(&mut self, button: MouseButton, x: f32, y: f32) {
+        self.0.push(TouchWithTime {
             id: button_to_id(button),
             phase: TouchPhase::Started,
             position: vec2(x, y),
@@ -1105,8 +1119,8 @@ impl EventHandler for Handler {
         });
     }
 
-    fn mouse_button_up_event(&mut self, _ctx: &mut miniquad::Context, button: MouseButton, x: f32, y: f32) {
-        self.0.push(Touch {
+    fn mouse_button_up_event(&mut self, button: MouseButton, x: f32, y: f32) {
+        self.0.push(TouchWithTime {
             id: button_to_id(button),
             phase: TouchPhase::Ended,
             position: vec2(x, y),
@@ -1114,14 +1128,14 @@ impl EventHandler for Handler {
         });
     }
 
-    fn key_down_event(&mut self, _ctx: &mut miniquad::Context, _keycode: KeyCode, _keymods: miniquad::KeyMods, repeat: bool) {
+    fn key_down_event(&mut self, _keycode: KeyCode, _keymods: miniquad::KeyMods, repeat: bool) {
         if !repeat {
             self.1 += 1;
             self.2 += 1;
         }
     }
 
-    fn key_up_event(&mut self, _ctx: &mut miniquad::Context, _keycode: KeyCode, _keymods: miniquad::KeyMods) {
+    fn key_up_event(&mut self, _keycode: KeyCode, _keymods: miniquad::KeyMods) {
         self.1 -= 1;
     }
 }

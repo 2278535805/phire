@@ -122,7 +122,7 @@ impl<T: Shading> VertexBuilder<T> {
 
     pub fn commit(&self) {
         let gl = unsafe { get_internal_gl() }.quad_gl;
-        gl.texture(self.shading.texture());
+        gl.texture(self.shading.texture().as_ref());
         gl.draw_mode(DrawMode::Triangles);
         gl.geometry(&self.vertices, &self.indices);
     }
@@ -586,7 +586,7 @@ impl<'a> Ui<'a> {
 
     pub fn camera(&self) -> Camera2D {
         Camera2D {
-            zoom: vec2(1., -self.viewport.2 as f32 / self.viewport.3 as f32),
+            zoom: vec2(1., self.viewport.2 as f32 / self.viewport.3 as f32),
             viewport: Some(self.viewport),
             ..Default::default()
         }
@@ -668,7 +668,7 @@ impl<'a> Ui<'a> {
 
     fn emit_lyon(&mut self, texture: Option<Texture2D>) {
         let gl = unsafe { get_internal_gl() }.quad_gl;
-        gl.texture(texture);
+        gl.texture(texture.as_ref());
         gl.draw_mode(DrawMode::Triangles);
         gl.geometry(&std::mem::take(&mut self.vertex_buffers.vertices), &std::mem::take(&mut self.vertex_buffers.indices));
     }
@@ -759,22 +759,24 @@ impl<'a> Ui<'a> {
     }
 
     pub fn scissor(&mut self, rect: Option<Rect>) {
-        let igl = unsafe { get_internal_gl() };
-        let gl = igl.quad_gl;
+        let InternalGlContext { quad_context, quad_gl } = unsafe { get_internal_gl() };
         if let Some(rect) = rect {
             let rect = self.rect_to_global(rect);
             let vp = get_viewport();
-            let screen_height = gl
+            let screen_height = quad_gl
                 .get_active_render_pass()
-                .map(|it| it.texture(igl.quad_context).height as f32)
+                .map(|it| {
+                    let tex = quad_context.render_pass_texture(it);
+                    quad_context.texture_size(tex).1 as f32
+                })
                 .unwrap_or_else(screen_height);
             let pt = (
                 vp.0 as f32 + (rect.x + 1.) / 2. * vp.2 as f32,
                 (screen_height - (vp.1 + vp.3) as f32) + (rect.y * vp.2 as f32 / vp.3 as f32 + 1.) / 2. * vp.3 as f32,
             );
-            gl.scissor(Some((pt.0 as _, pt.1 as _, (rect.w * vp.2 as f32 / 2.) as _, (rect.h * vp.2 as f32 / 2.) as _)));
+            quad_gl.scissor(Some((pt.0 as _, pt.1 as _, (rect.w * vp.2 as f32 / 2.) as _, (rect.h * vp.2 as f32 / 2.) as _)));
         } else {
-            gl.scissor(None);
+            quad_gl.scissor(None);
         }
     }
 
@@ -1006,7 +1008,7 @@ impl<'a> Ui<'a> {
         let rect = Rect::new(cx - r, cy - r, r * 2., r * 2.);
         match avatar {
             Ok(Some(avatar)) => {
-                self.fill_circle(cx, cy, r, (*avatar, rect, ScaleType::CropCenter, c));
+                self.fill_circle(cx, cy, r, (Texture2D::clone(&avatar), rect, ScaleType::CropCenter, c));
             }
             Ok(None) => {
                 self.loading(
@@ -1023,7 +1025,7 @@ impl<'a> Ui<'a> {
             }
             Err(icon) => {
                 self.fill_circle(cx, cy, r, semi_black(c.a * 0.2));
-                self.fill_circle(cx, cy, r, (*icon, rect.feather(-0.025), ScaleType::CropCenter, c));
+                self.fill_circle(cx, cy, r, (Texture2D::clone(&icon), rect.feather(-0.025), ScaleType::CropCenter, c));
             }
         }
         self.stroke_circle(cx, cy, r, 0.004, c);

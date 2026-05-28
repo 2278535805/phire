@@ -7,7 +7,8 @@ use crate::{
     ui::Ui,
 };
 use macroquad::prelude::*;
-use miniquad::{RenderPass, Texture, TextureParams, TextureWrap};
+use macroquad::miniquad::{TextureParams, TextureWrap};
+use macroquad::miniquad::RenderPass as MiniquadRenderPass;
 use nalgebra::Rotation2;
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
@@ -96,7 +97,7 @@ pub enum JudgeLineKind {
     Texture(SafeTexture, String),
     TextureGif(Anim<f32>, GifFrames, String),
     Text(Anim<TextData>),
-    Paint(Anim<f32>, RefCell<(Option<RenderPass>, bool)>),
+    Paint(Anim<f32>, RefCell<(Option<MiniquadRenderPass>, bool)>),
 }
 
 #[derive(Clone)]
@@ -344,7 +345,7 @@ impl JudgeLine {
                             // let hf = vec2(texture.width() / res.aspect_ratio, texture.height() / res.aspect_ratio);
                             let hf = vec2(texture.width(), texture.height()); // Sync RPE
                             draw_texture_ex(
-                                **texture,
+                                texture,
                                 -hf.x * self.anchor[0],
                                 -hf.y * self.anchor[1],
                                 color,
@@ -367,7 +368,7 @@ impl JudgeLine {
                             }
                             let hf = vec2(frame.width(), frame.height());
                             draw_texture_ex(
-                                **frame,
+                                frame,
                                 -hf.x * self.anchor[0],
                                 -hf.y * self.anchor[1],
                                 color,
@@ -402,17 +403,21 @@ impl JudgeLine {
                             let vp = get_viewport();
                             let pass = *guard.0.get_or_insert_with(|| {
                                 let ctx = &mut gl.quad_context;
-                                let tex = Texture::new_render_texture(
-                                    ctx,
+                                let tex = ctx.new_render_texture(
                                     TextureParams {
                                         width: vp.2 as _,
                                         height: vp.3 as _,
                                         format: miniquad::TextureFormat::RGBA8,
-                                        filter: FilterMode::Linear,
+                                        kind: miniquad::TextureKind::Texture2D,
+                                        min_filter: FilterMode::Linear,
+                                        mag_filter: FilterMode::Linear,
+                                        mipmap_filter: miniquad::MipmapFilterMode::None,
+                                        allocate_mipmaps: false,
+                                        sample_count: 1,
                                         wrap: TextureWrap::Clamp,
                                     },
                                 );
-                                RenderPass::new(ctx, tex, None)
+                                ctx.new_render_pass(tex, None)
                             });
                             gl.flush();
                             let old_pass = gl.quad_gl.get_active_render_pass();
@@ -438,11 +443,12 @@ impl JudgeLine {
             if let JudgeLineKind::Paint(_, state) = &self.kind {
                 let guard = state.borrow_mut();
                 if guard.1 && res.config.render_line_extra {
-                    let ctx = unsafe { get_internal_gl() }.quad_context;
-                    let tex = guard.0.as_ref().unwrap().texture(ctx);
+                    let mut gl = unsafe { get_internal_gl() };
+                    let ctx = &mut gl.quad_context;
+                    let tex = ctx.render_pass_texture(*guard.0.as_ref().unwrap());
                     let top = 1. / res.aspect_ratio;
                     draw_texture_ex(
-                        Texture2D::from_miniquad_texture(tex),
+                        &Texture2D::from_miniquad_texture(tex),
                         -1.,
                         -top,
                         WHITE,

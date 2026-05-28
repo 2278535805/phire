@@ -702,7 +702,7 @@ impl GameScene {
             let w = 0.05;
             let no_retry = self.mode == GameMode::NoRetry;
             draw_texture_ex(
-                *res.icon_back,
+                &*res.icon_back,
                 -s * 3. - w,
                 -s + o,
                 c,
@@ -712,7 +712,7 @@ impl GameScene {
                 },
             );
             draw_texture_ex(
-                *res.icon_retry,
+                &*res.icon_retry,
                 -s,
                 -s + o,
                 if no_retry { semi_white(res.alpha * 0.6) } else { c },
@@ -722,7 +722,7 @@ impl GameScene {
                 },
             );
             draw_texture_ex(
-                *res.icon_resume,
+                &*res.icon_resume,
                 s + w,
                 -s + o,
                 c,
@@ -1407,20 +1407,20 @@ impl Scene for GameScene {
             .chart_target
             .as_ref()
             .map(|it| if msaa { it.input() } else { it.output() })
-            .or(res.camera.render_target);
+            .or(res.camera.render_target.clone());
 
         let h = 1. / res.aspect_ratio;
         set_camera(&Camera2D {
-            zoom: vec2(1., -asp2_window),
+            zoom: vec2(1., asp2_window),
             viewport: if res.chart_target.is_some() { None } else { viewport_window },
-            render_target: chart_onto,
+            render_target: chart_onto.clone(),
             ..Default::default()
         });
         if !res.config.preserve_framebuffer {
             clear_background(BLACK);
         }
         if res.config.render_bg {
-            draw_background(*res.background, res.config.render_bg_dim);
+            draw_background(Texture2D::clone(&res.background), res.config.render_bg_dim);
         }
 
         if res.config.render_bg_dim && res.config.chart_ratio >= 1. {
@@ -1436,7 +1436,7 @@ impl Scene for GameScene {
             draw_rectangle(x_range * 2. - 1., -h, (1. - x_range * 2.) * 2., h * 2., Color::new(0., 0., 0., res.alpha * res.info.background_dim));
         }
 
-        let chart_zoom = if res.config.chart_ratio < 1. { vec2(asp2_chart / asp2_window * ratio, -asp2_chart * ratio) } else { vec2(1. * ratio, -asp2_chart * ratio) };
+        let chart_zoom = if res.config.chart_ratio < 1. { vec2(asp2_chart / asp2_window * ratio, asp2_chart * ratio) } else { vec2(1. * ratio, asp2_chart * ratio) };
         let chart_viewport = if res.config.chart_ratio < 1. { viewport_window } else { viewport_chart };
 
         if res.config.render_bg_dim && res.config.chart_ratio < 1. {
@@ -1445,7 +1445,7 @@ impl Scene for GameScene {
                 viewport: chart_viewport,
                 ..Default::default()
             });
-            self.gl.quad_gl.render_pass(chart_onto.map(|it| it.render_pass));
+            self.gl.quad_gl.render_pass(chart_onto.as_ref().map(|it| it.render_pass.raw_miniquad_id()));
             draw_rectangle(-1., -h, 2., h * 2., Color::new(0., 0., 0., res.alpha * res.info.background_dim));
         }
 
@@ -1475,14 +1475,14 @@ impl Scene for GameScene {
             rotation: angle.to_degrees(),
             ..Default::default()
         });
-        self.gl.quad_gl.render_pass(chart_onto.map(|it| it.render_pass));
+        self.gl.quad_gl.render_pass(chart_onto.as_ref().map(|it| it.render_pass.raw_miniquad_id()));
         self.chart.render(ui, res);
 
         self.gl.quad_gl.render_pass(
             res.chart_target
                 .as_ref()
-                .map(|it| it.output().render_pass)
-                .or_else(|| res.camera.render_pass()),
+                .map(|it| it.output().render_pass.raw_miniquad_id())
+                .or_else(|| Some(res.camera.render_pass()?.raw_miniquad_id())),
         );
 
         self.bad_notes.retain(|dummy| dummy.render(res));
@@ -1494,7 +1494,7 @@ impl Scene for GameScene {
 
         if !res.no_effect {
             set_camera(&Camera2D {
-                zoom: vec2(1., asp2_chart),
+                zoom: vec2(1., -asp2_chart),
                 ..Default::default()
             });
             for effect in &self.chart.extra.effects {
@@ -1504,9 +1504,9 @@ impl Scene for GameScene {
         
         {
             set_camera(&Camera2D {
-                zoom: if res.config.chart_ratio < 1. { vec2(asp2_ui_window * ratio, -1. * ratio) } else { vec2(asp2_ui * ratio, -1. * ratio) },
+                zoom: if res.config.chart_ratio < 1. { vec2(asp2_ui_window * ratio, 1. * ratio) } else { vec2(asp2_ui * ratio, 1. * ratio) },
                 viewport: chart_viewport,
-                render_target: self.res.chart_target.as_ref().map(|it| it.output()).or(self.res.camera.render_target),
+                render_target: self.res.chart_target.as_ref().map(|it| it.output()).or(self.res.camera.render_target.clone()),
                 ..Default::default()
             });
             self.ui(ui, tm)?;
@@ -1514,7 +1514,7 @@ impl Scene for GameScene {
 
         if !self.res.no_effect && !self.effects.is_empty() {
             set_camera(&Camera2D {
-                zoom: vec2(1., asp2_window),
+                zoom: vec2(1., -asp2_window),
                 ..Default::default()
             });
             for effect in &self.effects {
@@ -1524,9 +1524,9 @@ impl Scene for GameScene {
 
         {
             set_camera(&Camera2D {
-                zoom: vec2(1., 1.),
+                zoom: vec2(1., -1.),
                 viewport: viewport_window,
-                render_target: self.res.chart_target.as_ref().map(|it| it.output()).or(self.res.camera.render_target),
+                render_target: self.res.chart_target.as_ref().map(|it| it.output()).or(self.res.camera.render_target.clone()),
                 ..Default::default()
             });
             if tm.paused() {
@@ -1538,7 +1538,7 @@ impl Scene for GameScene {
             set_camera(&Camera2D {
                 zoom: vec2(1., -asp2_window),
                 viewport: viewport_window,
-                render_target: self.res.chart_target.as_ref().map(|it| it.output()).or(self.res.camera.render_target),
+                render_target: self.res.chart_target.as_ref().map(|it| it.output()).or(self.res.camera.render_target.clone()),
                 ..Default::default()
             });
             if self.mode == GameMode::TweakOffset {
@@ -1553,9 +1553,9 @@ impl Scene for GameScene {
         
         {
             set_camera(&Camera2D {
-                zoom: vec2(1., -asp2_chart),
+                zoom: vec2(1., asp2_chart),
                 viewport: viewport_chart,
-                render_target: self.res.chart_target.as_ref().map(|it| it.output()).or(self.res.camera.render_target),
+                render_target: self.res.chart_target.as_ref().map(|it| it.output()).or(self.res.camera.render_target.clone()),
                 ..Default::default()
             });
             self.overlay_ui(ui, tm)?;
@@ -1567,13 +1567,13 @@ impl Scene for GameScene {
                 self.gl.flush();
                 self.gl.quad_gl.viewport(None);
                 set_camera(&Camera2D {
-                    zoom: vec2(1., asp2_window),
-                    render_target: self.res.camera.render_target,
+                    zoom: vec2(1., -asp2_window),
+                    render_target: self.res.camera.render_target.clone(),
                     viewport: Some(ui.viewport),
                     ..Default::default()
                 });
                 draw_texture_ex(
-                    target.output().texture,
+                    &target.output().texture,
                     -1.,
                     -ui.top,
                     WHITE,

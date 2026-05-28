@@ -385,7 +385,7 @@ impl ChartsView {
                 let p = if transit.back { p } else { 1. - p };
                 let r = Rect::tween(&fr, &ui.screen_rect(), p);
                 let path = r.rounded(0.02 * (1. - p));
-                ui.fill_path(&path, (*transit.chart.illu.texture.1, r.feather(0.01 * (1. - p))));
+                ui.fill_path(&path, (Texture2D::clone(&transit.chart.illu.texture.1), r.feather(0.01 * (1. - p))));
                 ui.fill_path(&path, semi_black(0.55));
             }
         }

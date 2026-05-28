@@ -1,6 +1,6 @@
 use chrono::Utc;
 use colored::Colorize;
-use miniquad::{debug, error, info, trace, warn};
+use macroquad::miniquad::{debug, error, info, trace, warn};
 use tracing::{field::Visit, Level, Subscriber};
 use tracing_subscriber::{prelude::*, EnvFilter, Layer};
 

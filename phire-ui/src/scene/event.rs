@@ -363,7 +363,7 @@ impl Scene for EventScene {
         let p = 1. - (self.scroll.y_scroller.offset / 0.4).clamp(0., 1.);
 
         let r = ui.back_rect();
-        ui.fill_rect(r, (*self.icons.back, r, ScaleType::Fit, semi_white(p)));
+        ui.fill_rect(r, (Texture2D::clone(&self.icons.back), r, ScaleType::Fit, semi_white(p)));
         self.btn_back.set(ui, r);
 
         ui.fill_rect(ui.screen_rect(), semi_black((self.scroll.y_scroller.offset / 0.3).min(1.) * 0.7));
@@ -425,7 +425,7 @@ impl Scene for EventScene {
                 let bc = ui.background();
                 let mut draw = |text, bc| {
                     let oh = r.h;
-                    self.btn_join.render_shadow(ui, r, t, 1.0, |_| semi_white(0.3)); 
+                    self.btn_join.render_shadow(ui, r, t, 1.0, |_| semi_white(0.3));
                     {
                         //ui.fill_path(&path, Color { a: p, ..bc });
                         ui.text(text)
@@ -441,24 +441,23 @@ impl Scene for EventScene {
                     if Utc::now() > self.event.time_end {
                         draw(tl!("btn-ended"), semi_black(0.4));
                     } else if Utc::now() < self.event.time_start {
-                        draw(tl!("btn-not-started"), Color::from_hex_argb(0xffe3f2fd));
+                        draw(tl!("btn-not-started"), Color::new(0xe3 as f32 / 255., 0xf2 as f32 / 255., 0xfd as f32 / 255., 0xff as f32 / 255.));
                     } else {
-                        self.btn_join
-                            .render_shadow(ui, r, t, 1.0, |_| semi_white(0.3));
+                        self.btn_join.render_shadow(ui, r, t, 1.0, |_| semi_white(0.3));
                         let mut text = ui.text(format!("#{}", status.rank.unwrap())).anchor(0., 0.5).no_baseline().size(0.7);
                         let w = text.measure().w;
                         let mut ir = Rect::new(ct.x, ct.y, 0., 0.).feather(r.h / 2. - 0.02);
                         let w = w + 0.01 + ir.w;
                         ir.x += (ir.w - w) / 2.;
                         text.pos(ir.right() + 0.01, ct.y).draw();
-                        ui.fill_rect(ir, (*self.icons.ldb, ir, ScaleType::Fit));
+                        ui.fill_rect(ir, (Texture2D::clone(&self.icons.ldb), ir, ScaleType::Fit));
                     }
                 } else {
                     draw(tl!("btn-join"), bc);
                 }
             } else {
                 self.btn_join.render_shadow(ui, r, t, 1.0, |_| semi_white(0.3));
-                    //ui.fill_path(&path, semi_black(0.4));
+                //ui.fill_path(&path, semi_black(0.4));
                 ui.loading(
                     ct.x,
                     ct.y,

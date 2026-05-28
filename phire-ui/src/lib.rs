@@ -28,13 +28,11 @@ use phire::{
     scene::{show_error, show_message},
     time::TimeManager,
     ui::{FontArc, TextPainter},
-    gyro::{GYRO, GyroData},
     Main,
 };
 use scene::MainScene;
-use std::{collections::VecDeque, sync::{mpsc, Mutex}, time::Duration};
-use nalgebra::{UnitQuaternion, Vector3};
-use tracing::{error, debug, info};
+use std::sync::{mpsc, Mutex};
+use tracing::{error, info};
 
 static ACTIVITY_LIFECYCLE: Mutex<Option<mpsc::Sender<bool>>> = Mutex::new(None);
 static ACTIVITY_FOUCUS: Mutex<Option<mpsc::Sender<bool>>> = Mutex::new(None);
@@ -180,10 +178,11 @@ async fn the_main() -> Result<()> {
         rx
     };
 
-    unsafe { get_internal_gl() }
-        .quad_context
-        .display_mut()
-        .set_pause_resume_listener(on_pause_resume);
+    // NOTE: set_pause_resume_listener is not available in stock miniquad 0.4
+    // unsafe { get_internal_gl() }
+    //     .quad_context
+    //     .display_mut()
+    //     .set_pause_resume_listener(on_pause_resume);
 
     if let Some(me) = &get_data().me {
         anti_addiction_action("startup", Some(format!("Phigros-{}", me.id)));

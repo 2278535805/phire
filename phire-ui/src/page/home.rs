@@ -1,6 +1,6 @@
 phire::tl_file!("home");
 
-use std::{sync::Arc};
+use std::sync::Arc;
 
 use super::{LibraryPage, NextPage, Page, ResPackPage, SFader, SettingsPage, SharedState};
 use crate::{
@@ -21,7 +21,7 @@ use phire::{
     info::ChartInfo,
     scene::{show_error, NextScene},
     task::Task,
-    ui::{button_hit_large, rounded_rect, DRectButton, Ui},
+    ui::{button_hit_large, DRectButton, Ui},
 };
 use serde::Deserialize;
 use tracing::warn;
@@ -274,7 +274,7 @@ impl Page for HomePage {
 
         s.render_fader(ui, |ui, c| {
             let r = Rect::new(offset.x * 0.4 - 0.9, offset.y * 0.4 - ui.top + 0.1, 1.5, 1.5);
-            ui.fill_rect(r, (*self.character, r, ScaleType::CropCenter, c));
+            ui.fill_rect(r, (Texture2D::clone(&self.character), r, ScaleType::CropCenter, c));
         });
 
         // play button
@@ -329,7 +329,7 @@ impl Page for HomePage {
 
         let r = s.render_fader(ui, |ui, c| {
             let r = Rect::new(offset.x * 0.6 + 0.70, offset.y * 0.6 - 0.30, 1.3, 0.2);
-            text_and_icon(ui, r, &mut self.btn_play, tl!("play"), *self.icons.play, c);
+            text_and_icon(ui, r, &mut self.btn_play, tl!("play"), Texture2D::clone(&self.icons.play), c);
             r
         });
 
@@ -341,7 +341,7 @@ impl Page for HomePage {
 
         let r = s.render_fader(ui, |ui, c| {
             let r = Rect::new(r.left(), r.bottom() + 0.02, 1.3, 0.2);
-            text_and_icon(ui, r, &mut self.btn_respack, tl!("respack"), *self.icons.respack, c);
+            text_and_icon(ui, r, &mut self.btn_respack, tl!("respack"), Texture2D::clone(&self.icons.respack), c);
             r
         });
 
@@ -359,7 +359,7 @@ impl Page for HomePage {
             // let (r, _) = self.btn_settings.render_shadow(ui, r, t, c.a, |_| semi_black(0.4 * c.a));
             // let r = r.feather(0.004);
             // ui.fill_rect(r, (*self.icons.settings, r, ScaleType::Fit, c));
-            text_and_icon(ui, r, &mut self.btn_settings, tl!("settings"), *self.icons.settings, c);
+            text_and_icon(ui, r, &mut self.btn_settings, tl!("settings"), Texture2D::clone(&self.icons.settings), c);
         });
 
         s.fader.roll_back();

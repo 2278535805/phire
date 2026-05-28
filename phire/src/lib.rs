@@ -25,7 +25,7 @@ pub mod inner;
 #[cfg(target_os = "ios")]
 pub mod objc;
 
-use miniquad::conf::Icon;
+use macroquad::miniquad::conf::Icon;
 use macroquad::window::Conf;
 pub use scene::Main;
 

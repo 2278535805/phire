@@ -149,18 +149,18 @@ impl Scene for LoadingScene {
 
     fn render(&mut self, tm: &mut TimeManager, ui: &mut Ui) -> Result<()> {
         let cam = ui.camera();
-        let asp = -cam.zoom.y;
+        let asp = cam.zoom.y;
         let top = 1. / asp;
         let now = tm.now();
         let intern = unsafe { get_internal_gl() };
         let gl = intern.quad_gl;
         set_camera(&Camera2D {
-            zoom: vec2(1., -asp),
-            render_target: self.target,
+            zoom: vec2(1., asp),
+            render_target: self.target.clone(),
             ..Default::default()
         });
         if self.config.render_bg {
-            draw_background(*self.background, self.config.render_bg_dim);
+            draw_background(Texture2D::clone(&self.background), self.config.render_bg_dim);
         }
         let dx = if now > self.finish_time {
             let p = ((now - self.finish_time) / TRANSITION_TIME).min(1.);
@@ -173,7 +173,7 @@ impl Scene for LoadingScene {
         }
         let vo = -top / 10.;
         let voi = -top / 8.5;
-        let r = draw_illustration(*self.illustration, 0.380, voi, 1.03, 1.0, WHITE, false);
+        let r = draw_illustration(Texture2D::clone(&self.illustration), 0.380, voi, 1.03, 1.0, WHITE, false);
         let h = r.h / 3.55;
         let main: Rect = Rect::new(-0.87, vo - h / 2. - top / 10., 0.768, h);
         draw_parallelogram(main, None, Color::new(0., 0., 0., 0.6), false);

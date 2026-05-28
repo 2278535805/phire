@@ -1,7 +1,7 @@
 use super::{MSRenderTarget, Matrix, Point, NOTE_WIDTH_RATIO_BASE};
 use crate::{
     config::Config,
-    core::{HitSound, tween::Tweenable},
+    core::tween::Tweenable,
     ext::{SafeTexture, create_audio_manger, nalgebra_to_glm},
     fs::FileSystem,
     health::Health,
@@ -10,7 +10,7 @@ use crate::{
 };
 use anyhow::{bail, Context, Result};
 use macroquad::prelude::*;
-use miniquad::{gl::{GLuint, GL_LINEAR}, Texture, TextureWrap};
+use macroquad::miniquad::{gl::{GLuint, GL_LINEAR}, TextureId, TextureWrap};
 use sasa::{AudioClip, AudioManager, Sfx};
 use serde::Deserialize;
 use std::{cell::RefCell, collections::{BTreeMap, HashMap, VecDeque}, ops::DerefMut, path::Path, sync::atomic::AtomicU32};
@@ -253,7 +253,7 @@ impl ResourcePack {
                     &pixels.bytes[(atlas.0 as usize * width as usize * 4)..(pixels.bytes.len() - atlas.1 as usize * width as usize * 4)],
                 );
                 let context = unsafe { get_internal_gl() }.quad_context;
-                res.raw_miniquad_texture_handle().set_wrap(context, TextureWrap::Repeat);
+                context.texture_set_wrap(res.raw_miniquad_id(), TextureWrap::Repeat, TextureWrap::Repeat);
                 style.hold_body = Some(res.into());
             }
             get_body(&mut note_style);
@@ -347,7 +347,7 @@ impl ParticleEmitter {
         let emitter_config = EmitterConfig {
             max_particles: config.max_particles,
             local_coords: false,
-            texture: Some(*res_pack.hit_fx),
+            texture: Some(Texture2D::clone(&res_pack.hit_fx)),
             lifetime: res_pack.info.hit_fx_duration,
             lifetime_randomness: 0.0,
             initial_rotation_randomness: 0.0,
@@ -434,7 +434,7 @@ impl NoteBuffer {
         let gl = gl.quad_gl;
         gl.draw_mode(DrawMode::Triangles);
         for ((_, tex_id), meshes) in &self.0 {
-            gl.texture(Some(Texture2D::from_miniquad_texture(unsafe { Texture::from_raw_id(*tex_id, miniquad::TextureFormat::RGBA8) })));
+            gl.texture(Some(&Texture2D::from_miniquad_texture(unsafe { TextureId::from_raw_id(macroquad::miniquad::RawId::OpenGl(*tex_id)) })));
             for mesh in meshes {
                 if !mesh.0.is_empty() {
                     gl.geometry(&mesh.0, &mesh.1);
@@ -745,7 +745,7 @@ impl Resource {
             self.camera.viewport = Some(viewport(aspect_ratio, vp));
         } else {
             self.aspect_ratio = aspect_ratio.min(vp.2 as f32 / vp.3 as f32);
-            self.camera.zoom.y = -self.aspect_ratio;
+            self.camera.zoom.y = self.aspect_ratio;
             self.camera.viewport = Some(viewport(self.aspect_ratio, vp));
         };
         true

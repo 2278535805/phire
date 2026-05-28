@@ -1,14 +1,13 @@
 use macroquad::{
-    texture::{RenderTarget, Texture2D},
+    texture::{render_target, render_target_ex, RenderTarget, RenderTargetParams},
     window::get_internal_gl,
 };
-use miniquad::{gl::GLuint, RenderPass, Texture, TextureFormat};
+use macroquad::miniquad::{self as miniquad, gl::GLuint};
 
 pub struct MSRenderTarget {
     dim: (u32, u32),
     fbo: GLuint,
-    rbo: GLuint,
-    dummy: RenderTarget,
+    input: RenderTarget,
     output: [Option<RenderTarget>; 2],
 }
 
@@ -23,101 +22,72 @@ pub fn copy_fbo(src: GLuint, dst: GLuint, dim: (u32, u32)) -> bool {
     }
 }
 
+fn get_fbo(target: &RenderTarget) -> GLuint {
+    let gl = unsafe { get_internal_gl() };
+    let rp = target.render_pass.raw_miniquad_id();
+    unsafe {
+        gl.quad_context.begin_pass(Some(rp), miniquad::PassAction::Nothing);
+        let mut fbo: GLuint = 0;
+        miniquad::gl::glGetIntegerv(miniquad::gl::GL_FRAMEBUFFER_BINDING, &mut fbo as *mut _ as *mut _);
+        gl.quad_context.end_render_pass();
+        fbo
+    }
+}
+
 pub fn internal_id(target: RenderTarget) -> GLuint {
-    target.render_pass.gl_internal_id(unsafe { get_internal_gl() }.quad_context)
+    get_fbo(&target)
 }
 
 impl MSRenderTarget {
     pub fn new(dim: (u32, u32), samples: u32) -> Self {
-        let mut fbo = 0;
-        let mut rbo = 0;
-        unsafe {
-            use miniquad::gl::*;
-            glGenRenderbuffers(1, &mut rbo as *mut _);
-            glBindRenderbuffer(GL_RENDERBUFFER, rbo);
-            glRenderbufferStorageMultisample(GL_RENDERBUFFER, samples as _, GL_RGB8, dim.0 as _, dim.1 as _);
-            glGenFramebuffers(1, &mut fbo as *mut _);
-            glBindFramebuffer(GL_FRAMEBUFFER, fbo);
-            glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, rbo);
-        }
-        let gl = unsafe { get_internal_gl() };
-        let texture = Texture::new_render_texture(
-            gl.quad_context,
-            miniquad::TextureParams {
-                width: dim.0,
-                height: dim.1,
-                format: TextureFormat::RGB8,
+        let input = render_target_ex(
+            dim.0,
+            dim.1,
+            RenderTargetParams {
+                sample_count: samples as i32,
                 ..Default::default()
             },
         );
-        let render_pass = RenderPass::new(gl.quad_context, texture, None);
-        let dummy_render_pass = RenderPass::from_raw(gl.quad_context, fbo, texture);
+        let output = render_target(dim.0, dim.1);
+        let fbo = get_fbo(&input);
         Self {
             dim,
             fbo,
-            rbo,
-            dummy: RenderTarget {
-                texture: Texture2D::from_miniquad_texture(texture),
-                render_pass: dummy_render_pass,
-            },
-            output: [
-                Some(RenderTarget {
-                    texture: Texture2D::from_miniquad_texture(texture),
-                    render_pass,
-                }),
-                None,
-            ],
+            input,
+            output: [Some(output), None],
         }
     }
 
     pub fn blit(&self) {
-        copy_fbo(self.fbo, internal_id(self.output[0].unwrap()), self.dim);
+        if let Some(target) = &self.output[0] {
+            let dst_fbo = get_fbo(target);
+            copy_fbo(self.fbo, dst_fbo, self.dim);
+        }
     }
 
     pub fn swap(&mut self) {
         self.output.swap(0, 1);
         if self.output[0].is_none() {
-            let gl = unsafe { get_internal_gl() };
-            let texture = miniquad::Texture::new_render_texture(
-                gl.quad_context,
-                miniquad::TextureParams {
-                    width: self.dim.0,
-                    height: self.dim.1,
-                    format: TextureFormat::RGB8,
-                    ..Default::default()
-                },
-            );
-            let render_pass = RenderPass::new(gl.quad_context, texture, None);
-            self.output[0] = Some(RenderTarget {
-                texture: Texture2D::from_miniquad_texture(texture),
-                render_pass,
-            });
-            copy_fbo(internal_id(self.output[1].unwrap()), internal_id(self.output[0].unwrap()), self.dim);
+            self.output[0] = Some(render_target(self.dim.0, self.dim.1));
+            // TODO: copy content from old output to new output
         }
     }
 
     pub fn input(&self) -> RenderTarget {
-        self.dummy
+        self.input.clone()
     }
 
     pub fn output(&self) -> RenderTarget {
-        self.output[0].unwrap()
+        self.output[0].clone().unwrap()
     }
 
     pub fn old(&self) -> RenderTarget {
-        self.output[1].unwrap()
+        self.output[1].clone().unwrap()
     }
 }
 
 impl Drop for MSRenderTarget {
     fn drop(&mut self) {
-        unsafe {
-            use miniquad::gl::*;
-            glDeleteRenderbuffers(1, &self.rbo as *const _);
-            glDeleteFramebuffers(1, &self.fbo as *const _);
-        }
-        for target in self.output.iter().flatten() {
-            target.delete();
-        }
+        // Render pass and texture cleanup is handled by macroquad's RenderPass Drop impl
     }
 }

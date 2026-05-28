@@ -115,7 +115,7 @@ fn draw_tex_pts(res: &Resource, texture: Texture2D, order: i8, p: [Point; 4], co
     ];
     res.note_buffer
         .borrow_mut()
-        .push((order, texture.raw_miniquad_texture_handle().gl_internal_id()), vertices);
+        .push((order, { let gl = unsafe { get_internal_gl() }; match unsafe { gl.quad_context.texture_raw_id(texture.raw_miniquad_id()) } { miniquad::RawId::OpenGl(id) => id, _ => 0 } }), vertices);
 }
 
 fn draw_center(res: &Resource, tex: Texture2D, order: i8, scale: f32, color: Color) {
@@ -331,7 +331,7 @@ impl Note {
         match self.kind {
             NoteKind::Click => {
                 if self.fake && res.time >= self.time { return };
-                draw(res, *style.click);
+                draw(res, Texture2D::clone(&style.click));
             }
             NoteKind::Hold { end_time, end_height, end_speed } => {
                 if self.fake && res.time >= end_time { return };
@@ -384,7 +384,7 @@ impl Note {
                     // body
                     draw_tex(
                         res,
-                        **(if res.res_pack.info.hold_repeat {
+                        Texture2D::clone(if res.res_pack.info.hold_repeat {
                             style.hold_body.as_ref().unwrap()
                         } else {
                             tex
@@ -417,7 +417,7 @@ impl Note {
                         let head_y = if flip_y { bottom as f32 + hf.y * 2. } else { bottom as f32 };
                         draw_tex(
                             res,
-                            **tex,
+                            Texture2D::clone(tex),
                             order,
                             -scale,
                             head_y - if res.res_pack.info.hold_compact { hf.y } else { hf.y * 2. },
@@ -440,7 +440,7 @@ impl Note {
                     let tail_y = if flip_y { top as f32 - hf.y * 2. } else { top as f32 };
                     draw_tex(
                         res,
-                        **tex,
+                        Texture2D::clone(tex),
                         order,
                         -scale,
                         tail_y - if res.res_pack.info.hold_compact { hf.y } else { 0. },
@@ -457,11 +457,11 @@ impl Note {
             }
             NoteKind::Flick => {
                 if self.fake && res.time >= self.time { return };
-                draw(res, *style.flick);
+                draw(res, Texture2D::clone(&style.flick));
             }
             NoteKind::Drag => {
                 if self.fake && res.time >= self.time { return };
-                draw(res, *style.drag);
+                draw(res, Texture2D::clone(&style.drag));
             }
         }
         if res.config.chart_debug_note > 0. {
@@ -542,9 +542,9 @@ impl BadNote {
             draw_center(
                 res,
                 match &self.kind {
-                    NoteKind::Click => *style.click,
-                    NoteKind::Drag => *style.drag,
-                    NoteKind::Flick => *style.flick,
+                    NoteKind::Click => Texture2D::clone(&style.click),
+                    NoteKind::Drag => Texture2D::clone(&style.drag),
+                    NoteKind::Flick => Texture2D::clone(&style.flick),
                     _ => unreachable!(),
                 },
                 self.kind.order(),
