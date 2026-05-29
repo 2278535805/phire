@@ -270,7 +270,7 @@ fn parse_events<T: Tweenable, V: Clone + Into<T>>(
         kfs.push(Keyframe {
             time: r.time(&e.start_time),
             value: e.start.clone().into(),
-            tween: e.tween(&bezier_map),
+            tween: e.tween(bezier_map),
         });
         kfs.push(Keyframe::new(r.time(&e.end_time), e.end.clone().into(), 0));
     }
@@ -295,7 +295,7 @@ fn parse_text_events(
         kfs.push(Keyframe {
             time: r.time(&e.start_time),
             value: TextData { text: e.start.clone(), font_id },
-            tween: e.tween(&bezier_map),
+            tween: e.tween(bezier_map),
         });
         kfs.push(Keyframe::new(r.time(&e.end_time), TextData { text: e.end.clone(), font_id }, 0));
     }
@@ -425,7 +425,7 @@ fn parse_gif_events<V: Clone + Into<f32>>(r: &mut BpmList, rpe: &[RPEEvent<V>], 
         kfs.push(Keyframe {
             time: r.time(&e.start_time),
             value: e.start.clone().into(),
-            tween: e.tween(&bezier_map),
+            tween: e.tween(bezier_map),
         });
         kfs.push(Keyframe::new(r.time(&e.end_time), e.end.clone().into(), 2));
         next_rep_time = (r.time(&e.end_time) as f32 * 1000. + gif.total_time() as f32 * (1. - e.end.clone().into())).round() as u128;
@@ -548,7 +548,7 @@ fn parse_ctrl_events(rpe: &[RPECtrlEvent], key: &str) -> AnimFloat {
     }
     AnimFloat::new(
         rpe.iter()
-            .zip(vals.into_iter())
+            .zip(vals)
             .map(|(it, val)| Keyframe::new(it.x, val, RPE_TWEEN_MAP.get(it.easing.max(1) as usize).copied().unwrap_or(RPE_TWEEN_MAP[0])))
             .collect(),
     )
@@ -708,25 +708,7 @@ async fn parse_judge_line(
                 debug!("gif decoded");
                 let events = parse_gif_events(r, events, bezier_map, &frames).with_context(|| ptl!("gif-events-parse-failed"))?;
                 JudgeLineKind::TextureGif(events, frames, rpe.texture.clone())
-            } else {
-                if let Some(texture) = line_texture_map.get(&rpe.texture) {
-                    JudgeLineKind::Texture(texture.clone(), rpe.texture.clone())
-                } else {
-                    let texture = SafeTexture::from(image::load_from_memory(
-                        &fs.load_file(&rpe.texture)
-                            .await
-                            .with_context(|| ptl!("illustration-load-failed", "path" => rpe.texture.clone()))?,
-                    )?)
-                    .with_mipmap();
-                    line_texture_map.insert(rpe.texture.clone(), texture.clone());
-                    JudgeLineKind::Texture(
-                        texture,
-                        rpe.texture.clone(),
-                    )
-                }
-            }
-        } else {
-            if let Some(texture) = line_texture_map.get(&rpe.texture) {
+            } else if let Some(texture) = line_texture_map.get(&rpe.texture) {
                 JudgeLineKind::Texture(texture.clone(), rpe.texture.clone())
             } else {
                 let texture = SafeTexture::from(image::load_from_memory(
@@ -741,7 +723,21 @@ async fn parse_judge_line(
                     rpe.texture.clone(),
                 )
             }
-    },
+        } else if let Some(texture) = line_texture_map.get(&rpe.texture) {
+            JudgeLineKind::Texture(texture.clone(), rpe.texture.clone())
+        } else {
+            let texture = SafeTexture::from(image::load_from_memory(
+                &fs.load_file(&rpe.texture)
+                    .await
+                    .with_context(|| ptl!("illustration-load-failed", "path" => rpe.texture.clone()))?,
+            )?)
+            .with_mipmap();
+            line_texture_map.insert(rpe.texture.clone(), texture.clone());
+            JudgeLineKind::Texture(
+                texture,
+                rpe.texture.clone(),
+            )
+        },
         parent: {
             let parent = rpe.parent.unwrap_or(-1);
             if parent == -1 {

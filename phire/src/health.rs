@@ -112,11 +112,11 @@ impl Default for HealthConfig {
 
 impl HealthConfig {
     pub fn to_json(&self) -> Result<String> {
-        serde_json::to_string_pretty(self).map_err(|e| anyhow::Error::from(e))
+        serde_json::to_string_pretty(self).map_err(anyhow::Error::from)
     }
 
     pub fn from_json(json: &str) -> Result<Self> {
-        serde_json::from_str(json).map_err(|e| anyhow::Error::from(e))
+        serde_json::from_str(json).map_err(anyhow::Error::from)
     }
 }
 

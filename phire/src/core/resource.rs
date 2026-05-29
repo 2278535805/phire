@@ -419,7 +419,7 @@ pub type SfxMap = HashMap<String, Sfx>;
 impl NoteBuffer {
     pub fn push(&mut self, key: (i8, GLuint), vertices: [Vertex; 4]) {
         let meshes = self.0.entry(key).or_default();
-        if meshes.last().map_or(true, |it| it.0.len() + 4 > MAX_SIZE * 4) {
+        if meshes.last().is_none_or(|it| it.0.len() + 4 > MAX_SIZE * 4) {
             meshes.push((Vec::with_capacity(MAX_SIZE * 4), Vec::with_capacity(MAX_SIZE * 6)));
         }
         let last = meshes.last_mut().unwrap();
@@ -446,7 +446,7 @@ impl NoteBuffer {
             }
         }
         // 清空数据但保留缓冲区容量
-        for (_, meshes) in &mut self.0 {
+        for meshes in self.0.values_mut() {
             for mesh in meshes.iter_mut() {
                 mesh.0.clear();
                 mesh.1.clear();

@@ -91,9 +91,7 @@ impl SafeTexture {
     }
 
     pub fn with_mipmap(self) -> Self {
-        let id = match unsafe { get_internal_gl().quad_context.texture_raw_id(self.0 .0.raw_miniquad_id()) } {
-            macroquad::miniquad::RawId::OpenGl(id) => id,
-        };
+        let macroquad::miniquad::RawId::OpenGl(id) = unsafe { get_internal_gl().quad_context.texture_raw_id(self.0 .0.raw_miniquad_id()) };
         unsafe {
             use macroquad::miniquad::gl::*;
             glBindTexture(GL_TEXTURE_2D, id);
@@ -104,9 +102,7 @@ impl SafeTexture {
     }
 
     pub fn with_filter(self, filter: GLenum) -> Self{
-        let id = match unsafe { get_internal_gl().quad_context.texture_raw_id(self.0 .0.raw_miniquad_id()) } {
-            macroquad::miniquad::RawId::OpenGl(id) => id,
-        };
+        let macroquad::miniquad::RawId::OpenGl(id) = unsafe { get_internal_gl().quad_context.texture_raw_id(self.0 .0.raw_miniquad_id()) };
         unsafe {
             use macroquad::miniquad::gl::*;
             glBindTexture(GL_TEXTURE_2D, id);
@@ -237,7 +233,7 @@ pub fn source_of_image(tex: &Texture2D, rect: Rect, scale_type: ScaleType) -> Op
 }
 
 pub fn draw_image(tex: &Texture2D, rect: Rect, scale_type: ScaleType) {
-    let source = source_of_image(&tex, rect, scale_type);
+    let source = source_of_image(tex, rect, scale_type);
     let (w, h) = (tex.width(), tex.height());
     draw_texture_ex(
         tex,
@@ -636,7 +632,7 @@ pub fn validate_combo(value: &String) -> bool {
     }
 
     let filtered_value = RE_FILTER.replace_all(value, "").trim().to_string();
-    return RE_VALIDATE.is_match(&filtered_value);
+    RE_VALIDATE.is_match(&filtered_value)
 }
 
 pub fn get_latency(audio: &AudioManager, frame_times: &VecDeque<f64>) -> f64 {

@@ -185,7 +185,7 @@ impl Scene for EndingScene {
 
     fn update(&mut self, tm: &mut TimeManager) -> Result<()> {
         self.audio.recover_if_needed()?;
-        if !self.bgm_already_played && tm.now() >= EndingScene::BPM_WAIT_TIME - self.config.offset as f64 && self.target.is_none() && self.bgm.paused() {
+        if !self.bgm_already_played && tm.now() >= EndingScene::BPM_WAIT_TIME - self.config.offset && self.target.is_none() && self.bgm.paused() {
             self.bgm.play()?;
             self.bgm_already_played = true;
         }
@@ -331,14 +331,14 @@ impl Scene for EndingScene {
         draw_parallelogram(main, None, c2, true);
         {
             let spd = if (self.speed - 1.).abs() <= 1e-4 {
-                format!("")//String::new()
+                String::new()//String::new()
             } else {
                 format!("{:.2}x", self.speed)
             };
             let full_screen_judge = if self.config.full_scrrn_judge() {
-                format!("FULL SCREEN JUDGE")
+                "FULL SCREEN JUDGE".to_string()
             } else {
-                format!("")
+                String::new()
             };
             let text = if self.autoplay {
                 format!("{text_autoplay} {spd}")
@@ -350,7 +350,7 @@ impl Scene for EndingScene {
                     if state.best {
                         format!("{text_new_best} +{:07}", state.improvement)
                     } else {
-                        format!(" ")//String::new()
+                        " ".to_string()//String::new()
                     }
                 )
             } else {
@@ -373,7 +373,7 @@ impl Scene for EndingScene {
             let ct = (main.right() + 0.015 - main.h * slope - s / 2., r.bottom() + 0.033 - s / 2.);
             let s = s + s * (1. - ps) * 0.3;
             draw_texture_ex( // 成绩等级图标
-                &*self.icon,
+                &self.icon,
                 ct.0 - s * 0.99 / 2.,
                 ct.1 - s * 1.05 / 2.,
                 Color::new(1., 1., 1., pa),
@@ -454,7 +454,7 @@ impl Scene for EndingScene {
         draw_parallelogram(r, None, c, true);
         draw_parallelogram(Rect::new(r.x + r.w * (1. - s), r.y, r.w * s, r.h), None, WHITE, false);
         let ct = r.center();
-        draw_texture_ex(&*self.icon_retry, ct.x - hs * 0.9, ct.y - hs, WHITE, params.clone());
+        draw_texture_ex(&self.icon_retry, ct.x - hs * 0.9, ct.y - hs, WHITE, params.clone());
         gl.pop_model_matrix();
         if p <= 0. {
             self.btn_retry.set(ui, r);
@@ -465,7 +465,7 @@ impl Scene for EndingScene {
         draw_parallelogram(r, None, c, true);
         draw_parallelogram(Rect::new(r.x, r.y, r.w * s, r.h), None, WHITE, false);
         let ct = r.center();
-        draw_texture_ex(&*self.icon_proceed, ct.x - hs * 0.8 - r.w * s / 2., ct.y - hs, WHITE, params);
+        draw_texture_ex(&self.icon_proceed, ct.x - hs * 0.8 - r.w * s / 2., ct.y - hs, WHITE, params);
         gl.pop_model_matrix();
         if p <= 0. {
             self.btn_proceed.set(ui, r);
@@ -488,9 +488,9 @@ impl Scene for EndingScene {
             }*/
             &if let Some(rks) = &self.player_rks {
                 if self.config.roman {
-                    GameScene::int_to_roman(rks.clone() as u32)
+                    GameScene::int_to_roman(*rks as u32)
                 } else if self.config.chinese {
-                    GameScene::float_to_chinese(rks.clone())
+                    GameScene::float_to_chinese(*rks)
                 } 
                 else {
                     format!("{rks:.2}")

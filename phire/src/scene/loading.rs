@@ -93,7 +93,7 @@ impl LoadingScene {
             .map(|(ill, back)| (ill.into(), back.into()))
             .unwrap_or_else(|| (BLACK_TEXTURE.clone(), BLACK_TEXTURE.clone()));
         if info.tip.is_none() {
-            let tips_file = load_file(format!("tips.txt").as_str()).await?;
+            let tips_file = load_file("tips.txt".to_string().as_str()).await?;
             let tips = String::from_utf8_lossy(&tips_file)
                 .lines()
                 .map(|line| line.to_string())
@@ -190,7 +190,7 @@ impl Scene for LoadingScene {
         ct.y += sub.h * 0.05;
         draw_parallelogram(sub, None, WHITE, true);
         //draw_text_aligned(ui, &(self.info.difficulty as u32).to_string(), ct.x, ct.y + sub.h * 0.05, (0.5, 1.), 0.88, BLACK);
-        if self.config.difficulty.len() > 0 {
+        if !self.config.difficulty.is_empty() {
             draw_text_aligned_opt(ui, &self.config.difficulty, ct.x, ct.y + sub.h * 0.05, (0.5, 1.), 0.90, BLACK, main.w * 0.18, main.h * 0.6);
         } else {
             let first_str = Regex::new(r"[0-9?]+").unwrap();
@@ -225,9 +225,9 @@ impl Scene for LoadingScene {
         let t = draw_text_aligned(ui, text_illustration, t.x - w, t.y + t.h + h, (0., 0.), 0.253, WHITE);
         draw_text_aligned_opt_width(ui, &self.info.illustrator, t.x - 0.002, t.y + top / 22., (0., 0.), 0.415, WHITE, 0.58);
         let text_tip = self.info.tip.as_ref().unwrap();
-        draw_text_aligned_opt_width(ui, &text_tip, -0.895, top * 0.88, (0., 1.), 0.47, WHITE, 1.55);
+        draw_text_aligned_opt_width(ui, text_tip, -0.895, top * 0.88, (0., 1.), 0.47, WHITE, 1.55);
         let text_loading = if self.config.chinese {"加载中..."} else {"Loading..."};
-        let t = draw_text_aligned(ui, &text_loading, 0.865, top * 0.865, (1., 1.), 0.41, WHITE);
+        let t = draw_text_aligned(ui, text_loading, 0.865, top * 0.865, (1., 1.), 0.41, WHITE);
         let we = 0.19;
         let he = 0.35;
         let r = Rect::new(t.x - t.w * we, t.y - t.h * he, t.w * (1. + we * 2.2), t.h * (1. + he * 2.2));

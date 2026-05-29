@@ -464,8 +464,8 @@ impl Judge {
             fn to_local(Vec2 { x, y }: Vec2) -> Point {
                 Point::new(x / screen_width() * 2. - 1., y / screen_height() * 2. - 1.)
             }
-            let delta = (t / spd - self.last_time) as f64 / (events.len() + 1) as f64;
-            let mut t = self.last_time as f64;
+            let delta = ((t / spd - self.last_time)) / (events.len() + 1) as f64;
+            let mut t = self.last_time;
             for Touch {
                 id,
                 phase,
@@ -506,7 +506,7 @@ impl Judge {
                 it.time = if it.time.is_infinite() {
                     f64::NEG_INFINITY
                 } else {
-                    t as f64 - (uptime - it.time) * spd as f64
+                    t - (uptime - it.time) * spd
                 };
                 it
             })
@@ -546,7 +546,7 @@ impl Judge {
         for (id, touch) in touches.iter().enumerate() {
             let click = touch.phase == TouchPhase::Started;
             let flick =
-                matches!(touch.phase, TouchPhase::Moved | TouchPhase::Stationary) && self.trackers.get_mut(&touch.id).map_or(false, |it| it.flicked);
+                matches!(touch.phase, TouchPhase::Moved | TouchPhase::Stationary) && self.trackers.get_mut(&touch.id).is_some_and(|it| it.flicked);
             if !(click || flick) {
                 continue;
             }
@@ -609,8 +609,7 @@ impl Judge {
                     x.set_time(t);
                     let judge_time = t - note.time;
                     matches!(note.kind, NoteKind::Drag | NoteKind::Flick)
-                        && judge_time >= -LIMIT_GOOD
-                        && judge_time <= LIMIT_BAD
+                        && (-LIMIT_GOOD..=LIMIT_BAD).contains(&judge_time)
                         && (x.now() - posx).abs() as f64 <= (x_diff_max - NOTE_WIDTH_RATIO_BASE) + NOTE_WIDTH_RATIO_BASE * note.judge_scale // note_dist <= x_diff_max
                         && !note.protected
                         && !note.fake
@@ -734,7 +733,7 @@ impl Judge {
             line.object.set_time(t);
             for id in &idx[*st..] {
                 let note = &mut line.notes[*id as usize];
-                let x_diff_max = (x_diff_max - NOTE_WIDTH_RATIO_BASE) + NOTE_WIDTH_RATIO_BASE * note.judge_scale as f64;
+                let x_diff_max = (x_diff_max - NOTE_WIDTH_RATIO_BASE) + NOTE_WIDTH_RATIO_BASE * note.judge_scale;
                 if let NoteKind::Hold { end_time, .. } = &note.kind {
                     if let JudgeStatus::Hold(.., ref mut pre_judge, ref mut up_time) = note.judge {
                         if (*end_time - t) / spd <= LIMIT_BAD {
@@ -744,7 +743,7 @@ impl Judge {
                         let x = &mut note.object.translation.0;
                         x.set_time(t);
                         let x = x.now();
-                        if self.key_down_count == 0 && !pos.iter().any(|it| it.map_or(false, |it| (it.x - x).abs() <= x_diff_max as f32)) {
+                        if self.key_down_count == 0 && !pos.iter().any(|it| it.is_some_and(|it| (it.x - x).abs() <= x_diff_max as f32)) {
                             if t > *up_time + UP_TOLERANCE {
                                 note.judge = JudgeStatus::Judged;
                                 judgements.push((Judgement::Miss, line_id, *id, None));
@@ -787,7 +786,7 @@ impl Judge {
                 let x = x.now();
                 if self.key_down_count != 0
                     || pos.iter().any(|it| {
-                        it.map_or(false, |it| {
+                        it.is_some_and(|it| {
                             let dx = (it.x - x).abs() as f64;
                             dx <= x_diff_max && dt <= (LIMIT_BAD - LIMIT_PERFECT * (dx - 0.9).max(0.))
                         })
@@ -920,7 +919,7 @@ impl Judge {
         for (line, (idx, st)) in chart.lines.iter().zip(self.notes.iter_mut()) {
             while idx
                 .get(*st)
-                .map_or(false, |id| matches!(line.notes[*id as usize].judge, JudgeStatus::Judged))
+                .is_some_and(|id| matches!(line.notes[*id as usize].judge, JudgeStatus::Judged))
             {
                 *st += 1;
             }
@@ -980,7 +979,7 @@ impl Judge {
             }
             while idx
                 .get(*st)
-                .map_or(false, |id| matches!(line.notes[*id as usize].judge, JudgeStatus::Judged))
+                .is_some_and(|id| matches!(line.notes[*id as usize].judge, JudgeStatus::Judged))
             {
                 *st += 1;
             }

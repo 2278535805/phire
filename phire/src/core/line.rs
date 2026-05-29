@@ -76,19 +76,12 @@ impl GifFrames {
 }
 
 #[derive(Clone)]
+#[derive(Default)]
 pub struct TextData {
     pub text: String,
     pub font_id: Option<usize>,
 }
 
-impl Default for TextData {
-    fn default() -> Self {
-        Self {
-            text: String::new(),
-            font_id: None,
-        }
-    }
-}
 
 #[derive(Default)]
 pub enum JudgeLineKind {
@@ -137,12 +130,12 @@ impl JudgeLineCache {
         self.above_indices.clear();
         self.below_indices.clear();
         let mut index = 0;
-        while notes.get(index).map_or(false, |it| it.above) {
+        while notes.get(index).is_some_and(|it| it.above) {
             self.above_indices.push(index);
             let speed = notes[index].speed;
             loop {
                 index += 1;
-                if !notes.get(index).map_or(false, |it| it.above && it.speed == speed) {
+                if !notes.get(index).is_some_and(|it| it.above && it.speed == speed) {
                     break;
                 }
             }
@@ -152,7 +145,7 @@ impl JudgeLineCache {
             let speed = notes[index].speed;
             loop {
                 index += 1;
-                if !notes.get(index).map_or(false, |it| it.speed == speed) {
+                if !notes.get(index).is_some_and(|it| it.speed == speed) {
                     break;
                 }
             }
@@ -246,7 +239,7 @@ impl JudgeLine {
                 if self
                     .notes
                     .get(index + 1)
-                    .map_or(false, |it| it.above && it.speed == self.notes[index].speed)
+                    .is_some_and(|it| it.above && it.speed == self.notes[index].speed)
                 {
                     index += 1;
                 } else {
@@ -268,7 +261,7 @@ impl JudgeLine {
                 if self
                     .notes
                     .get(index + 1)
-                    .map_or(false, |it| it.speed == self.notes[index].speed)
+                    .is_some_and(|it| it.speed == self.notes[index].speed)
                 {
                     index += 1;
                 } else {
@@ -641,7 +634,7 @@ impl JudgeLine {
                             },
                             JudgeLineKind::Paint(_, _) => {
                                 if !res.config.render_line_extra { return };
-                                format!(" paint")
+                                " paint".to_string()
                             },
                         };
 

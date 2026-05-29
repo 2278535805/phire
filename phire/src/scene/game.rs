@@ -274,10 +274,8 @@ impl GameScene {
                     }
                     result.insert_str(0, chinese_units[unit_index]);
                     result.insert_str(0, chinese_digits[digit]);
-                } else {
-                    if !result.starts_with("零") {
-                        need_zero = true;
-                    }
+                } else if !result.starts_with("零") {
+                    need_zero = true;
                 }
                 n /= 10;
                 unit_index += 1;
@@ -335,9 +333,9 @@ impl GameScene {
             }
         });
         let mut chart = match format {
-            ChartFormat::Rpe => parse_rpe(&text?, fs, extra).await,
-            ChartFormat::Pgr => parse_phigros(&text?, extra),
-            ChartFormat::Pec => parse_pec(&text?, extra),
+            ChartFormat::Rpe => parse_rpe(text?, fs, extra).await,
+            ChartFormat::Pgr => parse_phigros(text?, extra),
+            ChartFormat::Pec => parse_pec(text?, extra),
             ChartFormat::Pbc => {
                 let mut r = BinaryReader::new(Cursor::new(bytes));
                 r.read()
@@ -359,13 +357,10 @@ impl GameScene {
         upload_fn: Option<UploadFn>,
         update_fn: Option<UpdateFn>,
     ) -> Result<Self> {
-        match mode {
-            GameMode::TweakOffset => {
-                config.mods.insert(Mods::AUTOPLAY);
-                config.volume_music = config.volume_music.max(0.5);
-                config.volume_sfx = config.volume_sfx.max(0.5);
-            }
-            _ => {}
+        if mode == GameMode::TweakOffset {
+            config.mods.insert(Mods::AUTOPLAY);
+            config.volume_music = config.volume_music.max(0.5);
+            config.volume_sfx = config.volume_sfx.max(0.5);
         }
         let (mut chart, format) = if let Some((chart, format)) = preload_chart {
             (chart, format)
@@ -702,7 +697,7 @@ impl GameScene {
             let w = 0.05;
             let no_retry = self.mode == GameMode::NoRetry;
             draw_texture_ex(
-                &*res.icon_back,
+                &res.icon_back,
                 -s * 3. - w,
                 -s + o,
                 c,
@@ -712,7 +707,7 @@ impl GameScene {
                 },
             );
             draw_texture_ex(
-                &*res.icon_retry,
+                &res.icon_retry,
                 -s,
                 -s + o,
                 if no_retry { semi_white(res.alpha * 0.6) } else { c },
@@ -722,7 +717,7 @@ impl GameScene {
                 },
             );
             draw_texture_ex(
-                &*res.icon_resume,
+                &res.icon_resume,
                 s + w,
                 -s + o,
                 c,
@@ -751,7 +746,7 @@ impl GameScene {
                 if no_retry && clicked == Some(0) {
                     clicked = None;
                 }
-                if clicked.map_or(false, |it| it != -1) && (tm.speed - res.config.speed as f64).abs() > 1e-3 {
+                if clicked.is_some_and(|it| it != -1) && (tm.speed - res.config.speed as f64).abs() > 1e-3 {
                     reset_music_speed!(self, res, tm);
                 }
                 match clicked {
@@ -768,9 +763,9 @@ impl GameScene {
                         res.disable_hit_fx = true;
                     }
                     Some(1) => {
-                        if self.mode == GameMode::Exercise && tm.now() > self.exercise_range.end as f64 && self.exercise_range.end - 0.1 < res.track_length {
-                            tm.seek_to(self.exercise_range.start as f64);
-                            self.music.seek_to(self.exercise_range.start as f64)?;
+                        if self.mode == GameMode::Exercise && tm.now() > self.exercise_range.end && self.exercise_range.end - 0.1 < res.track_length {
+                            tm.seek_to(self.exercise_range.start);
+                            self.music.seek_to(self.exercise_range.start)?;
                         }
                         self.music.play()?;
                         let now = tm.now();
@@ -1081,13 +1076,13 @@ impl Scene for GameScene {
         let time = tm.now();
         self.res.audio.recover_if_needed()?;
         if matches!(self.state, State::Playing) && time < self.res.track_length {
-            tm.update(self.music.position() as f64);
+            tm.update(self.music.position());
         }
-        if self.mode == GameMode::Exercise && tm.now() > self.exercise_range.end as f64 && self.exercise_range.end < self.res.track_length - 0.1 && !tm.paused() {
+        if self.mode == GameMode::Exercise && tm.now() > self.exercise_range.end && self.exercise_range.end < self.res.track_length - 0.1 && !tm.paused() {
             let state = self.state.clone();
             reset!(self, self.res, tm);
             self.state = state;
-            tm.seek_to(self.exercise_range.start as f64);
+            tm.seek_to(self.exercise_range.start);
             tm.pause();
             self.music.pause()?;
         }
@@ -1112,7 +1107,7 @@ impl Scene for GameScene {
                     self.res.alpha = 1.;
                     self.state = State::BeforeMusic;
                     tm.reset();
-                    tm.seek_to(self.exercise_range.start as f64);
+                    tm.seek_to(self.exercise_range.start);
                     self.last_update_time = tm.real_time();
                     if self.first_in && self.mode == GameMode::Exercise {
                         //tm.pause();
@@ -1134,7 +1129,7 @@ impl Scene for GameScene {
             }
             State::BeforeMusic => {
                 if time >= 0.0 {
-                    self.music.seek_to(time as f64)?;
+                    self.music.seek_to(time)?;
                     self.music.play()?;
                     self.state = State::Playing;
                 }
@@ -1281,13 +1276,13 @@ impl Scene for GameScene {
                 res.time -= 2.;
                 let dst = (self.music.position() - 2.).max(0.);
                 self.music.seek_to(dst)?;
-                tm.seek_to(dst as f64);
+                tm.seek_to(dst);
             }
             if is_key_pressed(KeyCode::Right) {
                 res.time += 5.;
-                let dst = (self.music.position() + 5.).min(res.track_length as f64);
+                let dst = (self.music.position() + 5.).min(res.track_length);
                 self.music.seek_to(dst)?;
-                tm.seek_to(dst as f64);
+                tm.seek_to(dst);
 
                 self.pause_rewind = PauseRewind {
                     time: Some(tm.now()),
