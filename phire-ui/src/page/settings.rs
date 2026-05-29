@@ -5,11 +5,11 @@ use crate::{get_data, get_data_mut, popup::ChooseButton, save_data, scene::BGM_V
 use anyhow::Result;
 use macroquad::prelude::*;
 use phire::{
-    ext::{poll_future, semi_black, validate_combo, LocalTask, RectExt, SafeTexture, ScaleType},
+    ext::{LocalTask, RectExt, SafeTexture, ScaleType, poll_future, semi_black, validate_combo},
     health::{HealthConfig, HealthType},
-    l10n::{LanguageIdentifier, LANG_IDENTS, LANG_NAMES},
+    l10n::{LANG_IDENTS, LANG_NAMES, LanguageIdentifier},
     scene::{request_input, return_input, show_error, show_message, take_input},
-    ui::{DRectButton, Scroll, Slider, Ui},
+    ui::{DRectButton, InlineInputBox, Scroll, Slider, Ui},
 };
 use std::{borrow::Cow, net::ToSocketAddrs, sync::atomic::Ordering};
 
@@ -710,6 +710,7 @@ struct OtherList {
     chart_ratio_slider: Slider,
     fade_slider: Slider,
     watermark: DRectButton,
+    watermark_input: InlineInputBox,
     combo_btn: DRectButton,
     roman_btn: DRectButton,
     chinese_btn: DRectButton,
@@ -718,6 +719,7 @@ struct OtherList {
     shake_play_mode_btn: DRectButton,
 
     health_mode_btn: DRectButton,
+    health_mode_input: InlineInputBox,
 }
 
 impl OtherList {
@@ -729,6 +731,7 @@ impl OtherList {
             chart_ratio_slider: Slider::new(0.05..1.0, 0.05),
             fade_slider: Slider::new(-2.0..2.0, 0.05),
             watermark: DRectButton::new(),
+            watermark_input: InlineInputBox::new(),
             combo_btn: DRectButton::new(),
             roman_btn: DRectButton::new(),
             chinese_btn: DRectButton::new(),
@@ -737,6 +740,7 @@ impl OtherList {
             shake_play_mode_btn: DRectButton::new(),
             #[cfg(feature = "play")]
             health_mode_btn: DRectButton::new(),
+            health_mode_input: InlineInputBox::new(),
         }
     }
 
@@ -746,6 +750,42 @@ impl OtherList {
 
     pub fn touch(&mut self, touch: &Touch, t: f32) -> Result<Option<bool>> {
         let data = get_data_mut();
+        if self.watermark_input.is_active() {
+            let submitted = self.watermark_input.touch(touch);
+            if submitted {
+                let text = self.watermark_input.confirm();
+                if text.trim().is_empty() {
+                    data.config.watermark = String::new();
+                    return Ok(Some(true));
+                }
+                data.config.watermark = text;
+                return Ok(Some(true));
+            }
+            return Ok(Some(false));
+        }
+
+        if self.health_mode_input.is_active() {
+            let submitted = self.health_mode_input.touch(touch);
+            if submitted {
+                let text = self.health_mode_input.confirm();
+                if text.trim().is_empty() {
+                    data.config.health_mode = None;
+                    return Ok(Some(true));
+                }
+                match HealthConfig::from_json(&text) {
+                    Ok(health_mode) => {
+                        data.config.health_mode = Some(health_mode);
+                        return Ok(Some(true));
+                    }
+                    Err(_) => {
+                        show_message(tl!("illegal-input")).error();
+                        return Ok(Some(false));
+                    }
+                }
+            }
+            return Ok(Some(false));
+        }
+
         let config = &mut data.config;
         if let wt @ Some(_) = self.chart_debug_line_slider.touch(touch, t, &mut config.chart_debug_line) {
             return Ok(wt);
@@ -764,7 +804,7 @@ impl OtherList {
             return Ok(wt);
         }
         if self.watermark.touch(touch, t) {
-            request_input("watermark", &config.watermark, tl!("item-watermark"));
+            self.watermark_input.activate(&config.watermark, false);
             return Ok(Some(true));
         }
         if self.combo_btn.touch(touch, t) {
@@ -801,7 +841,7 @@ impl OtherList {
             } else {
                 String::new()
             };
-            request_input("health-mode", &text, tl!("item-health-mode"));
+            self.health_mode_input.activate(&text, true);
             return Ok(Some(true));
         }
         Ok(None)
@@ -809,6 +849,12 @@ impl OtherList {
 
     pub fn update(&mut self, _t: f32) -> Result<bool> {
         let data = get_data_mut();
+        if self.watermark_input.is_active() {
+            self.watermark_input.update();
+        }
+        if self.health_mode_input.is_active() {
+            self.health_mode_input.update();
+        }
         if let Some((id, text)) = take_input() {
             if id == "watermark" {
                 data.config.watermark = text;
@@ -889,7 +935,11 @@ impl OtherList {
         }
         item! {
             render_title(ui, c, tl!("item-watermark"), None);
-            self.watermark.render_text(ui, rr, t, c.a, &config.watermark, 0.4, false);
+            if self.watermark_input.is_active() {
+                self.watermark_input.render(ui, rr, c, &tl!("item-watermark"));
+            } else {
+                self.watermark.render_text(ui, rr, t, c.a, &config.watermark, 0.4, false);
+            }
         }
         item! {
             render_title(ui, c, tl!("item-combo"), None);
@@ -915,14 +965,22 @@ impl OtherList {
         #[cfg(feature = "play")]
         item! {
             render_title(ui, c, tl!("item-health-mode"), Some(tl!("item-health-mode-sub")));
-            let text = match config.health_mode.clone().map(|it| it.mode) {
-                None => "OFF",
-                Some(HealthType::Classic{}) => "classic",
-                Some(HealthType::ComboHeal{ .. }) => "comboHeal",
-                Some(HealthType::SpeedBased{ .. }) => "speedBased",
-            };
-            self.health_mode_btn.render_text(ui, rr, t, c.a, text, 0.4, false);
+            if self.health_mode_input.is_active() {
+                let edit_h = (ITEM_HEIGHT + 0.1).max(0.25);
+                let edit_rect = Rect::new(rr.x, rr.y - (edit_h - ITEM_HEIGHT) / 2.0, rr.w, edit_h);
+                self.health_mode_input.render(ui, edit_rect, c, &tl!("item-health-mode"));
+                h += edit_h - ITEM_HEIGHT;
+            } else {
+                let text = match config.health_mode.clone().map(|it| it.mode) {
+                    None => "OFF",
+                    Some(HealthType::Classic{}) => "classic",
+                    Some(HealthType::ComboHeal{ .. }) => "comboHeal",
+                    Some(HealthType::SpeedBased{ .. }) => "speedBased",
+                };
+                self.health_mode_btn.render_text(ui, rr, t, c.a, text, 0.4, false);
+            }
         }
+
         (w, h)
     }
 }

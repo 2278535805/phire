@@ -19,6 +19,9 @@ pub use shadow::*;
 mod text;
 pub use text::{DrawText, TextPainter};
 
+mod input;
+pub use input::{InlineInputBox};
+
 pub use glyph_brush::ab_glyph::FontArc;
 
 use crate::{
@@ -778,6 +781,14 @@ impl<'a> Ui<'a> {
         } else {
             quad_gl.scissor(None);
         }
+    }
+
+    pub fn scissor_state(&self) -> Option<(i32, i32, i32, i32)> {
+        unsafe { get_internal_gl() }.quad_gl.get_scissor()
+    }
+
+    pub fn restore_scissor(&mut self, state: Option<(i32, i32, i32, i32)>) {
+        unsafe { get_internal_gl() }.quad_gl.scissor(state);
     }
 
     pub fn text<'s, 'ui>(&'ui mut self, text: impl Into<Cow<'s, str>>) -> DrawText<'a, 's, 'ui> {
