@@ -139,7 +139,9 @@ impl InlineInputBox {
             TouchPhase::Started => {
                 if in_rect {
                     self.state.cursor = cursor;
-                    self.state.selection_anchor = Some(cursor);
+                    if !self.multiline { // TODO: multiline text selection
+                        self.state.selection_anchor = Some(cursor);
+                    }
                 }
                 !in_rect
             }
@@ -368,23 +370,25 @@ impl InlineInputBox {
         let bx = rect.x;
         let by = rect.y;
         let bw = rect.w;
-        let line_h = rect.h;
+        let bh = rect.h;
 
         ui.fill_path(
-            &Rect::new(bx, by, bw, line_h).rounded(0.008),
+            &Rect::new(bx, by, bw, bh).rounded(0.008),
             Color::new(0.35, 0.5, 1.0, c.a * 0.8),
         );
         ui.fill_path(
-            &Rect::new(bx + 0.002, by + 0.002, bw - 0.004, line_h - 0.004).rounded(0.006),
+            &Rect::new(bx + 0.002, by + 0.002, bw - 0.004, bh - 0.004).rounded(0.006),
             Color::new(0.15, 0.15, 0.18, c.a),
         );
 
         let text_x = bx + 0.02;
         let max_w = bw - 0.04;
-        let clip = Rect::new(bx + 0.002, by + 0.002, bw - 0.004, line_h - 0.004);
-
+        let max_h = bh - 0.04;
+        let clip = Rect::new(bx + 0.002, by + 0.002, bw - 0.004, bh - 0.004);
+        let saved = ui.scissor_state();
+        ui.scissor(Some(clip));
         if self.buffer.is_empty() {
-            let text_y = by + line_h / 2.0;
+            let text_y = by + bh / 2.0;
             ui.text(placeholder)
                 .pos(text_x, text_y)
                 .anchor(0.0, 0.5)
@@ -394,33 +398,47 @@ impl InlineInputBox {
                 .draw();
             let cursor_x = text_x;
             let cursor_y = by + 0.01;
-            ui.fill_rect(Rect::new(cursor_x, cursor_y, 0.003, line_h - 0.02), Color::new(1.0, 1.0, 1.0, c.a * 0.9));
+            ui.fill_rect(Rect::new(cursor_x, cursor_y, 0.003, bh - 0.02), Color::new(1.0, 1.0, 1.0, c.a * 0.9));
             let (sx, sy) = ui.to_global((cursor_x, cursor_y));
             self.update_ime((sx, sy + 0.5));
         } else if self.multiline {
-            let saved = ui.scissor_state();
-            ui.scissor(Some(clip));
-            ui.text(&self.buffer)
-                .pos(text_x, by + 0.015)
-                .no_baseline()
-                .size(0.42)
-                .multiline()
-                .max_width(max_w)
-                .color(Color::new(1.0, 1.0, 1.0, c.a))
-                .draw();
+            let line_h_with_space = ui.text("0\n0").size(0.42).multiline().measure().h - ui.text("0").size(0.42).measure().h;
+            let line_h = ui.text("0").size(0.42).measure().h;
             let before = self.text_before();
             let line_start = before.rfind('\n').map(|i| i + 1).unwrap_or(0);
             let cursor_line_text = &before[line_start..];
             let line_num = before.chars().filter(|c| *c == '\n').count() as f32;
-            let cursor_w = ui.text(cursor_line_text).size(0.42).measure().w;
-            let cursor_y = by + 0.015 + line_num * 0.02;
-            let cx = text_x + cursor_w;
-            ui.fill_rect(Rect::new(cx, cursor_y, 0.003, 0.02), Color::new(1.0, 1.0, 1.0, c.a * 0.9));
-            ui.restore_scissor(saved);
-            let (sx, sy) = ui.to_global((cx, cursor_y));
+            let cursor_w = ui.text(cursor_line_text).size(0.42).multiline().measure().w;
+            let cursor_y = by + line_num * line_h_with_space;
+            let full_text = ui.text(&self.buffer).size(0.42).multiline().measure();
+            let full_w = full_text.w;
+            let full_h = full_text.h;
+            let text_x_adj = if full_w > max_w {
+                let overflow = full_w - max_w;
+                let shift = (cursor_w - max_w * 0.8).max(0.0).min(overflow);
+                text_x - shift
+            } else {
+                text_x
+            };
+            let text_y_adj = if full_h > max_h {
+                let overflow = full_h - max_h;
+                let shift = (cursor_y - max_h * 0.8).max(0.0).min(overflow);
+                by - shift
+            } else {
+                by
+            };
+            ui.text(&self.buffer)
+                .pos(text_x_adj, text_y_adj)
+                .size(0.42)
+                .color(Color::new(1.0, 1.0, 1.0, c.a))
+                .multiline()
+                .draw();
+            let cx = text_x_adj + cursor_w;
+            ui.fill_rect(Rect::new(cx, cursor_y, 0.003, line_h), Color::new(1.0, 1.0, 1.0, c.a * 0.9));
+            let (sx, sy) = ui.to_global((cx, by + 0.01));
             self.update_ime((sx, sy + 0.5));
         } else {
-            let text_y = by + line_h / 2.0;
+            let text_y = by + bh / 2.0;
             let before = self.text_before();
             let cursor_w = ui.text(before).size(0.42).measure().w;
             let full_w = ui.text(&self.buffer).size(0.42).measure().w;
@@ -431,8 +449,6 @@ impl InlineInputBox {
             } else {
                 text_x
             };
-            let saved = ui.scissor_state();
-            ui.scissor(Some(clip));
             // Draw selection highlight
             if let Some((sel_start, sel_end)) = self.selection_range() {
                 let start_before = &self.buffer[..self.byte_at(sel_start)];
@@ -441,7 +457,7 @@ impl InlineInputBox {
                 let sel_end_w = ui.text(end_before).size(0.42).measure().w;
                 let sel_x = text_x_adj + sel_start_w;
                 let sel_w = sel_end_w - sel_start_w;
-                ui.fill_rect(Rect::new(sel_x, by + 0.01, sel_w, line_h - 0.02), Color::new(0.3, 0.5, 1.0, c.a * 0.3));
+                ui.fill_rect(Rect::new(sel_x, by + 0.01, sel_w, bh - 0.02), Color::new(0.3, 0.5, 1.0, c.a * 0.3));
             }
             ui.text(&self.buffer)
                 .pos(text_x_adj, text_y)
@@ -450,11 +466,11 @@ impl InlineInputBox {
                 .size(0.42)
                 .color(Color::new(1.0, 1.0, 1.0, c.a))
                 .draw();
-            ui.restore_scissor(saved);
             let cx = text_x_adj + cursor_w;
-            ui.fill_rect(Rect::new(cx, by + 0.01, 0.003, line_h - 0.02), Color::new(1.0, 1.0, 1.0, c.a * 0.9));
+            ui.fill_rect(Rect::new(cx, by + 0.01, 0.003, bh - 0.02), Color::new(1.0, 1.0, 1.0, c.a * 0.9));
             let (sx, sy) = ui.to_global((cx, by + 0.01));
             self.update_ime((sx, sy + 0.5));
         }
+        ui.restore_scissor(saved);
     }
 }

@@ -968,7 +968,8 @@ impl OtherList {
             if self.health_mode_input.is_active() {
                 let edit_h = (ITEM_HEIGHT + 0.1).max(0.25);
                 let edit_rect = Rect::new(rr.x, rr.y - (edit_h - ITEM_HEIGHT) / 2.0, rr.w, edit_h);
-                self.health_mode_input.render(ui, edit_rect, c, &tl!("item-health-mode"));
+                let rrr = Rect::new(0.0, -0.5, 1.0, 0.5);
+                self.health_mode_input.render(ui, rrr, c, &tl!("item-health-mode"));
                 h += edit_h - ITEM_HEIGHT;
             } else {
                 let text = match config.health_mode.clone().map(|it| it.mode) {
