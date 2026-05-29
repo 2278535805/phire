@@ -141,6 +141,7 @@ impl InlineInputBox {
 
     pub fn update(&mut self) {
         let now = get_time();
+        let ctrl = is_key_down(KeyCode::LeftControl) || is_key_down(KeyCode::RightControl);
         let shift = is_key_down(KeyCode::LeftShift) || is_key_down(KeyCode::RightShift);
 
         // Arrow keys
@@ -277,7 +278,6 @@ impl InlineInputBox {
         }
 
         // Copy/Paste/Cut
-        let ctrl = is_key_pressed(KeyCode::LeftControl) || is_key_pressed(KeyCode::RightControl) || is_key_pressed(KeyCode::LeftSuper) || is_key_pressed(KeyCode::RightSuper);
         if ctrl {
             if is_key_pressed(KeyCode::C) {
                 if let Some(text) = self.selected_text() {
