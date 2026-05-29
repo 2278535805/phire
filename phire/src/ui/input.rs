@@ -124,15 +124,22 @@ impl InlineInputBox {
     pub fn touch(&mut self, touch: &Touch) -> bool {
         let p = touch.position;
         let in_rect = self.rect.contains(p);
+        let ratio = (p.x - self.rect.x) / (self.rect.w) * self.buffer.chars().count() as f32;
+        let cursor = (ratio.round() as usize).clamp(0, self.buffer.chars().count());
         match touch.phase {
-            TouchPhase::Moved | TouchPhase::Stationary | TouchPhase::Ended | TouchPhase::Cancelled => {
+            TouchPhase::Moved => {
+                if in_rect {
+                    self.state.cursor = cursor;
+                }
+                false
+            }
+            TouchPhase::Stationary | TouchPhase::Ended | TouchPhase::Cancelled => {
                 false
             }
             TouchPhase::Started => {
                 if in_rect {
-                    let ratio = (p.x - self.rect.x) / (self.rect.w) * self.buffer.chars().count() as f32;
-                    self.state.cursor = (ratio.round() as usize).clamp(0, self.buffer.chars().count());
-                    self.state.selection_anchor = None;
+                    self.state.cursor = cursor;
+                    self.state.selection_anchor = Some(cursor);
                 }
                 !in_rect
             }
