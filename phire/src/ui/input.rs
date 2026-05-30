@@ -30,6 +30,8 @@ struct State {
     last_cursor_time: Option<f64>,
 
     cursor_positions: Vec<(f32, f32)>,
+    scroll_x: f32,
+    scroll_y: f32,
 }
 
 impl InlineInputBox {
@@ -48,6 +50,8 @@ impl InlineInputBox {
         self.multiline = multiline;
         self.state.cursor = initial.chars().count();
         self.state.backspace_time = None;
+        self.state.scroll_x = 0.0;
+        self.state.scroll_y = 0.0;
         miniquad::window::set_ime_enabled(true);
         miniquad::window::show_keyboard(true);
     }
@@ -460,17 +464,27 @@ impl InlineInputBox {
             let cursor_y = line_num * line_h_with_space;
             let full_text = ui.text(&self.buffer).size(0.42).multiline().measure();
             let text_x_adj = if full_text.w > max_w {
-                let overflow = full_text.w - max_w;
-                let shift = (cursor_w - max_w * 0.8).max(0.0).min(overflow);
-                text_x - shift
+                let margin = max_w * 0.1;
+                let lo = (cursor_w - max_w + margin).max(0.0);
+                let hi = (cursor_w - margin).max(0.0).min(full_text.w - max_w);
+                if lo <= hi {
+                    self.state.scroll_x = self.state.scroll_x.clamp(lo, hi);
+                }
+                text_x - self.state.scroll_x
             } else {
+                self.state.scroll_x = 0.0;
                 text_x
             };
             let text_y_adj = if full_text.h > max_h {
-                let overflow = full_text.h - max_h;
-                let shift = (cursor_y - max_h * 0.8).max(0.0).min(overflow);
-                text_y - shift
+                let margin = max_h * 0.1;
+                let lo = (cursor_y + line_h - max_h + margin).max(0.0);
+                let hi = (cursor_y - margin).max(0.0).min(full_text.h - max_h);
+                if lo <= hi {
+                    self.state.scroll_y = self.state.scroll_y.clamp(lo, hi);
+                }
+                text_y - self.state.scroll_y
             } else {
+                self.state.scroll_y = 0.0;
                 text_y
             };
             let cursor_y_adj = text_y_adj + line_num * line_h_with_space;
@@ -512,10 +526,15 @@ impl InlineInputBox {
             let cursor_w = ui.text(before).size(0.42).measure().w;
             let full_w = ui.text(&self.buffer).size(0.42).measure().w;
             let text_x_adj = if full_w > max_w {
-                let overflow = full_w - max_w;
-                let shift = (cursor_w - max_w * 0.8).max(0.0).min(overflow);
-                text_x - shift
+                let margin = max_w * 0.1;
+                let lo = (cursor_w - max_w + margin).max(0.0);
+                let hi = (cursor_w - margin).max(0.0).min(full_w - max_w);
+                if lo <= hi {
+                    self.state.scroll_x = self.state.scroll_x.clamp(lo, hi);
+                }
+                text_x - self.state.scroll_x
             } else {
+                self.state.scroll_x = 0.0;
                 text_x
             };
             // Draw selection highlight
