@@ -124,7 +124,7 @@ impl InlineInputBox {
     pub fn touch(&mut self, touch: &Touch) -> bool {
         let p = touch.position;
         let in_rect = self.rect.contains(p);
-        let ratio = (p.x - self.rect.x) / (self.rect.w) * self.buffer.chars().count() as f32;
+        let ratio = (p.x - self.rect.x - 0.02) / (self.rect.w - 0.04) * self.buffer.chars().count() as f32;
         let cursor = (ratio.round() as usize).clamp(0, self.buffer.chars().count());
         match touch.phase {
             TouchPhase::Moved => {
@@ -236,7 +236,7 @@ impl InlineInputBox {
                     let prev_start = prev_line.rfind('\n').map(|i| i + 1).unwrap_or(0);
                     let prev_col = col.min(line_start - prev_start);
                     let target_byte = prev_start + prev_col;
-                    self.state.cursor = self.buffer.char_indices().take_while(|(i, _)| *i <= target_byte).count();
+                    self.state.cursor = self.buffer.char_indices().take_while(|(i, _)| *i < target_byte).count();
                 }
             }
             if is_key_pressed(KeyCode::Down) {
@@ -257,7 +257,7 @@ impl InlineInputBox {
                     let next_line_end = self.buffer[next_line_start..].find('\n').map(|i| next_line_start + i).unwrap_or(self.buffer.chars().count());
                     let next_line_len = next_line_end - next_line_start;
                     let target_col = col.min(next_line_len);
-                    self.state.cursor = self.buffer.char_indices().take_while(|(i, _)| *i <= next_line_start + target_col).count();
+                    self.state.cursor = self.buffer.char_indices().take_while(|(i, _)| *i < next_line_start + target_col).count();
                 }
             }
         }
