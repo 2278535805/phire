@@ -113,12 +113,14 @@ impl InlineInputBox {
         }
     }
 
-    // TODO: set IME position.
-    fn update_ime(&self, _cursor_screen: (f32, f32)) {
-        // let dpi = miniquad::window::dpi_scale();
-        // let x = cursor_screen.0 * dpi;
-        // let y = cursor_screen.1 * dpi;
-        // miniquad::window::set_ime_position(x as i32, y as i32);
+    fn update_ime(&self, ui: &Ui, cursor_screen: (f32, f32)) {
+        let dpi = miniquad::window::dpi_scale();
+        let (x, y) = ui.to_global(cursor_screen);
+        let vp = ui.viewport;
+        let asp = vp.2 as f32 / vp.3 as f32;
+        let x = (x + 1.0) * 0.5 * vp.2 as f32 * dpi;
+        let y = (y * asp + 1.0) * 0.5 * vp.3 as f32 * dpi;
+        miniquad::window::set_ime_position(x as i32, y as i32);
     }
 
     pub fn touch(&mut self, touch: &Touch) -> bool {
@@ -393,6 +395,7 @@ impl InlineInputBox {
             Color::new(0.15, 0.15, 0.18, c.a),
         );
 
+        let line_h = ui.text("0").size(0.42).measure().h;
         let text_x = bx + 0.02;
         let max_w = bw - 0.04;
         let max_h = bh - 0.04;
@@ -411,12 +414,10 @@ impl InlineInputBox {
             let cursor_x = text_x;
             let cursor_y = by + 0.01;
             ui.fill_rect(Rect::new(cursor_x, cursor_y, 0.003, bh - 0.02), Color::new(1.0, 1.0, 1.0, c.a * 0.9));
-            let (sx, sy) = ui.to_global((cursor_x, cursor_y));
-            self.update_ime((sx, sy + 0.5));
+            self.update_ime(ui, (cursor_x, text_y - line_h * 0.5));
         } else if self.multiline {
             let text_y = by + 0.02;
             let line_h_with_space = ui.text("0\n0").size(0.42).multiline().measure().h - ui.text("0").size(0.42).measure().h;
-            let line_h = ui.text("0").size(0.42).measure().h;
             let before = self.text_before();
             let line_start = before.rfind('\n').map(|i| i + 1).unwrap_or(0);
             let cursor_line_text = &before[line_start..];
@@ -447,8 +448,7 @@ impl InlineInputBox {
                 .draw();
             let cx = text_x_adj + cursor_w;
             ui.fill_rect(Rect::new(cx, cursor_y_adj, 0.003, line_h + 0.01), Color::new(1.0, 1.0, 1.0, c.a * 0.9));
-            let (sx, sy) = ui.to_global((cx, cursor_y_adj + 0.01));
-            self.update_ime((sx, sy + 0.5));
+            self.update_ime(ui, (cx, cursor_y_adj + 0.002));
         } else {
             let text_y = by + bh / 2.0;
             let before = self.text_before();
@@ -480,8 +480,7 @@ impl InlineInputBox {
                 .draw();
             let cx = text_x_adj + cursor_w;
             ui.fill_rect(Rect::new(cx, by + 0.01, 0.003, bh - 0.02), Color::new(1.0, 1.0, 1.0, c.a * 0.9));
-            let (sx, sy) = ui.to_global((cx, by + 0.01));
-            self.update_ime((sx, sy + 0.5));
+            self.update_ime(ui, (cx, text_y - line_h * 0.5));
         }
         ui.restore_scissor(saved);
     }
