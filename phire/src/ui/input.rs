@@ -488,6 +488,37 @@ impl InlineInputBox {
                 text_y
             };
             let cursor_y_adj = text_y_adj + line_num * line_h_with_space;
+            if let Some((sel_start, sel_end)) = self.selection_range() {
+                let mut char_offset = 0usize;
+                for (line_idx, line) in self.buffer.split('\n').enumerate() {
+                    let line_len = line.chars().count();
+                    let line_char_start = char_offset;
+                    let line_char_end = char_offset + line_len;
+
+                    let overlap_start = sel_start.max(line_char_start).min(line_char_end);
+                    let overlap_end = sel_end.max(line_char_start).min(line_char_end);
+
+                    if overlap_start < overlap_end {
+                        let sel_start_in_line = overlap_start - line_char_start;
+                        let sel_end_in_line = overlap_end - line_char_start;
+
+                        let start_byte = line.char_indices().nth(sel_start_in_line).map(|(i, _)| i).unwrap_or(line.len());
+                        let end_byte = line.char_indices().nth(sel_end_in_line).map(|(i, _)| i).unwrap_or(line.len());
+
+                        let start_w = if start_byte == 0 { 0.0 } else { ui.text(&line[..start_byte]).size(0.42).multiline().measure().w };
+                        let end_w = if end_byte == 0 { 0.0 } else { ui.text(&line[..end_byte]).size(0.42).multiline().measure().w };
+
+                        let y = text_y_adj + line_idx as f32 * line_h_with_space;
+                        let x = text_x_adj + start_w;
+                        let w = end_w - start_w;
+                        if w > 0.0 {
+                            ui.fill_rect(Rect::new(x, y, w, line_h + 0.01), Color::new(0.3, 0.5, 1.0, c.a * 0.3));
+                        }
+                    }
+
+                    char_offset += line_len + 1;
+                }
+            }
             ui.text(&self.buffer)
                 .pos(text_x_adj, text_y_adj)
                 .size(0.42)
