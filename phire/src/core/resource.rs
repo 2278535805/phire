@@ -6,7 +6,7 @@ use crate::{
     fs::FileSystem,
     health::Health,
     info::ChartInfo,
-    particle::{AtlasConfig, ColorCurve, Curve, Emitter, EmitterConfig, Interpolation, ParticleShape}
+    particle::{AtlasConfig, ColorCurve, Curve, Emitter, EmitterConfig, Interpolation, ParticleShape}, ui::TextPainter
 };
 use anyhow::{bail, Context, Result};
 use macroquad::prelude::*;
@@ -486,6 +486,7 @@ pub struct Resource {
     pub sfx_drag: Sfx,
     pub sfx_flick: Sfx,
     pub extra_sfxs: SfxMap,
+    pub fonts: Vec<RefCell<TextPainter>>,
     pub frame_times: VecDeque<f64>, // frame interval time
     pub disable_hit_fx: bool,
 
@@ -643,6 +644,7 @@ impl Resource {
             sfx_drag,
             sfx_flick,
             extra_sfxs: SfxMap::new(),
+            fonts: Vec::new(),
             frame_times,
             disable_hit_fx: false,
 

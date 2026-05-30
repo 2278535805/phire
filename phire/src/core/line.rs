@@ -74,13 +74,28 @@ impl GifFrames {
     }
 }
 
+#[derive(Clone)]
+pub struct TextData {
+    pub text: String,
+    pub font_id: Option<usize>,
+}
+
+impl Default for TextData {
+    fn default() -> Self {
+        Self {
+            text: String::new(),
+            font_id: None,
+        }
+    }
+}
+
 #[derive(Default)]
 pub enum JudgeLineKind {
     #[default]
     Normal,
     Texture(SafeTexture, String),
     TextureGif(Anim<f32>, GifFrames, String),
-    Text(Anim<String>),
+    Text(Anim<TextData>),
     Paint(Anim<f32>, RefCell<(Option<RenderPass>, bool)>),
 }
 
@@ -330,13 +345,12 @@ impl JudgeLine {
                             let hf = vec2(texture.width(), texture.height()); // Sync RPE
                             draw_texture_ex(
                                 **texture,
-                                -hf.x / 2.,
-                                -hf.y / 2.,
+                                -hf.x * self.anchor[0],
+                                -hf.y * self.anchor[1],
                                 color,
                                 DrawTextureParams {
                                     dest_size: Some(hf),
                                     flip_y: true,
-                                    pivot: Some(Vec2::new(self.anchor[0], -self.anchor[1] + 1.)),
                                     ..Default::default()
                                 },
                             );
@@ -354,13 +368,12 @@ impl JudgeLine {
                             let hf = vec2(frame.width(), frame.height());
                             draw_texture_ex(
                                 **frame,
-                                -hf.x / 2.,
-                                -hf.y / 2.,
+                                -hf.x * self.anchor[0],
+                                -hf.y * self.anchor[1],
                                 color,
                                 DrawTextureParams {
                                     dest_size: Some(hf),
                                     flip_y: true,
-                                    pivot: Some(Vec2::new(self.anchor[0], -self.anchor[1] + 1.)),
                                     ..Default::default()
                                 },
                             );
@@ -368,14 +381,15 @@ impl JudgeLine {
                     }
                     JudgeLineKind::Text(anim) => {
                         if res.config.render_line_extra {
-                                let mut color = color.unwrap_or(WHITE);
+                            let mut color = color.unwrap_or(WHITE);
                             color.a = parse_alpha(alpha.max(0.0), res.alpha, 0.15, res.config.chart_debug_line > 0.);
                             if color.a == 0.0 {
                                 return;
                             }
-                            let now = anim.now();
-                            res.apply_model_of(&Matrix::identity().append_nonuniform_scaling(&Vector::new(1., -1.)), |_| {
-                                ui.text(&now).pos(0., 0.).anchor(self.anchor[0], -self.anchor[1] + 1.).size(1.).color(color).multiline().draw();
+                            res.apply_model_of(&Matrix::identity().append_nonuniform_scaling(&Vector::new(1., -1.)), |res| {
+                                let now = anim.now();
+                                let mut painter = now.font_id.and_then(|id| res.fonts.get(id)).map(|cell| cell.borrow_mut());
+                                ui.text(&now.text).pos(0., 0.).anchor(self.anchor[0], -self.anchor[1] + 1.).size(1.).color(color).multiline().draw_with_font(painter.as_deref_mut());
                             });
                         }
                     }
@@ -609,7 +623,7 @@ impl JudgeLine {
                             },
                             JudgeLineKind::Text(text) => {
                                 if !res.config.render_line_extra { return };
-                                format!(" text:{}", text.now())
+                                format!(" text:{}", text.now().text)
                             },
                             JudgeLineKind::Texture(_, name) => {
                                 if !res.config.render_line_extra { return };

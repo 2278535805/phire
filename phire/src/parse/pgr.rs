@@ -320,6 +320,7 @@ pub fn parse_phigros(source: &str, extra: ChartExtra) -> Result<Chart> {
             ..Default::default()
         },
         extra,
-        FxHashMap::default()
+        FxHashMap::default(),
+        Vec::new(),
     ))
 }

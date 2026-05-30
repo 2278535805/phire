@@ -1161,7 +1161,7 @@ fn build_audio() -> AudioManager {
     {
         use sasa::backend::oboe::*;
         AudioManager::new(OboeBackend::new(OboeSettings {
-            performance_mode: PerformanceMode::PowerSaving,
+            performance_mode: PerformanceMode::None,
             sharing_mode: SharingMode::Shared,
             usage: Usage::Media,
             ..Default::default()
