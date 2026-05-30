@@ -166,6 +166,7 @@ async fn the_main() -> Result<()> {
     data.init().await?;
     set_data(data);
     sync_data();
+    miniquad::window::set_ime_enabled(false);
 
     let activity_lifecycle = {
         let (tx, rx) = mpsc::channel();
