@@ -28,6 +28,8 @@ struct State {
     left_arrow_time: Option<f64>,
     right_arrow_time: Option<f64>,
     last_cursor_time: Option<f64>,
+
+    cursor_positions: Vec<(f32, f32)>,
 }
 
 impl InlineInputBox {
@@ -127,8 +129,7 @@ impl InlineInputBox {
     pub fn touch(&mut self, touch: &Touch) -> bool {
         let p = touch.position;
         let in_rect = self.rect.contains(p);
-        let ratio = (p.x - self.rect.x - 0.02) / (self.rect.w - 0.04) * self.buffer.chars().count() as f32;
-        let cursor = (ratio.round() as usize).clamp(0, self.buffer.chars().count());
+        let cursor = self.find_nearest_cursor(p.x, p.y);
         match touch.phase {
             TouchPhase::Moved => {
                 if in_rect {
@@ -142,13 +143,29 @@ impl InlineInputBox {
             TouchPhase::Started => {
                 if in_rect {
                     self.state.cursor = cursor;
-                    if !self.multiline { // TODO: multiline text selection
-                        self.state.selection_anchor = Some(cursor);
-                    }
+                    self.state.selection_anchor = Some(cursor);
                 }
                 !in_rect
             }
         }
+    }
+
+    fn find_nearest_cursor(&self, touch_x: f32, touch_y: f32) -> usize {
+        if self.state.cursor_positions.is_empty() {
+            return 0;
+        }
+        let mut best_idx = 0;
+        let mut best_dist = f32::MAX;
+        for (i, &(px, py)) in self.state.cursor_positions.iter().enumerate() {
+            let dx = touch_x - px;
+            let dy = touch_y - py;
+            let dist = dx * dx + dy * dy * 10000.0;
+            if dist < best_dist {
+                best_dist = dist;
+                best_idx = i;
+            }
+        }
+        best_idx
     }
 
     pub fn update(&mut self) {
@@ -430,6 +447,8 @@ impl InlineInputBox {
             let cursor_y = by + 0.01;
             ui.fill_rect(Rect::new(cursor_x, cursor_y, 0.003, bh - 0.02), Color::new(1.0, 1.0, 1.0, c.a * 0.9));
             self.update_ime(ui, (cursor_x, text_y - line_h * 0.5));
+            self.state.cursor_positions.clear();
+            self.state.cursor_positions.push(ui.to_global((cursor_x, text_y)));
         } else if self.multiline {
             let text_y = by + 0.02;
             let line_h_with_space = ui.text("0\n0").size(0.42).multiline().measure().h - ui.text("0").size(0.42).measure().h;
@@ -464,6 +483,29 @@ impl InlineInputBox {
             let cx = text_x_adj + cursor_w;
             ui.fill_rect(Rect::new(cx, cursor_y_adj, 0.003, line_h + 0.01), Color::new(1.0, 1.0, 1.0, c.a * 0.9));
             self.update_ime(ui, (cx, cursor_y_adj + 0.002));
+            self.state.cursor_positions.clear();
+            let chars_count = self.buffer.chars().count();
+            let mut line_num_cur = 0usize;
+            let mut line_start_byte = 0usize;
+            for i in 0..=chars_count {
+                if i > 0 {
+                    let prev_byte = self.byte_at(i - 1);
+                    if self.buffer.as_bytes()[prev_byte] == b'\n' {
+                        line_num_cur += 1;
+                        line_start_byte = prev_byte + 1;
+                    }
+                }
+                let byte_pos = self.byte_at(i);
+                let line_text = &self.buffer[line_start_byte..byte_pos];
+                let w = if line_text.is_empty() {
+                    0.0
+                } else {
+                    ui.text(line_text).size(0.42).multiline().measure().w
+                };
+                let x = text_x_adj + w;
+                let y = text_y_adj + line_num_cur as f32 * line_h_with_space;
+                self.state.cursor_positions.push(ui.to_global((x, y)));
+            }
         } else {
             let text_y = by + bh / 2.0;
             let before = self.text_before();
@@ -496,6 +538,14 @@ impl InlineInputBox {
             let cx = text_x_adj + cursor_w;
             ui.fill_rect(Rect::new(cx, by + 0.01, 0.003, bh - 0.02), Color::new(1.0, 1.0, 1.0, c.a * 0.9));
             self.update_ime(ui, (cx, text_y - line_h * 0.5));
+            self.state.cursor_positions.clear();
+            let chars_count = self.buffer.chars().count();
+            for i in 0..=chars_count {
+                let before_i = &self.buffer[..self.byte_at(i)];
+                let w = ui.text(before_i).size(0.42).measure().w;
+                let x = text_x_adj + w;
+                self.state.cursor_positions.push(ui.to_global((x, text_y)));
+            }
         }
         ui.restore_scissor(saved);
     }
