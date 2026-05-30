@@ -22,6 +22,7 @@ struct State {
     cursor: usize,
     selection_anchor: Option<usize>,
     backspace_time: Option<f64>,
+    delete_time: Option<f64>,
     last_pop_time: Option<f64>,
 
     left_arrow_time: Option<f64>,
@@ -344,10 +345,26 @@ impl InlineInputBox {
 
         // Delete key
         if is_key_pressed(KeyCode::Delete) {
+            self.state.delete_time = Some(now);
             if !self.delete_selection() {
                 if self.state.cursor < self.buffer.chars().count() {
                     self.remove_char_at(self.state.cursor);
                 }
+            }
+        } else if let Some(delete_time) = self.state.delete_time {
+            if is_key_down(KeyCode::Delete) {
+                if now - delete_time > 0.5 {
+                    if self.state.last_pop_time.map_or(true, |t| now - t > 0.02) {
+                        self.state.last_pop_time = Some(now);
+                        if !self.delete_selection() {
+                            if self.state.cursor < self.buffer.chars().count() {
+                                self.remove_char_at(self.state.cursor);
+                            }
+                        }
+                    }
+                }
+            } else {
+                self.state.delete_time = None;
             }
         }
 
