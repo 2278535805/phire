@@ -765,8 +765,7 @@ impl OtherList {
         }
 
         if self.health_mode_input.is_active() {
-            let submitted = self.health_mode_input.touch(touch);
-            if submitted {
+            if self.health_mode_input.touch(touch) {
                 let text = self.health_mode_input.confirm();
                 if text.trim().is_empty() {
                     data.config.health_mode = None;
