@@ -375,8 +375,6 @@ impl InlineInputBox {
                 let byte_pos = self.byte_at(self.state.cursor);
                 self.buffer.insert(byte_pos, '\n');
                 self.state.cursor += 1;
-            } else {
-                self.confirm();
             }
         }
 
