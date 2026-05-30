@@ -402,6 +402,7 @@ impl InlineInputBox {
             let (sx, sy) = ui.to_global((cursor_x, cursor_y));
             self.update_ime((sx, sy + 0.5));
         } else if self.multiline {
+            let text_y = by + 0.02;
             let line_h_with_space = ui.text("0\n0").size(0.42).multiline().measure().h - ui.text("0").size(0.42).measure().h;
             let line_h = ui.text("0").size(0.42).measure().h;
             let before = self.text_before();
@@ -409,24 +410,23 @@ impl InlineInputBox {
             let cursor_line_text = &before[line_start..];
             let line_num = before.chars().filter(|c| *c == '\n').count() as f32;
             let cursor_w = ui.text(cursor_line_text).size(0.42).multiline().measure().w;
-            let cursor_y = by + line_num * line_h_with_space;
+            let cursor_y = line_num * line_h_with_space;
             let full_text = ui.text(&self.buffer).size(0.42).multiline().measure();
-            let full_w = full_text.w;
-            let full_h = full_text.h;
-            let text_x_adj = if full_w > max_w {
-                let overflow = full_w - max_w;
+            let text_x_adj = if full_text.w > max_w {
+                let overflow = full_text.w - max_w;
                 let shift = (cursor_w - max_w * 0.8).max(0.0).min(overflow);
                 text_x - shift
             } else {
                 text_x
             };
-            let text_y_adj = if full_h > max_h {
-                let overflow = full_h - max_h;
+            let text_y_adj = if full_text.h > max_h {
+                let overflow = full_text.h - max_h;
                 let shift = (cursor_y - max_h * 0.8).max(0.0).min(overflow);
-                by - shift
+                text_y - shift
             } else {
-                by
+                text_y
             };
+            let cursor_y_adj = text_y_adj + line_num * line_h_with_space;
             ui.text(&self.buffer)
                 .pos(text_x_adj, text_y_adj)
                 .size(0.42)
@@ -434,8 +434,8 @@ impl InlineInputBox {
                 .multiline()
                 .draw();
             let cx = text_x_adj + cursor_w;
-            ui.fill_rect(Rect::new(cx, cursor_y, 0.003, line_h), Color::new(1.0, 1.0, 1.0, c.a * 0.9));
-            let (sx, sy) = ui.to_global((cx, by + 0.01));
+            ui.fill_rect(Rect::new(cx, cursor_y_adj, 0.003, line_h + 0.01), Color::new(1.0, 1.0, 1.0, c.a * 0.9));
+            let (sx, sy) = ui.to_global((cx, cursor_y_adj + 0.01));
             self.update_ime((sx, sy + 0.5));
         } else {
             let text_y = by + bh / 2.0;
