@@ -934,7 +934,7 @@ impl OtherList {
         item! {
             render_title(ui, c, tl!("item-watermark"), None);
             if self.watermark_input.is_active() {
-                self.watermark_input.render(ui, rr, c, &tl!("item-watermark"));
+                self.watermark_input.render(ui, rr, c.a, &tl!("item-watermark"));
             } else {
                 self.watermark.render_text(ui, rr, t, c.a, &config.watermark, 0.4, false);
             }
@@ -964,11 +964,8 @@ impl OtherList {
         item! {
             render_title(ui, c, tl!("item-health-mode"), Some(tl!("item-health-mode-sub")));
             if self.health_mode_input.is_active() {
-                let edit_h = (ITEM_HEIGHT + 0.1).max(0.25);
-                let edit_rect = Rect::new(rr.x, rr.y - (edit_h - ITEM_HEIGHT) / 2.0, rr.w, edit_h);
-                let rrr = Rect::new(0.0, -0.5, 1.0, 0.5);
-                self.health_mode_input.render(ui, rrr, c, &tl!("item-health-mode"));
-                h += edit_h - ITEM_HEIGHT;
+                let edit_rect = ui.rect_to_local(r);
+                self.health_mode_input.render(ui, edit_rect, c.a, &tl!("item-health-mode"));
             } else {
                 let text = match config.health_mode.clone().map(|it| it.mode) {
                     None => "OFF",

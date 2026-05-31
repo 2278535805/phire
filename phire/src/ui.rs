@@ -706,6 +706,23 @@ impl<'a> Ui<'a> {
         (r.x, r.y)
     }
 
+    pub fn rect_to_local(&self, rect: Rect) -> Rect {
+        let pt = self.to_local((rect.x, rect.y));
+        let vec = self.vec_to_local((rect.w, rect.h));
+        Rect::new(pt.0, pt.1, vec.0, vec.1)
+    }
+
+    pub fn vec_to_local(&self, vec: (f32, f32)) -> (f32, f32) {
+        let r = self
+            .model_stack
+            .last()
+            .unwrap()
+            .try_inverse()
+            .unwrap()
+            .transform_vector(&Vector::new(vec.0, vec.1));
+        (r.x, r.y)
+    }
+
     pub fn to_local(&self, pt: (f32, f32)) -> (f32, f32) {
         let r = self
             .model_stack

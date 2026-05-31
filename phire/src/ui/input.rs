@@ -492,7 +492,7 @@ impl InlineInputBox {
         }
     }
 
-    pub fn render(&mut self, ui: &mut Ui, rect: Rect, c: Color, placeholder: &str) {
+    pub fn render(&mut self, ui: &mut Ui, rect: Rect, t: f32, placeholder: &str) {
         self.rect = ui.rect_to_global(rect);
         self.state.touch_scale_y = if self.rect.h > 0.0 { rect.h / self.rect.h } else { 1.0 };
         let bx = rect.x;
@@ -502,11 +502,11 @@ impl InlineInputBox {
 
         ui.fill_path(
             &Rect::new(bx, by, bw, bh).rounded(0.008),
-            Color::new(0.35, 0.5, 1.0, c.a * 0.8),
+            Color::new(0.35, 0.5, 1.0, t),
         );
         ui.fill_path(
             &Rect::new(bx + 0.002, by + 0.002, bw - 0.004, bh - 0.004).rounded(0.006),
-            Color::new(0.15, 0.15, 0.18, c.a),
+            Color::new(0.15, 0.15, 0.18, t),
         );
 
         let line_h = ui.text("0").size(0.42).measure().h;
@@ -523,11 +523,11 @@ impl InlineInputBox {
                 .anchor(0.0, 0.5)
                 .no_baseline()
                 .size(0.42)
-                .color(Color::new(1.0, 1.0, 1.0, c.a * 0.3))
+                .color(Color::new(1.0, 1.0, 1.0, t * 0.3))
                 .draw();
             let cursor_x = text_x;
             let cursor_y = by + 0.01;
-            ui.fill_rect(Rect::new(cursor_x, cursor_y, 0.003, bh - 0.02), Color::new(1.0, 1.0, 1.0, c.a * 0.9));
+            ui.fill_rect(Rect::new(cursor_x, cursor_y, 0.003, bh - 0.02), Color::new(1.0, 1.0, 1.0, t * 0.9));
             self.update_ime(ui, (cursor_x, text_y - line_h * 0.5));
             self.state.cursor_positions.clear();
             self.state.cursor_positions.push(ui.to_global((cursor_x, text_y)));
@@ -599,7 +599,7 @@ impl InlineInputBox {
                         let x = text_x_adj + start_w;
                         let w = end_w - start_w;
                         if w > 0.0 {
-                            ui.fill_rect(Rect::new(x, y, w, line_h + 0.01), Color::new(0.3, 0.5, 1.0, c.a * 0.3));
+                            ui.fill_rect(Rect::new(x, y, w, line_h + 0.01), Color::new(0.3, 0.5, 1.0, t * 0.3));
                         }
                     }
 
@@ -609,11 +609,11 @@ impl InlineInputBox {
             ui.text(&self.buffer)
                 .pos(text_x_adj, text_y_adj)
                 .size(0.42)
-                .color(Color::new(1.0, 1.0, 1.0, c.a))
+                .color(Color::new(1.0, 1.0, 1.0, t))
                 .multiline()
                 .draw();
             let cx = text_x_adj + cursor_w;
-            ui.fill_rect(Rect::new(cx, cursor_y_adj, 0.003, line_h + 0.01), Color::new(1.0, 1.0, 1.0, c.a * 0.9));
+            ui.fill_rect(Rect::new(cx, cursor_y_adj, 0.003, line_h + 0.01), Color::new(1.0, 1.0, 1.0, t * 0.9));
             self.update_ime(ui, (cx, cursor_y_adj + 0.002));
             self.state.cursor_positions.clear();
             let chars_count = self.buffer.chars().count();
@@ -665,17 +665,17 @@ impl InlineInputBox {
                 let sel_end_w = ui.text(end_before).size(0.42).measure().w;
                 let sel_x = text_x_adj + sel_start_w;
                 let sel_w = sel_end_w - sel_start_w;
-                ui.fill_rect(Rect::new(sel_x, by + 0.01, sel_w, bh - 0.02), Color::new(0.3, 0.5, 1.0, c.a * 0.3));
+                ui.fill_rect(Rect::new(sel_x, by + 0.01, sel_w, bh - 0.02), Color::new(0.3, 0.5, 1.0, t * 0.3));
             }
             ui.text(&self.buffer)
                 .pos(text_x_adj, text_y)
                 .anchor(0.0, 0.5)
                 .no_baseline()
                 .size(0.42)
-                .color(Color::new(1.0, 1.0, 1.0, c.a))
+                .color(Color::new(1.0, 1.0, 1.0, t))
                 .draw();
             let cx = text_x_adj + cursor_w;
-            ui.fill_rect(Rect::new(cx, by + 0.01, 0.003, bh - 0.02), Color::new(1.0, 1.0, 1.0, c.a * 0.9));
+            ui.fill_rect(Rect::new(cx, by + 0.01, 0.003, bh - 0.02), Color::new(1.0, 1.0, 1.0, t * 0.9));
             self.update_ime(ui, (cx, text_y - line_h * 0.5));
             self.state.cursor_positions.clear();
             let chars_count = self.buffer.chars().count();
