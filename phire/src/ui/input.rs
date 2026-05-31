@@ -152,9 +152,7 @@ impl InlineInputBox {
         if is_mouse_button_down(MouseButton::Left) || is_mouse_button_released(MouseButton::Left) {
             match touch.phase {
                 TouchPhase::Moved => {
-                    if in_rect {
-                        self.state.cursor = cursor;
-                    }
+                    self.state.cursor = cursor;
                     false
                 }
                 TouchPhase::Stationary | TouchPhase::Ended | TouchPhase::Cancelled => {
@@ -181,42 +179,40 @@ impl InlineInputBox {
                     !in_rect
                 }
                 TouchPhase::Moved => {
-                    if in_rect {
-                        let dx = p.x - self.state.touch_start_pos.0;
-                        let dy = p.y - self.state.touch_start_pos.1;
-                        let dist = (dx * dx + dy * dy).sqrt();
-                        let dt = get_time() - self.state.touch_start_time;
+                    let dx = p.x - self.state.touch_start_pos.0;
+                    let dy = p.y - self.state.touch_start_pos.1;
+                    let dist = (dx * dx + dy * dy).sqrt();
+                    let dt = get_time() - self.state.touch_start_time;
 
-                        match self.state.touch_mode {
-                            0 => {
-                                if dist > 0.05 {
-                                    self.state.touch_mode = 1;
-                                    self.state.manual_scroll = true;
-                                } else if dt > 0.5 {
-                                    if self.selection_range().is_some() {
-                                        if let Some(text) = self.selected_text() {
-                                            clipboard_set(&text);
-                                            self.state.selection_anchor = None;
-                                        }
-                                        self.state.touch_mode = 3;
-                                    } else {
-                                        self.state.touch_mode = 2;
-                                        self.state.cursor = cursor;
-                                        self.state.selection_anchor = Some((cursor - 1).max(0));
+                    match self.state.touch_mode {
+                        0 => {
+                            if dist > 0.05 {
+                                self.state.touch_mode = 1;
+                                self.state.manual_scroll = true;
+                            } else if dt > 0.5 {
+                                if self.selection_range().is_some() {
+                                    if let Some(text) = self.selected_text() {
+                                        clipboard_set(&text);
+                                        self.state.selection_anchor = None;
                                     }
+                                    self.state.touch_mode = 3;
+                                } else {
+                                    self.state.touch_mode = 2;
+                                    self.state.cursor = cursor;
+                                    self.state.selection_anchor = Some((cursor - 1).max(0));
                                 }
                             }
-                            1 => {
-                                let dx_ui = dx * self.state.touch_scale_x;
-                                let dy_ui = dy * self.state.touch_scale_y;
-                                self.state.scroll_x = self.state.touch_start_scroll_x - dx_ui;
-                                self.state.scroll_y = self.state.touch_start_scroll_y - dy_ui;
-                            }
-                            2 => {
-                                self.state.cursor = cursor;
-                            }
-                            _ => {}
                         }
+                        1 => {
+                            let dx_ui = dx * self.state.touch_scale_x;
+                            let dy_ui = dy * self.state.touch_scale_y;
+                            self.state.scroll_x = self.state.touch_start_scroll_x - dx_ui;
+                            self.state.scroll_y = self.state.touch_start_scroll_y - dy_ui;
+                        }
+                        2 => {
+                            self.state.cursor = cursor;
+                        }
+                        _ => {}
                     }
                     false
                 }
