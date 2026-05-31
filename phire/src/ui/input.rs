@@ -36,7 +36,9 @@ struct State {
     touch_start_pos: (f32, f32),
     touch_start_time: f64,
     touch_mode: u8,
+    touch_start_scroll_x: f32,
     touch_start_scroll_y: f32,
+    touch_scale_x: f32,
     touch_scale_y: f32,
     manual_scroll: bool,
 }
@@ -173,6 +175,7 @@ impl InlineInputBox {
                         self.state.touch_start_pos = (p.x, p.y);
                         self.state.touch_start_time = get_time();
                         self.state.touch_mode = 0;
+                        self.state.touch_start_scroll_x = self.state.scroll_x;
                         self.state.touch_start_scroll_y = self.state.scroll_y;
                     }
                     !in_rect
@@ -190,13 +193,23 @@ impl InlineInputBox {
                                     self.state.touch_mode = 1;
                                     self.state.manual_scroll = true;
                                 } else if dt > 0.5 {
-                                    self.state.touch_mode = 2;
-                                    self.state.cursor = cursor;
-                                    self.state.selection_anchor = Some(cursor);
+                                    if self.selection_range().is_some() {
+                                        if let Some(text) = self.selected_text() {
+                                            clipboard_set(&text);
+                                            self.state.selection_anchor = None;
+                                        }
+                                        self.state.touch_mode = 3;
+                                    } else {
+                                        self.state.touch_mode = 2;
+                                        self.state.cursor = cursor;
+                                        self.state.selection_anchor = Some((cursor - 1).max(0));
+                                    }
                                 }
                             }
                             1 => {
+                                let dx_ui = dx * self.state.touch_scale_x;
                                 let dy_ui = dy * self.state.touch_scale_y;
+                                self.state.scroll_x = self.state.touch_start_scroll_x - dx_ui;
                                 self.state.scroll_y = self.state.touch_start_scroll_y - dy_ui;
                             }
                             2 => {
@@ -494,6 +507,7 @@ impl InlineInputBox {
 
     pub fn render(&mut self, ui: &mut Ui, rect: Rect, t: f32, placeholder: &str) {
         self.rect = ui.rect_to_global(rect);
+        self.state.touch_scale_x = if self.rect.w > 0.0 { rect.w / self.rect.w } else { 1.0 };
         self.state.touch_scale_y = if self.rect.h > 0.0 { rect.h / self.rect.h } else { 1.0 };
         let bx = rect.x;
         let by = rect.y;
