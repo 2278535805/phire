@@ -751,8 +751,7 @@ impl OtherList {
     pub fn touch(&mut self, touch: &Touch, t: f32) -> Result<Option<bool>> {
         let data = get_data_mut();
         if self.watermark_input.is_active() {
-            let submitted = self.watermark_input.touch(touch);
-            if submitted {
+            if self.watermark_input.touch(touch) {
                 let text = self.watermark_input.confirm();
                 if text.trim().is_empty() {
                     data.config.watermark = String::new();
