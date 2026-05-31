@@ -316,18 +316,18 @@ impl Fader {
     pub fn render_title(&mut self, ui: &mut Ui, painter: &mut TextPainter, t: f32, s: &str) {
         let tp = -ui.top + 0.08;
         let h = ui.text("L").size(1.4).no_baseline().measure().h;
-        ui.scissor(Some(Rect::new(-1., tp, 2., h)));
-        let p = self.progress(t);
-        let tp = tp + h * p;
-        for (i, c) in s.chars().enumerate() {
-            ui.text(c.to_string())
-                .pos(-0.8 + i as f32 * 0.117, tp)
-                .anchor(0.5, 0.)
-                .size(1.4)
-                .color(Color::new(1., 1., 1., 0.4))
-                .draw_with_font(Some(painter));
-        }
-        ui.scissor(None);
+        ui.scissor(Rect::new(-1., tp, 2., h), |ui| {
+            let p = self.progress(t);
+            let tp = tp + h * p;
+            for (i, c) in s.chars().enumerate() {
+                ui.text(c.to_string())
+                    .pos(-0.8 + i as f32 * 0.117, tp)
+                    .anchor(0.5, 0.)
+                    .size(1.4)
+                    .color(Color::new(1., 1., 1., 0.4))
+                    .draw_with_font(Some(painter));
+            }
+        });
     }
 }
 

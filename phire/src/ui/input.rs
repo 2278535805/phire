@@ -514,178 +514,177 @@ impl InlineInputBox {
         let max_w = bw - 0.04;
         let max_h = bh - 0.04;
         let clip = Rect::new(bx + 0.002, by + 0.002, bw - 0.004, bh - 0.004);
-        let saved = ui.scissor_state();
-        ui.scissor(Some(clip));
-        if self.buffer.is_empty() {
-            let text_y = by + bh / 2.0;
-            ui.text(placeholder)
-                .pos(text_x, text_y)
-                .anchor(0.0, 0.5)
-                .no_baseline()
-                .size(0.42)
-                .color(Color::new(1.0, 1.0, 1.0, t * 0.3))
-                .draw();
-            let cursor_x = text_x;
-            let cursor_y = by + 0.01;
-            ui.fill_rect(Rect::new(cursor_x, cursor_y, 0.003, bh - 0.02), Color::new(1.0, 1.0, 1.0, t * 0.9));
-            self.update_ime(ui, (cursor_x, text_y - line_h * 0.5));
-            self.state.cursor_positions.clear();
-            self.state.cursor_positions.push(ui.to_global((cursor_x, text_y)));
-        } else if self.multiline {
-            let text_y = by + 0.02;
-            let line_h_with_space = ui.text("0\n0").size(0.42).multiline().measure().h - ui.text("0").size(0.42).measure().h;
-            let before = self.text_before();
-            let line_start = before.rfind('\n').map(|i| i + 1).unwrap_or(0);
-            let cursor_line_text = &before[line_start..];
-            let line_num = before.chars().filter(|c| *c == '\n').count() as f32;
-            let cursor_w = ui.text(cursor_line_text).size(0.42).multiline().measure().w;
-            let cursor_y = line_num * line_h_with_space;
-            let full_text = ui.text(&self.buffer).size(0.42).multiline().measure();
-            let text_x_adj = if full_text.w > max_w {
-                let margin = max_w * 0.1;
-                let lo = (cursor_w - max_w + margin).max(0.0);
-                let hi = (cursor_w - margin).max(0.0).min(full_text.w - max_w);
-                if lo <= hi {
-                    self.state.scroll_x = self.state.scroll_x.clamp(lo, hi);
-                } else {
-                    self.state.scroll_x = hi;
-                }
-                text_x - self.state.scroll_x
-            } else {
-                self.state.scroll_x = 0.0;
-                text_x
-            };
-            let text_y_adj = if full_text.h > max_h {
-                if self.state.manual_scroll {
-                    let max_scroll = (full_text.h - max_h).max(0.0);
-                    self.state.scroll_y = self.state.scroll_y.clamp(0.0, max_scroll);
-                } else {
-                    let margin = max_h * 0.1;
-                    let lo = (cursor_y + line_h - max_h + margin).max(0.0);
-                    let hi = (cursor_y - margin).max(0.0).min(full_text.h - max_h);
+        ui.scissor(clip, |ui| {
+            if self.buffer.is_empty() {
+                let text_y = by + bh / 2.0;
+                ui.text(placeholder)
+                    .pos(text_x, text_y)
+                    .anchor(0.0, 0.5)
+                    .no_baseline()
+                    .size(0.42)
+                    .color(Color::new(1.0, 1.0, 1.0, t * 0.3))
+                    .draw();
+                let cursor_x = text_x;
+                let cursor_y = by + 0.01;
+                ui.fill_rect(Rect::new(cursor_x, cursor_y, 0.003, bh - 0.02), Color::new(1.0, 1.0, 1.0, t * 0.9));
+                self.update_ime(ui, (cursor_x, text_y - line_h * 0.5));
+                self.state.cursor_positions.clear();
+                self.state.cursor_positions.push(ui.to_global((cursor_x, text_y)));
+            } else if self.multiline {
+                let text_y = by + 0.02;
+                let line_h_with_space = ui.text("0\n0").size(0.42).multiline().measure().h - ui.text("0").size(0.42).measure().h;
+                let before = self.text_before();
+                let line_start = before.rfind('\n').map(|i| i + 1).unwrap_or(0);
+                let cursor_line_text = &before[line_start..];
+                let line_num = before.chars().filter(|c| *c == '\n').count() as f32;
+                let cursor_w = ui.text(cursor_line_text).size(0.42).multiline().measure().w;
+                let cursor_y = line_num * line_h_with_space;
+                let full_text = ui.text(&self.buffer).size(0.42).multiline().measure();
+                let text_x_adj = if full_text.w > max_w {
+                    let margin = max_w * 0.1;
+                    let lo = (cursor_w - max_w + margin).max(0.0);
+                    let hi = (cursor_w - margin).max(0.0).min(full_text.w - max_w);
                     if lo <= hi {
-                        self.state.scroll_y = self.state.scroll_y.clamp(lo, hi);
+                        self.state.scroll_x = self.state.scroll_x.clamp(lo, hi);
                     } else {
-                        self.state.scroll_y = hi;
+                        self.state.scroll_x = hi;
                     }
-                }
-                text_y - self.state.scroll_y
-            } else {
-                self.state.scroll_y = 0.0;
-                text_y
-            };
-            let cursor_y_adj = text_y_adj + line_num * line_h_with_space;
-            if let Some((sel_start, sel_end)) = self.selection_range() {
-                let mut char_offset = 0usize;
-                for (line_idx, line) in self.buffer.split('\n').enumerate() {
-                    let line_len = line.chars().count();
-                    let line_char_start = char_offset;
-                    let line_char_end = char_offset + line_len;
-
-                    let overlap_start = sel_start.max(line_char_start).min(line_char_end);
-                    let overlap_end = sel_end.max(line_char_start).min(line_char_end);
-
-                    if overlap_start < overlap_end {
-                        let sel_start_in_line = overlap_start - line_char_start;
-                        let sel_end_in_line = overlap_end - line_char_start;
-
-                        let start_byte = line.char_indices().nth(sel_start_in_line).map(|(i, _)| i).unwrap_or(line.len());
-                        let end_byte = line.char_indices().nth(sel_end_in_line).map(|(i, _)| i).unwrap_or(line.len());
-
-                        let start_w = if start_byte == 0 { 0.0 } else { ui.text(&line[..start_byte]).size(0.42).multiline().measure().w };
-                        let end_w = if end_byte == 0 { 0.0 } else { ui.text(&line[..end_byte]).size(0.42).multiline().measure().w };
-
-                        let y = text_y_adj + line_idx as f32 * line_h_with_space;
-                        let x = text_x_adj + start_w;
-                        let w = end_w - start_w;
-                        if w > 0.0 {
-                            ui.fill_rect(Rect::new(x, y, w, line_h + 0.01), Color::new(0.3, 0.5, 1.0, t * 0.3));
+                    text_x - self.state.scroll_x
+                } else {
+                    self.state.scroll_x = 0.0;
+                    text_x
+                };
+                let text_y_adj = if full_text.h > max_h {
+                    if self.state.manual_scroll {
+                        let max_scroll = (full_text.h - max_h).max(0.0);
+                        self.state.scroll_y = self.state.scroll_y.clamp(0.0, max_scroll);
+                    } else {
+                        let margin = max_h * 0.1;
+                        let lo = (cursor_y + line_h - max_h + margin).max(0.0);
+                        let hi = (cursor_y - margin).max(0.0).min(full_text.h - max_h);
+                        if lo <= hi {
+                            self.state.scroll_y = self.state.scroll_y.clamp(lo, hi);
+                        } else {
+                            self.state.scroll_y = hi;
                         }
                     }
+                    text_y - self.state.scroll_y
+                } else {
+                    self.state.scroll_y = 0.0;
+                    text_y
+                };
+                let cursor_y_adj = text_y_adj + line_num * line_h_with_space;
+                if let Some((sel_start, sel_end)) = self.selection_range() {
+                    let mut char_offset = 0usize;
+                    for (line_idx, line) in self.buffer.split('\n').enumerate() {
+                        let line_len = line.chars().count();
+                        let line_char_start = char_offset;
+                        let line_char_end = char_offset + line_len;
 
-                    char_offset += line_len + 1;
-                }
-            }
-            ui.text(&self.buffer)
-                .pos(text_x_adj, text_y_adj)
-                .size(0.42)
-                .color(Color::new(1.0, 1.0, 1.0, t))
-                .multiline()
-                .draw();
-            let cx = text_x_adj + cursor_w;
-            ui.fill_rect(Rect::new(cx, cursor_y_adj, 0.003, line_h + 0.01), Color::new(1.0, 1.0, 1.0, t * 0.9));
-            self.update_ime(ui, (cx, cursor_y_adj + 0.002));
-            self.state.cursor_positions.clear();
-            let chars_count = self.buffer.chars().count();
-            let mut line_num_cur = 0usize;
-            let mut line_start_byte = 0usize;
-            for i in 0..=chars_count {
-                if i > 0 {
-                    let prev_byte = self.byte_at(i - 1);
-                    if self.buffer.as_bytes()[prev_byte] == b'\n' {
-                        line_num_cur += 1;
-                        line_start_byte = prev_byte + 1;
+                        let overlap_start = sel_start.max(line_char_start).min(line_char_end);
+                        let overlap_end = sel_end.max(line_char_start).min(line_char_end);
+
+                        if overlap_start < overlap_end {
+                            let sel_start_in_line = overlap_start - line_char_start;
+                            let sel_end_in_line = overlap_end - line_char_start;
+
+                            let start_byte = line.char_indices().nth(sel_start_in_line).map(|(i, _)| i).unwrap_or(line.len());
+                            let end_byte = line.char_indices().nth(sel_end_in_line).map(|(i, _)| i).unwrap_or(line.len());
+
+                            let start_w = if start_byte == 0 { 0.0 } else { ui.text(&line[..start_byte]).size(0.42).multiline().measure().w };
+                            let end_w = if end_byte == 0 { 0.0 } else { ui.text(&line[..end_byte]).size(0.42).multiline().measure().w };
+
+                            let y = text_y_adj + line_idx as f32 * line_h_with_space;
+                            let x = text_x_adj + start_w;
+                            let w = end_w - start_w;
+                            if w > 0.0 {
+                                ui.fill_rect(Rect::new(x, y, w, line_h + 0.01), Color::new(0.3, 0.5, 1.0, t * 0.3));
+                            }
+                        }
+
+                        char_offset += line_len + 1;
                     }
                 }
-                let byte_pos = self.byte_at(i);
-                let line_text = &self.buffer[line_start_byte..byte_pos];
-                let w = if line_text.is_empty() {
-                    0.0
-                } else {
-                    ui.text(line_text).size(0.42).multiline().measure().w
-                };
-                let x = text_x_adj + w;
-                let y = text_y_adj + line_num_cur as f32 * line_h_with_space;
-                self.state.cursor_positions.push(ui.to_global((x, y)));
-            }
-        } else {
-            let text_y = by + bh / 2.0;
-            let before = self.text_before();
-            let cursor_w = ui.text(before).size(0.42).measure().w;
-            let full_w = ui.text(&self.buffer).size(0.42).measure().w;
-            let text_x_adj = if full_w > max_w {
-                let margin = max_w * 0.1;
-                let lo = (cursor_w - max_w + margin).max(0.0);
-                let hi = (cursor_w - margin).max(0.0).min(full_w - max_w);
-                if lo <= hi {
-                    self.state.scroll_x = self.state.scroll_x.clamp(lo, hi);
-                } else {
-                    self.state.scroll_x = hi;
+                ui.text(&self.buffer)
+                    .pos(text_x_adj, text_y_adj)
+                    .size(0.42)
+                    .color(Color::new(1.0, 1.0, 1.0, t))
+                    .multiline()
+                    .draw();
+                let cx = text_x_adj + cursor_w;
+                ui.fill_rect(Rect::new(cx, cursor_y_adj, 0.003, line_h + 0.01), Color::new(1.0, 1.0, 1.0, t * 0.9));
+                self.update_ime(ui, (cx, cursor_y_adj + 0.002));
+                self.state.cursor_positions.clear();
+                let chars_count = self.buffer.chars().count();
+                let mut line_num_cur = 0usize;
+                let mut line_start_byte = 0usize;
+                for i in 0..=chars_count {
+                    if i > 0 {
+                        let prev_byte = self.byte_at(i - 1);
+                        if self.buffer.as_bytes()[prev_byte] == b'\n' {
+                            line_num_cur += 1;
+                            line_start_byte = prev_byte + 1;
+                        }
+                    }
+                    let byte_pos = self.byte_at(i);
+                    let line_text = &self.buffer[line_start_byte..byte_pos];
+                    let w = if line_text.is_empty() {
+                        0.0
+                    } else {
+                        ui.text(line_text).size(0.42).multiline().measure().w
+                    };
+                    let x = text_x_adj + w;
+                    let y = text_y_adj + line_num_cur as f32 * line_h_with_space;
+                    self.state.cursor_positions.push(ui.to_global((x, y)));
                 }
-                text_x - self.state.scroll_x
             } else {
-                self.state.scroll_x = 0.0;
-                text_x
-            };
-            // Draw selection highlight
-            if let Some((sel_start, sel_end)) = self.selection_range() {
-                let start_before = &self.buffer[..self.byte_at(sel_start)];
-                let end_before = &self.buffer[..self.byte_at(sel_end)];
-                let sel_start_w = ui.text(start_before).size(0.42).measure().w;
-                let sel_end_w = ui.text(end_before).size(0.42).measure().w;
-                let sel_x = text_x_adj + sel_start_w;
-                let sel_w = sel_end_w - sel_start_w;
-                ui.fill_rect(Rect::new(sel_x, by + 0.01, sel_w, bh - 0.02), Color::new(0.3, 0.5, 1.0, t * 0.3));
+                let text_y = by + bh / 2.0;
+                let before = self.text_before();
+                let cursor_w = ui.text(before).size(0.42).measure().w;
+                let full_w = ui.text(&self.buffer).size(0.42).measure().w;
+                let text_x_adj = if full_w > max_w {
+                    let margin = max_w * 0.1;
+                    let lo = (cursor_w - max_w + margin).max(0.0);
+                    let hi = (cursor_w - margin).max(0.0).min(full_w - max_w);
+                    if lo <= hi {
+                        self.state.scroll_x = self.state.scroll_x.clamp(lo, hi);
+                    } else {
+                        self.state.scroll_x = hi;
+                    }
+                    text_x - self.state.scroll_x
+                } else {
+                    self.state.scroll_x = 0.0;
+                    text_x
+                };
+                // Draw selection highlight
+                if let Some((sel_start, sel_end)) = self.selection_range() {
+                    let start_before = &self.buffer[..self.byte_at(sel_start)];
+                    let end_before = &self.buffer[..self.byte_at(sel_end)];
+                    let sel_start_w = ui.text(start_before).size(0.42).measure().w;
+                    let sel_end_w = ui.text(end_before).size(0.42).measure().w;
+                    let sel_x = text_x_adj + sel_start_w;
+                    let sel_w = sel_end_w - sel_start_w;
+                    ui.fill_rect(Rect::new(sel_x, by + 0.01, sel_w, bh - 0.02), Color::new(0.3, 0.5, 1.0, t * 0.3));
+                }
+                ui.text(&self.buffer)
+                    .pos(text_x_adj, text_y)
+                    .anchor(0.0, 0.5)
+                    .no_baseline()
+                    .size(0.42)
+                    .color(Color::new(1.0, 1.0, 1.0, t))
+                    .draw();
+                let cx = text_x_adj + cursor_w;
+                ui.fill_rect(Rect::new(cx, by + 0.01, 0.003, bh - 0.02), Color::new(1.0, 1.0, 1.0, t * 0.9));
+                self.update_ime(ui, (cx, text_y - line_h * 0.5));
+                self.state.cursor_positions.clear();
+                let chars_count = self.buffer.chars().count();
+                for i in 0..=chars_count {
+                    let before_i = &self.buffer[..self.byte_at(i)];
+                    let w = ui.text(before_i).size(0.42).measure().w;
+                    let x = text_x_adj + w;
+                    self.state.cursor_positions.push(ui.to_global((x, text_y)));
+                }
             }
-            ui.text(&self.buffer)
-                .pos(text_x_adj, text_y)
-                .anchor(0.0, 0.5)
-                .no_baseline()
-                .size(0.42)
-                .color(Color::new(1.0, 1.0, 1.0, t))
-                .draw();
-            let cx = text_x_adj + cursor_w;
-            ui.fill_rect(Rect::new(cx, by + 0.01, 0.003, bh - 0.02), Color::new(1.0, 1.0, 1.0, t * 0.9));
-            self.update_ime(ui, (cx, text_y - line_h * 0.5));
-            self.state.cursor_positions.clear();
-            let chars_count = self.buffer.chars().count();
-            for i in 0..=chars_count {
-                let before_i = &self.buffer[..self.byte_at(i)];
-                let w = ui.text(before_i).size(0.42).measure().w;
-                let x = text_x_adj + w;
-                self.state.cursor_positions.push(ui.to_global((x, text_y)));
-            }
-        }
-        ui.restore_scissor(saved);
+        });
     }
 }

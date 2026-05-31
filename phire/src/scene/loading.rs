@@ -241,9 +241,9 @@ impl Scene for LoadingScene {
         let mut r = Rect::new(r.x + r.w * st, r.y, r.w * (en - st), r.h);
         ui.fill_rect(r, WHITE);
         r.x += dx as f32;
-        ui.scissor(Some(r));
-        draw_text_aligned(ui, text_loading, 0.865, top * 0.865, (1., 1.), 0.41, BLACK);
-        ui.scissor(None);
+        ui.scissor(r, |ui| {
+            draw_text_aligned(ui, text_loading, 0.865, top * 0.865, (1., 1.), 0.41, BLACK);
+        });
 
         if dx != 0. {
             gl.pop_model_matrix();

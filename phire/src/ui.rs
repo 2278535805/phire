@@ -553,6 +553,7 @@ pub struct Ui<'a> {
     pub text_painter: &'a mut TextPainter,
 
     model_stack: Vec<Matrix>,
+    scissor: Option<(i32, i32, i32, i32)>,
     touches: Option<Vec<Touch>>,
 
     vertex_buffers: VertexBuffers<Vertex, u16>,
@@ -577,6 +578,7 @@ impl<'a> Ui<'a> {
             text_painter,
 
             model_stack: vec![Matrix::identity()],
+            scissor: None,
             touches: None,
 
             vertex_buffers: VertexBuffers::new(),
@@ -778,34 +780,36 @@ impl<'a> Ui<'a> {
         res
     }
 
-    pub fn scissor(&mut self, rect: Option<Rect>) {
-        let InternalGlContext { quad_context, quad_gl } = unsafe { get_internal_gl() };
-        if let Some(rect) = rect {
-            let rect = self.rect_to_global(rect);
-            let vp = get_viewport();
-            let screen_height = quad_gl
-                .get_active_render_pass()
-                .map(|it| {
-                    let tex = quad_context.render_pass_texture(it);
-                    quad_context.texture_size(tex).1 as f32
-                })
-                .unwrap_or_else(screen_height);
-            let pt = (
-                vp.0 as f32 + (rect.x + 1.) / 2. * vp.2 as f32,
-                (screen_height - (vp.1 + vp.3) as f32) + (rect.y * vp.2 as f32 / vp.3 as f32 + 1.) / 2. * vp.3 as f32,
-            );
-            quad_gl.scissor(Some((pt.0 as _, pt.1 as _, (rect.w * vp.2 as f32 / 2.) as _, (rect.h * vp.2 as f32 / 2.) as _)));
-        } else {
-            quad_gl.scissor(None);
-        }
-    }
+    pub fn scissor<R>(&mut self, rect: Rect, f: impl FnOnce(&mut Ui) -> R) -> R {
+        let igl = unsafe { get_internal_gl() };
+        let gl = igl.quad_gl;
+        let rect = self.rect_to_global(rect);
+        let vp = get_viewport();
+        let pt = (
+            vp.0 as f32 + (rect.x + 1.) / 2. * vp.2 as f32,
+            (screen_height() - (vp.1 + vp.3) as f32) + (rect.y * vp.2 as f32 / vp.3 as f32 + 1.) / 2. * vp.3 as f32,
+        );
 
-    pub fn scissor_state(&self) -> Option<(i32, i32, i32, i32)> {
-        unsafe { get_internal_gl() }.quad_gl.get_scissor()
-    }
+        let old = self.scissor;
+        self.scissor = {
+            let mut l = pt.0 as i32;
+            let mut t = pt.1 as i32;
+            let mut r = (pt.0 + rect.w * vp.2 as f32 / 2.) as i32;
+            let mut b = (pt.1 + rect.h * vp.2 as f32 / 2.) as i32;
+            if let Some((l0, t0, w0, h0)) = old {
+                l = l.max(l0);
+                t = t.max(t0);
+                r = r.min(l0 + w0);
+                b = b.min(t0 + h0);
+            }
+            Some((l, t, r - l, b - t))
+        };
 
-    pub fn restore_scissor(&mut self, state: Option<(i32, i32, i32, i32)>) {
-        unsafe { get_internal_gl() }.quad_gl.scissor(state);
+        gl.scissor(self.scissor);
+        let res = f(self);
+        self.scissor = old;
+        gl.scissor(old);
+        res
     }
 
     pub fn text<'s, 'ui>(&'ui mut self, text: impl Into<Cow<'s, str>>) -> DrawText<'a, 's, 'ui> {

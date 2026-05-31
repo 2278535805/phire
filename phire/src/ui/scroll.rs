@@ -327,11 +327,11 @@ impl Scroll {
 
     pub fn render(&mut self, ui: &mut Ui, content: impl FnOnce(&mut Ui) -> (f32, f32)) {
         self.matrix = Some(ui.get_matrix().try_inverse().unwrap());
-        ui.scissor(Some(Rect::new(0., 0., self.size.0, self.size.1)));
-        let s = ui.with(Translation2::new(-self.x_scroller.offset, -self.y_scroller.offset).to_homogeneous(), content);
-        ui.scissor(None);
-        self.x_scroller.size((s.0 - self.size.0).max(0.));
-        self.y_scroller.size((s.1 - self.size.1).max(0.));
+        ui.scissor(Rect::new(0., 0., self.size.0, self.size.1), |ui| {
+            let s = ui.with(Translation2::new(-self.x_scroller.offset, -self.y_scroller.offset).to_homogeneous(), content);
+            self.x_scroller.size((s.0 - self.size.0).max(0.));
+            self.y_scroller.size((s.1 - self.size.1).max(0.));
+        });
     }
 
     pub fn size(&mut self, size: (f32, f32)) {
