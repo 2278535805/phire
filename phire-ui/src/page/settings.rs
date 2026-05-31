@@ -138,7 +138,6 @@ impl Page for SettingsPage {
 
     fn update(&mut self, s: &mut SharedState) -> Result<()> {
         let t = s.t;
-        self.scroll.update(t);
         if match self.chosen {
             SettingListType::General => self.list_general.update(t)?,
             SettingListType::Audio => self.list_audio.update(t)?,
@@ -148,6 +147,7 @@ impl Page for SettingsPage {
         } {
             self.save_time = t;
         }
+        self.scroll.update(t);
         if t > self.save_time + Self::SAVE_TIME {
             save_data()?;
             self.save_time = f32::INFINITY;

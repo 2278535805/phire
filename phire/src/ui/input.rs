@@ -1,6 +1,6 @@
 use super::Ui;
 use crate::{
-    ext::RectExt,
+    ext::RectExt, judge::take_wheel, ui::scroll::WHEEL_STEP,
 };
 use macroquad::{
     input::Touch,
@@ -32,6 +32,13 @@ struct State {
     cursor_positions: Vec<(f32, f32)>,
     scroll_x: f32,
     scroll_y: f32,
+
+    touch_start_pos: (f32, f32),
+    touch_start_time: f64,
+    touch_mode: u8,
+    touch_start_scroll_y: f32,
+    touch_scale_y: f32,
+    manual_scroll: bool,
 }
 
 impl InlineInputBox {
@@ -53,8 +60,11 @@ impl InlineInputBox {
         self.state.backspace_time = None;
         self.state.scroll_x = 0.0;
         self.state.scroll_y = 0.0;
+        self.state.manual_scroll = false;
         miniquad::window::set_ime_enabled(true);
         miniquad::window::show_keyboard(true);
+
+        while get_char_pressed().is_some() {}
     }
 
     pub fn is_active(&self) -> bool {
@@ -137,22 +147,76 @@ impl InlineInputBox {
         let p = touch.position;
         let in_rect = self.rect.contains(p);
         let cursor = self.find_nearest_cursor(p.x, p.y);
-        match touch.phase {
-            TouchPhase::Moved => {
-                if in_rect {
-                    self.state.cursor = cursor;
+        if is_mouse_button_down(MouseButton::Left) || is_mouse_button_released(MouseButton::Left) {
+            match touch.phase {
+                TouchPhase::Moved => {
+                    if in_rect {
+                        self.state.cursor = cursor;
+                    }
+                    false
                 }
-                false
-            }
-            TouchPhase::Stationary | TouchPhase::Ended | TouchPhase::Cancelled => {
-                false
-            }
-            TouchPhase::Started => {
-                if in_rect {
-                    self.state.cursor = cursor;
-                    self.state.selection_anchor = Some(cursor);
+                TouchPhase::Stationary | TouchPhase::Ended | TouchPhase::Cancelled => {
+                    false
                 }
-                !in_rect
+                TouchPhase::Started => {
+                    if in_rect {
+                        self.state.cursor = cursor;
+                        self.state.selection_anchor = Some(cursor);
+                    }
+                    !in_rect
+                }
+            }
+        } else {
+            match touch.phase {
+                TouchPhase::Started => {
+                    if in_rect {
+                        self.state.touch_start_pos = (p.x, p.y);
+                        self.state.touch_start_time = get_time();
+                        self.state.touch_mode = 0;
+                        self.state.touch_start_scroll_y = self.state.scroll_y;
+                    }
+                    !in_rect
+                }
+                TouchPhase::Moved => {
+                    if in_rect {
+                        let dx = p.x - self.state.touch_start_pos.0;
+                        let dy = p.y - self.state.touch_start_pos.1;
+                        let dist = (dx * dx + dy * dy).sqrt();
+                        let dt = get_time() - self.state.touch_start_time;
+
+                        match self.state.touch_mode {
+                            0 => {
+                                if dist > 0.05 {
+                                    self.state.touch_mode = 1;
+                                    self.state.manual_scroll = true;
+                                } else if dt > 0.5 {
+                                    self.state.touch_mode = 2;
+                                    self.state.cursor = cursor;
+                                    self.state.selection_anchor = Some(cursor);
+                                }
+                            }
+                            1 => {
+                                let dy_ui = dy * self.state.touch_scale_y;
+                                self.state.scroll_y = self.state.touch_start_scroll_y - dy_ui;
+                            }
+                            2 => {
+                                self.state.cursor = cursor;
+                            }
+                            _ => {}
+                        }
+                    }
+                    false
+                }
+                TouchPhase::Ended | TouchPhase::Cancelled => {
+                    if self.state.touch_mode == 0 && in_rect {
+                        self.state.cursor = cursor;
+                        self.state.selection_anchor = None;
+                        self.state.manual_scroll = false;
+                    }
+                    self.state.touch_mode = 0;
+                    false
+                }
+                _ => false,
             }
         }
     }
@@ -416,10 +480,21 @@ impl InlineInputBox {
         if is_key_pressed(KeyCode::Escape) {
             self.cancel();
         }
+
+        // Mouse wheel
+        if self.multiline {
+            let (x, y) = take_wheel();
+            if x.abs() > 1e-5 || y.abs() > 1e-5 {
+                self.state.scroll_x -= x * WHEEL_STEP;
+                self.state.scroll_y -= y * WHEEL_STEP;
+                self.state.manual_scroll = true;
+            }
+        }
     }
 
     pub fn render(&mut self, ui: &mut Ui, rect: Rect, c: Color, placeholder: &str) {
         self.rect = ui.rect_to_global(rect);
+        self.state.touch_scale_y = if self.rect.h > 0.0 { rect.h / self.rect.h } else { 1.0 };
         let bx = rect.x;
         let by = rect.y;
         let bw = rect.w;
@@ -481,13 +556,18 @@ impl InlineInputBox {
                 text_x
             };
             let text_y_adj = if full_text.h > max_h {
-                let margin = max_h * 0.1;
-                let lo = (cursor_y + line_h - max_h + margin).max(0.0);
-                let hi = (cursor_y - margin).max(0.0).min(full_text.h - max_h);
-                if lo <= hi {
-                    self.state.scroll_y = self.state.scroll_y.clamp(lo, hi);
+                if self.state.manual_scroll {
+                    let max_scroll = (full_text.h - max_h).max(0.0);
+                    self.state.scroll_y = self.state.scroll_y.clamp(0.0, max_scroll);
                 } else {
-                    self.state.scroll_y = hi;
+                    let margin = max_h * 0.1;
+                    let lo = (cursor_y + line_h - max_h + margin).max(0.0);
+                    let hi = (cursor_y - margin).max(0.0).min(full_text.h - max_h);
+                    if lo <= hi {
+                        self.state.scroll_y = self.state.scroll_y.clamp(lo, hi);
+                    } else {
+                        self.state.scroll_y = hi;
+                    }
                 }
                 text_y - self.state.scroll_y
             } else {

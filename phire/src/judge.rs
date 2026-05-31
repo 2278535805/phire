@@ -292,7 +292,12 @@ pub struct Judge {
 
 static SUBSCRIBER_ID: Lazy<usize> = Lazy::new(register_input_subscriber);
 thread_local! {
-    static TOUCHES: RefCell<(Vec<Touch>, i32, u32)> = RefCell::default();
+    static TOUCHES: RefCell<TouchStatus> = RefCell::default();
+    static WHEEL: RefCell<(f32, f32)> = RefCell::default();
+}
+
+pub fn take_wheel() -> (f32, f32) {
+    WHEEL.with(|it| std::mem::take(&mut *it.borrow_mut()))
 }
 
 impl Judge {
@@ -346,11 +351,17 @@ impl Judge {
     }
 
     pub(crate) fn on_new_frame() {
-        let mut handler = Handler(Vec::new(), 0, 0);
+        let mut handler = Handler {
+            status: TouchStatus::default(),
+            wheel: (0., 0.),
+        };
         repeat_all_miniquad_input(&mut handler, *SUBSCRIBER_ID);
         handler.finalize();
         TOUCHES.with(|it| {
-            *it.borrow_mut() = (handler.0, handler.1, handler.2);
+            *it.borrow_mut() = handler.status;
+        });
+        WHEEL.with(|it| {
+            *it.borrow_mut() = handler.wheel;
         });
     }
 
@@ -389,7 +400,7 @@ impl Judge {
             let guard = it.borrow();
             let tr = Self::touch_transform(false, scale, 0., low_resolution_mode);
             guard
-                .0
+                .touches
                 .iter()
                 .cloned()
                 .map(|mut it| {
@@ -457,9 +468,9 @@ impl Judge {
         };
         let (events, keys_down) = TOUCHES.with(|it| {
             let guard = it.borrow();
-            (guard.0.clone(), guard.2)
+            (guard.touches.clone(), guard.keys_down)
         });
-        self.key_down_count = self.key_down_count.saturating_add_signed(TOUCHES.with(|it| it.borrow().1));
+        self.key_down_count = self.key_down_count.saturating_add_signed(TOUCHES.with(|it| it.borrow().key_delta));
         {
             fn to_local(Vec2 { x, y }: Vec2) -> Point {
                 Point::new(x / screen_width() * 2. - 1., y / screen_height() * 2. - 1.)
@@ -1061,11 +1072,21 @@ impl Judge {
     }
 }
 
-struct Handler(Vec<Touch>, i32, u32);
+#[derive(Default)]
+struct TouchStatus {
+    touches: Vec<Touch>,
+    key_delta: i32,
+    keys_down: u32,
+}
+
+struct Handler {
+    status: TouchStatus,
+    wheel: (f32, f32),
+}
 impl Handler {
     fn finalize(&mut self) {
         if is_mouse_button_down(MouseButton::Left) {
-            self.0.push(Touch {
+            self.status.touches.push(Touch {
                 id: button_to_id(MouseButton::Left),
                 phase: TouchPhase::Moved,
                 position: mouse_position().into(),
@@ -1089,7 +1110,7 @@ impl EventHandler for Handler {
     fn update(&mut self) {}
     fn draw(&mut self) {}
     fn touch_event(&mut self, phase: miniquad::TouchPhase, id: u64, x: f32, y: f32, time: f64) {
-        self.0.push(Touch {
+        self.status.touches.push(Touch {
             id,
             phase: phase.into(),
             position: vec2(x, y),
@@ -1097,8 +1118,13 @@ impl EventHandler for Handler {
         });
     }
 
+    fn mouse_wheel_event(&mut self, x: f32, y: f32) {
+        self.wheel.0 += x;
+        self.wheel.1 += y;
+    }
+
     fn mouse_button_down_event(&mut self, button: MouseButton, x: f32, y: f32) {
-        self.0.push(Touch {
+        self.status.touches.push(Touch {
             id: button_to_id(button),
             phase: TouchPhase::Started,
             position: vec2(x, y),
@@ -1107,7 +1133,7 @@ impl EventHandler for Handler {
     }
 
     fn mouse_button_up_event(&mut self, button: MouseButton, x: f32, y: f32) {
-        self.0.push(Touch {
+        self.status.touches.push(Touch {
             id: button_to_id(button),
             phase: TouchPhase::Ended,
             position: vec2(x, y),
@@ -1117,13 +1143,13 @@ impl EventHandler for Handler {
 
     fn key_down_event(&mut self, _keycode: KeyCode, _keymods: miniquad::KeyMods, repeat: bool) {
         if !repeat {
-            self.1 += 1;
-            self.2 += 1;
+            self.status.key_delta += 1;
+            self.status.keys_down += 1;
         }
     }
 
     fn key_up_event(&mut self, _keycode: KeyCode, _keymods: miniquad::KeyMods) {
-        self.1 -= 1;
+        self.status.key_delta -= 1;
     }
 }
 
