@@ -8,7 +8,7 @@ use phire::{
     ext::{LocalTask, RectExt, SafeTexture, ScaleType, poll_future, semi_black, validate_combo},
     health::{HealthConfig, HealthType},
     l10n::{LANG_IDENTS, LANG_NAMES, LanguageIdentifier},
-    scene::{request_input, return_input, show_error, show_message, take_input},
+    scene::{show_error, show_message},
     ui::{DRectButton, InlineInputBox, Scroll, Slider, Ui},
 };
 use std::{borrow::Cow, net::ToSocketAddrs, sync::atomic::Ordering};
@@ -281,6 +281,7 @@ struct GeneralList {
     fullscreen_btn: DRectButton,
     mp_btn: DRectButton,
     mp_addr_btn: DRectButton,
+    mp_addr_input: InlineInputBox,
     anti_aliasing_btn: DRectButton,
     low_resolution_btn: DRectButton,
     insecure_btn: DRectButton,
@@ -306,6 +307,7 @@ impl GeneralList {
             fullscreen_btn: DRectButton::new(),
             mp_btn: DRectButton::new(),
             mp_addr_btn: DRectButton::new(),
+            mp_addr_input: InlineInputBox::new(),
             anti_aliasing_btn: DRectButton::new(),
             low_resolution_btn: DRectButton::new(),
             insecure_btn: DRectButton::new(),
@@ -321,6 +323,18 @@ impl GeneralList {
 
     pub fn touch(&mut self, touch: &Touch, t: f32) -> Result<Option<bool>> {
         let data = get_data_mut();
+        if self.mp_addr_input.is_active() {
+            if self.mp_addr_input.touch(touch) {
+                let text = self.mp_addr_input.confirm();
+                if let Err(err) = text.to_socket_addrs() {
+                    show_error(anyhow::Error::new(err).context(tl!("item-mp-addr-invalid")));
+                    return Ok(Some(false));
+                }
+                data.config.mp_address = text;
+                return Ok(Some(true));
+            }
+            return Ok(Some(false));
+        }
         let config = &mut data.config;
         if self.lang_btn.touch(touch, t) {
             return Ok(Some(false));
@@ -340,7 +354,7 @@ impl GeneralList {
             return Ok(Some(true));
         }
         if self.mp_addr_btn.touch(touch, t) {
-            request_input("mp_addr", &config.mp_address, tl!("item-mp-addr"));
+            self.mp_addr_input.activate(&config.mp_address, false, false);
             return Ok(Some(true));
         }
         if self.anti_aliasing_btn.touch(touch, t) {
@@ -360,24 +374,14 @@ impl GeneralList {
 
     pub fn update(&mut self, t: f32) -> Result<bool> {
         self.lang_btn.update(t);
+        if self.mp_addr_input.is_active() {
+            let _ = self.mp_addr_input.update();
+        }
         let data = get_data_mut();
         if self.lang_btn.changed() {
             data.language = Some(LANG_IDENTS[self.lang_btn.selected()].to_string());
             sync_data();
             return Ok(true);
-        }
-        if let Some((id, text)) = take_input() {
-            if id == "mp_addr" {
-                if let Err(err) = text.to_socket_addrs() {
-                    show_error(anyhow::Error::new(err).context(tl!("item-mp-addr-invalid")));
-                    return Ok(false);
-                } else {
-                    data.config.mp_address = text;
-                    return Ok(true);
-                }
-            } else {
-                return_input(id, text);
-            }
         }
         Ok(false)
     }
@@ -418,7 +422,11 @@ impl GeneralList {
         }
         item! {
             render_title(ui, c, tl!("item-mp-addr"), Some(tl!("item-mp-addr-sub")));
-            self.mp_addr_btn.render_text(ui, rr, t, c.a, &config.mp_address, 0.4, false);
+            if self.mp_addr_input.is_active() {
+                self.mp_addr_input.render(ui, rr, c.a, &tl!("item-mp-addr"));
+            } else {
+                self.mp_addr_btn.render_text(ui, rr, t, c.a, &config.mp_address, 0.4, false);
+            }
         }
         item! {
             render_title(ui, c, tl!("item-anti-aliasing"), None);
@@ -712,6 +720,7 @@ struct OtherList {
     watermark: DRectButton,
     watermark_input: InlineInputBox,
     combo_btn: DRectButton,
+    combo_input: InlineInputBox,
     roman_btn: DRectButton,
     chinese_btn: DRectButton,
     rotation_mode: DRectButton,
@@ -733,6 +742,7 @@ impl OtherList {
             watermark: DRectButton::new(),
             watermark_input: InlineInputBox::new(),
             combo_btn: DRectButton::new(),
+            combo_input: InlineInputBox::new(),
             roman_btn: DRectButton::new(),
             chinese_btn: DRectButton::new(),
             rotation_mode: DRectButton::new(),
@@ -784,6 +794,19 @@ impl OtherList {
             return Ok(Some(false));
         }
 
+        if self.combo_input.is_active() {
+            if self.combo_input.touch(touch) {
+                let text = self.combo_input.confirm();
+                if validate_combo(&text) || text.len() > 50 {
+                    show_message(tl!("not-combo")).error();
+                    return Ok(Some(false));
+                }
+                data.config.combo = text;
+                return Ok(Some(true));
+            }
+            return Ok(Some(false));
+        }
+
         let config = &mut data.config;
         if let wt @ Some(_) = self.chart_debug_line_slider.touch(touch, t, &mut config.chart_debug_line) {
             return Ok(wt);
@@ -806,7 +829,7 @@ impl OtherList {
             return Ok(Some(true));
         }
         if self.combo_btn.touch(touch, t) {
-            request_input("combo", &config.combo, tl!("item-combo"));
+            self.combo_input.activate(&config.combo, false, false);
             return Ok(Some(true));
         }
         if self.roman_btn.touch(touch, t) {
@@ -846,53 +869,14 @@ impl OtherList {
     }
 
     pub fn update(&mut self, _t: f32) -> Result<bool> {
-        let data = get_data_mut();
         if self.watermark_input.is_active() {
             self.watermark_input.update();
         }
         if self.health_mode_input.is_active() {
             self.health_mode_input.update();
         }
-        if let Some((id, text)) = take_input() {
-            if id == "watermark" {
-                data.config.watermark = text;
-                return Ok(true);
-            } else {
-                return_input(id, text);
-            }
-        }
-        if let Some((id, text)) = take_input() {
-            if id == "combo" {
-                if validate_combo(&text) || text.len() > 50 {
-                    show_message(tl!("not-combo")).error();
-                    return Ok(false);
-                }
-                data.config.combo = text;
-                return Ok(true);
-            } else {
-                return_input(id, text);
-            }
-        }
-        #[cfg(feature = "play")]
-        if let Some((id, text)) = take_input() {
-            if id == "health-mode" {
-                if text.trim().is_empty() {
-                    data.config.health_mode = None;
-                    return Ok(true);
-                }
-                match HealthConfig::from_json(&text) {
-                    Ok(health_mode) => {
-                        data.config.health_mode = Some(health_mode);
-                        return Ok(true);
-                    }
-                    Err(_) => {
-                        show_message(tl!("illegal-input")).error();
-                        return Ok(false);
-                    }
-                }
-            } else {
-                return_input(id, text);
-            }
+        if self.combo_input.is_active() {
+            self.combo_input.update();
         }
         Ok(false)
     }
@@ -941,7 +925,11 @@ impl OtherList {
         }
         item! {
             render_title(ui, c, tl!("item-combo"), None);
-            self.combo_btn.render_text(ui, rr, t, c.a, &config.combo, 0.4, false);
+            if self.combo_input.is_active() {
+                self.combo_input.render(ui, rr, c.a, &tl!("item-combo"));
+            } else {
+                self.combo_btn.render_text(ui, rr, t, c.a, &config.combo, 0.4, false);
+            }
         }
         item! {
             render_title(ui, c, tl!("item-roman"), None);
