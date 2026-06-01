@@ -526,7 +526,6 @@ impl GameScene {
         };
         let score_top = top + eps * 2.8125 - (1. - p) * 0.4;
         let score_right = aspect_ratio - margin + 0.001;
-        ui.text("AA").color(Color::new(0., 0., 0., 0.)).draw(); //Fix first text disappear
         let mut text_size = 0.71 * scale_ratio;
         let mut text = ui.text(&score).size(text_size);
         let max_width = 0.55 * aspect_ratio;
@@ -1091,18 +1090,6 @@ impl Scene for GameScene {
         }
         let time = match self.state {
             State::Starting => {
-                #[cfg(target_os = "windows")]
-                { // wtf bro. why must particles exist on Windows?
-                    let emitter_config = self.res.emitter.emitter.config.clone();
-                    let emitter_square_config = self.res.emitter.emitter_square.config.clone();
-                    self.res.emitter.emitter_square.config.rng = None;
-                    self.res.emitter.emitter.config.size = 0.0;
-                    self.res.emitter.emitter_square.config.size = 0.0;
-                    self.res.emitter.emitter.emit(vec2(0.0, 0.0), 1);
-                    self.res.emitter.emitter_square.emit(vec2(0.0, 0.0), 1);
-                    self.res.emitter.emitter.config = emitter_config;
-                    self.res.emitter.emitter_square.config = emitter_square_config;
-                }
                 if time >= Self::BEFORE_DURATION || !self.res.config.enter_animation { // wait for animation
                     self.res.alpha = 1.;
                     self.state = State::BeforeMusic;
