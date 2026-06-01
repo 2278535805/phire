@@ -627,7 +627,7 @@ impl InlineInputBox {
                         char_offset += line_len + 1;
                     }
                 }
-                ui.text(&*display)
+                ui.text(display)
                     .pos(text_x_adj, text_y_adj)
                     .size(0.42)
                     .color(Color::new(1.0, 1.0, 1.0, t))
@@ -671,8 +671,8 @@ impl InlineInputBox {
                 } else {
                     self.text_before()
                 };
-                let cursor_w = ui.text(&*display_before).size(0.42).measure().w;
-                let full_w = ui.text(&*display).size(0.42).measure().w;
+                let cursor_w = ui.text(display_before).size(0.42).measure().w;
+                let full_w = ui.text(display).size(0.42).measure().w;
                 let text_x_adj = if full_w > max_w {
                     let margin = max_w * 0.1;
                     let lo = (cursor_w - max_w + margin).max(0.0);
@@ -697,7 +697,7 @@ impl InlineInputBox {
                     let sel_w = sel_end_w - sel_start_w;
                     ui.fill_rect(Rect::new(sel_x, by + 0.01, sel_w, bh - 0.02), Color::new(0.3, 0.5, 1.0, t * 0.3));
                 }
-                ui.text(&*display)
+                ui.text(display)
                     .pos(text_x_adj, text_y)
                     .anchor(0.0, 0.5)
                     .no_baseline()
