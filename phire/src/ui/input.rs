@@ -8,6 +8,32 @@ use macroquad::{
     miniquad::window::{clipboard_get, clipboard_set},
 };
 
+const CONTEXT_MENU_MENU_W: f32 = 0.12;
+const CONTEXT_MENU_ITEM_Y: f32 = 0.04;
+
+struct ContextMenu {
+    visible: bool,
+    position: (f32, f32),
+    rect: Rect,
+    items: Vec<(Rect, &'static str)>,
+}
+
+impl Default for ContextMenu {
+    fn default() -> Self {
+        Self {
+            visible: false,
+            position: (0.0, 0.0),
+            rect: Rect::default(),
+            items: vec![
+                (Rect::default(), "全选"),
+                (Rect::default(), "复制"),
+                (Rect::default(), "剪切"),
+                (Rect::default(), "粘贴"),
+            ],
+        }
+    }
+}
+
 pub struct InlineInputBox {
     buffer: String,
     rect: Rect,
@@ -15,6 +41,7 @@ pub struct InlineInputBox {
     password: bool,
 
     state: State,
+    context_menu: ContextMenu,
 }
 
 #[derive(Default)]
@@ -51,7 +78,8 @@ impl InlineInputBox {
             rect: Rect::new(0., 0., 0., 0.),
             multiline: false,
             password: false,
-            state: State::default()
+            state: State::default(),
+            context_menu: ContextMenu::default(),
         }
     }
 
@@ -81,6 +109,7 @@ impl InlineInputBox {
         self.buffer.clear();
         self.state.selection_anchor = None;
         self.state.backspace_time = None;
+        self.context_menu.visible = false;
         miniquad::window::set_ime_enabled(false);
         miniquad::window::show_keyboard(false);
     }
@@ -89,6 +118,7 @@ impl InlineInputBox {
         self.state.active = false;
         self.state.selection_anchor = None;
         self.state.backspace_time = None;
+        self.context_menu.visible = false;
         miniquad::window::set_ime_enabled(false);
         miniquad::window::show_keyboard(false);
         std::mem::take(&mut self.buffer)
@@ -154,18 +184,79 @@ impl InlineInputBox {
         let cursor = self.find_nearest_cursor(p.x, p.y);
         if is_mouse_button_down(MouseButton::Left) || is_mouse_button_released(MouseButton::Left) {
             match touch.phase {
-                TouchPhase::Moved => {
-                    self.state.cursor = cursor;
+                TouchPhase::Moved | TouchPhase::Stationary => {
+                    if !self.context_menu.visible {
+                        self.state.cursor = cursor;
+                    }
                     false
                 }
-                TouchPhase::Stationary | TouchPhase::Ended | TouchPhase::Cancelled => {
+                TouchPhase::Ended | TouchPhase::Cancelled => {
+                    if self.context_menu.visible {
+                        if self.context_menu.rect.contains(p) {
+                            for (i, btn_rect) in self.context_menu.items.iter().enumerate() {
+                                if btn_rect.0.contains(p) {
+                                    match i {
+                                        0 => { // Select All
+                                            self.state.selection_anchor = Some(0);
+                                            self.state.cursor = self.buffer.chars().count();
+                                        }
+                                        1 => { // Copy
+                                            if let Some(text) = self.selected_text() {
+                                                clipboard_set(&text);
+                                            }
+                                        }
+                                        2 => { // Cut
+                                            if let Some(text) = self.selected_text() {
+                                                clipboard_set(&text);
+                                                self.delete_selection();
+                                            }
+                                        }
+                                        3 => { // Paste
+                                            if let Some(text) = clipboard_get().map(|s| s.to_string()) {
+                                                self.delete_selection();
+                                                let byte_pos = self.byte_at(self.state.cursor);
+                                                self.buffer.insert_str(byte_pos, &text);
+                                                self.state.cursor += text.chars().count();
+                                            }
+                                        }
+                                        _ => {}
+                                    }
+                                    self.context_menu.visible = false;
+                                    break;
+                                }
+                            }
+                        } else {
+                            self.context_menu.visible = false;
+                        }
+                    }
                     false
                 }
                 TouchPhase::Started => {
-                    if in_rect {
+                    if !self.context_menu.visible && in_rect {
                         self.state.cursor = cursor;
                         self.state.selection_anchor = Some(cursor);
                     }
+                    !in_rect
+                }
+            }
+        } else if is_mouse_button_down(MouseButton::Right) || is_mouse_button_released(MouseButton::Right) {
+            match touch.phase {
+                TouchPhase::Moved | TouchPhase::Stationary => {
+                    false
+                }
+                TouchPhase::Ended | TouchPhase::Cancelled => {
+                    if in_rect {
+                        if !self.password && self.rect.contains(p) && !self.context_menu.visible {
+                            self.context_menu.visible = true;
+                            self.context_menu.position = (
+                                p.x.clamp(self.rect.x, self.rect.right() - CONTEXT_MENU_MENU_W),
+                                p.y.clamp(self.rect.y, self.rect.bottom() - CONTEXT_MENU_ITEM_Y * self.context_menu.items.len() as f32)
+                            );
+                        }
+                    }
+                    false
+                }
+                TouchPhase::Started => {
                     !in_rect
                 }
             }
@@ -181,7 +272,7 @@ impl InlineInputBox {
                     }
                     !in_rect
                 }
-                TouchPhase::Moved => {
+                TouchPhase::Moved | TouchPhase::Stationary => {
                     let dx = p.x - self.state.touch_start_pos.0;
                     let dy = p.y - self.state.touch_start_pos.1;
                     let dist = (dx * dx + dy * dy).sqrt();
@@ -228,7 +319,6 @@ impl InlineInputBox {
                     self.state.touch_mode = 0;
                     false
                 }
-                _ => false,
             }
         }
     }
@@ -717,5 +807,30 @@ impl InlineInputBox {
                 }
             }
         });
+
+        if self.context_menu.visible && !self.password {
+            let menu_h = CONTEXT_MENU_ITEM_Y * self.context_menu.items.len() as f32;
+            let local_pos = ui.to_local(self.context_menu.position);
+            let menu_x = local_pos.0;
+            let menu_y = local_pos.1;
+
+            let menu_rect = Rect::new(menu_x, menu_y, CONTEXT_MENU_MENU_W, menu_h);
+            self.context_menu.rect = ui.rect_to_global(menu_rect);
+
+            ui.fill_path(&menu_rect.rounded(0.006), Color::new(0.2, 0.2, 0.22, 1.0));
+
+            for (i, item) in self.context_menu.items.iter_mut().enumerate() {
+                let btn_rect = Rect::new(menu_x + 0.005, menu_y + i as f32 * CONTEXT_MENU_ITEM_Y + 0.005, CONTEXT_MENU_MENU_W - 0.01, CONTEXT_MENU_ITEM_Y - 0.01);
+                item.0 = ui.rect_to_global(btn_rect);
+
+                ui.text(item.1)
+                    .pos(menu_x + 0.02, menu_y + i as f32 * CONTEXT_MENU_ITEM_Y + CONTEXT_MENU_ITEM_Y * 0.5)
+                    .anchor(0.0, 0.5)
+                    .no_baseline()
+                    .size(0.38)
+                    .color(Color::new(1.0, 1.0, 1.0, t))
+                    .draw();
+            }
+        }
     }
 }
