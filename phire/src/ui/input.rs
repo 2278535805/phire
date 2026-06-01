@@ -193,7 +193,7 @@ impl InlineInputBox {
                                 self.state.touch_mode = 1;
                                 self.state.manual_scroll = true;
                             } else if dt > 0.5 {
-                                if self.selection_range().is_some() {
+                                if self.selection_range().is_some() & !self.password {
                                     if let Some(text) = self.selected_text() {
                                         clipboard_set(&text);
                                         self.state.selection_anchor = None;
@@ -390,7 +390,7 @@ impl InlineInputBox {
         }
 
         // Copy/Paste/Cut
-        if ctrl {
+        if ctrl & !self.password {
             if is_key_pressed(KeyCode::C) {
                 if let Some(text) = self.selected_text() {
                     clipboard_set(&text);
