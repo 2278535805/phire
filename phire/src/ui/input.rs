@@ -1,3 +1,5 @@
+crate::tl_file!("input");
+
 use super::Ui;
 use crate::{
     ext::RectExt, judge::take_wheel, ui::scroll::WHEEL_STEP,
@@ -15,7 +17,7 @@ struct ContextMenu {
     visible: bool,
     position: (f32, f32),
     rect: Rect,
-    items: Vec<(Rect, &'static str)>,
+    items: Vec<(Rect, String)>,
 }
 
 impl Default for ContextMenu {
@@ -25,10 +27,10 @@ impl Default for ContextMenu {
             position: (0.0, 0.0),
             rect: Rect::default(),
             items: vec![
-                (Rect::default(), "全选"),
-                (Rect::default(), "复制"),
-                (Rect::default(), "剪切"),
-                (Rect::default(), "粘贴"),
+                (Rect::default(), tl!("select-all").to_string()),
+                (Rect::default(), tl!("copy").to_string()),
+                (Rect::default(), tl!("cut").to_string()),
+                (Rect::default(), tl!("paste").to_string()),
             ],
         }
     }
@@ -839,7 +841,7 @@ impl InlineInputBox {
                 let btn_rect = Rect::new(menu_x + 0.005, menu_y + i as f32 * CONTEXT_MENU_ITEM_Y + 0.005, CONTEXT_MENU_MENU_W - 0.01, CONTEXT_MENU_ITEM_Y - 0.01);
                 item.0 = ui.rect_to_global(btn_rect);
 
-                ui.text(item.1)
+                ui.text(&item.1)
                     .pos(menu_x + 0.02, menu_y + i as f32 * CONTEXT_MENU_ITEM_Y + CONTEXT_MENU_ITEM_Y * 0.5)
                     .anchor(0.0, 0.5)
                     .no_baseline()
