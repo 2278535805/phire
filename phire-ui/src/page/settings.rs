@@ -802,7 +802,7 @@ impl OtherList {
             return Ok(wt);
         }
         if self.watermark.touch(touch, t) {
-            self.watermark_input.activate(&config.watermark, false);
+            self.watermark_input.activate(&config.watermark, false, false);
             return Ok(Some(true));
         }
         if self.combo_btn.touch(touch, t) {
@@ -839,7 +839,7 @@ impl OtherList {
             } else {
                 String::new()
             };
-            self.health_mode_input.activate(&text, true);
+            self.health_mode_input.activate(&text, true, false);
             return Ok(Some(true));
         }
         Ok(None)
