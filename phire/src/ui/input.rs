@@ -618,24 +618,23 @@ impl InlineInputBox {
         let max_h = bh - 0.04;
         let clip = Rect::new(bx + 0.002, by + 0.002, bw - 0.004, bh - 0.004);
         ui.scissor(clip, |ui| {
-            if self.buffer.is_empty() {
-                let text_y = by + bh / 2.0;
-                ui.text(placeholder)
-                    .pos(text_x, text_y)
-                    .anchor(0.0, 0.5)
-                    .no_baseline()
-                    .size(0.42)
-                    .color(Color::new(1.0, 1.0, 1.0, t * 0.3))
-                    .draw();
-                let cursor_x = text_x;
-                let cursor_y = by + 0.01;
-                ui.fill_rect(Rect::new(cursor_x, cursor_y, 0.003, bh - 0.02), Color::new(1.0, 1.0, 1.0, t * 0.9));
-                self.update_ime(ui, (cursor_x, text_y - line_h * 0.5));
-                self.state.cursor_positions.clear();
-                self.state.cursor_positions.push(ui.to_global((cursor_x, text_y)));
-            } else if self.multiline {
+            if self.multiline {
                 let text_y = by + 0.02;
-                let line_h_with_space = ui.text("0\n0").size(0.42).multiline().measure().h - ui.text("0").size(0.42).measure().h;
+                let line_h_with_space = ui.text("0\n0").size(0.42).multiline().measure().h - line_h;
+                if self.buffer.is_empty() {
+                    ui.text(placeholder)
+                        .pos(text_x, text_y)
+                        .anchor(0.0, 0.0)
+                        .no_baseline()
+                        .size(0.42)
+                        .color(Color::new(1.0, 1.0, 1.0, t * 0.3))
+                        .draw();
+                    ui.fill_rect(Rect::new(text_x, text_y, 0.003, line_h + 0.01), Color::new(1.0, 1.0, 1.0, t * 0.9));
+                    self.update_ime(ui, (text_x, text_y));
+                    self.state.cursor_positions.clear();
+                    self.state.cursor_positions.push(ui.to_global((text_x, text_y)));
+                    return;
+                }
                 let display = if self.password {
                     &self.buffer.chars().map(|_| '•').collect::<String>()
                 } else {
@@ -750,7 +749,24 @@ impl InlineInputBox {
                     self.state.cursor_positions.push(ui.to_global((x, y)));
                 }
             } else {
-                let text_y = by + bh / 2.0;
+                if self.buffer.is_empty() {
+                    let text_y = by + bh * 0.5;
+                    ui.text(placeholder)
+                        .pos(text_x, text_y)
+                        .anchor(0.0, 0.5)
+                        .no_baseline()
+                        .size(0.42)
+                        .color(Color::new(1.0, 1.0, 1.0, t * 0.3))
+                        .draw();
+                    let cursor_x = text_x;
+                    let cursor_y = by + 0.01;
+                    ui.fill_rect(Rect::new(cursor_x, cursor_y, 0.003, bh - 0.02), Color::new(1.0, 1.0, 1.0, t * 0.9));
+                    self.update_ime(ui, (cursor_x, text_y - line_h * 0.5));
+                    self.state.cursor_positions.clear();
+                    self.state.cursor_positions.push(ui.to_global((cursor_x, text_y)));
+                    return;
+                }
+                let text_y = by + bh * 0.5;
                 let display = if self.password {
                     &self.buffer.chars().map(|_| '•').collect::<String>()
                 } else {
