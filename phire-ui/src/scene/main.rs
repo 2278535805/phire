@@ -158,7 +158,7 @@ impl MainScene {
                 let _ = bgm.fade_in(0.5);
             }
         }
-        self.state.fader.back(self.state.t);
+        self.state.fader.back_from(self.state.t);
     }
 
     pub fn take_imported_respack() -> Option<ResPackItem> {
@@ -205,6 +205,23 @@ impl Scene for MainScene {
 
     fn touch(&mut self, tm: &mut TimeManager, touch: &Touch) -> Result<bool> {
         if self.state.fader.transiting() {
+            if self.state.fader.is_forward() {
+                if self.btn_back.touch(touch) && self.pages.len() > 1 {
+                    button_hit();
+                    if !self.pages.last_mut().unwrap().on_back_pressed(&mut self.state) {
+                        if self.pages.len() == 2 {
+                            if let Some(bgm) = &mut self.bgm {
+                                bgm.set_low_pass(0.)?;
+                            }
+                        }
+                        self.pop();
+                    }
+                    return Ok(true);
+                }
+                let s = &mut self.state;
+                s.update(tm);
+                return self.pages.last_mut().unwrap().touch(touch, s);
+            }
             return Ok(false);
         }
         if self.import_task.is_some() {

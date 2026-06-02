@@ -270,6 +270,17 @@ impl Fader {
         self.back = true;
     }
 
+    pub fn back_from(&mut self, t: f32) {
+        let frac = if self.start_time.is_nan() {
+            1.
+        } else {
+            ((t - self.start_time) / self.time).clamp(0., 1.)
+        };
+        let remaining = (1. - frac).max(0.01);
+        self.start_time = t - remaining * self.time;
+        self.back = true;
+    }
+
     pub fn progress(&self, t: f32) -> f32 {
         if self.start_time.is_nan() {
             0.
@@ -302,6 +313,11 @@ impl Fader {
     #[inline]
     pub fn transiting(&self) -> bool {
         !self.start_time.is_nan()
+    }
+
+    #[inline]
+    pub fn is_forward(&self) -> bool {
+        !self.start_time.is_nan() && !self.back
     }
 
     pub fn done(&mut self, t: f32) -> Option<bool> {

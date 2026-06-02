@@ -533,4 +533,13 @@ impl Page for LibraryPage {
     fn next_scene(&mut self, _s: &mut SharedState) -> NextScene {
         self.charts_view.next_scene().unwrap_or_default()
     }
+
+    fn on_back_pressed(&mut self, s: &mut SharedState) -> bool {
+        if self.charts_view.transiting() {
+            self.charts_view.cancel_transit(s.t);
+            true
+        } else {
+            false
+        }
+    }
 }

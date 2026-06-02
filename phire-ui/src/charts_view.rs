@@ -88,6 +88,8 @@ struct TransitState {
     back: bool,
     done: bool,
     delete: bool,
+    interrupt_position: Option<f32>,
+    interrupt_duration: Option<f32>,
 }
 
 pub struct ChartsView {
@@ -151,6 +153,18 @@ impl ChartsView {
 
     pub fn transiting(&self) -> bool {
         self.transit.is_some()
+    }
+
+    pub fn cancel_transit(&mut self, t: f32) {
+        if let Some(transit) = &mut self.transit {
+            let elapsed = (t - transit.start_time).max(0.);
+            let p = (elapsed / TRANSIT_TIME).clamp(0., 1.);
+            transit.interrupt_position = Some(1. - (1. - p).powi(4));
+            transit.interrupt_duration = Some(elapsed);
+            transit.start_time = t;
+            transit.back = true;
+            transit.done = false;
+        }
     }
 
     pub fn on_result(&mut self, t: f32, delete: bool) {
@@ -225,6 +239,8 @@ impl ChartsView {
                             back: false,
                             done: false,
                             delete: false,
+                            interrupt_position: None,
+                            interrupt_duration: None,
                         });
                         return Ok(true);
                     }
@@ -239,7 +255,12 @@ impl ChartsView {
         self.scroll.update(t);
         if let Some(transit) = &mut self.transit {
             transit.chart.illu.settle(t);
-            if t > transit.start_time + TRANSIT_TIME {
+            let duration = if transit.back {
+                transit.interrupt_duration.unwrap_or(TRANSIT_TIME)
+            } else {
+                TRANSIT_TIME
+            };
+            if t > transit.start_time + duration {
                 if transit.back {
                     if transit.delete {
                         let data = get_data_mut();
@@ -380,9 +401,23 @@ impl ChartsView {
     pub fn render_top(&mut self, ui: &mut Ui, t: f32) {
         if let Some(transit) = &self.transit {
             if let Some(fr) = transit.rect {
-                let p = ((t - transit.start_time) / TRANSIT_TIME).clamp(0., 1.);
-                let p = (1. - p).powi(4);
-                let p = if transit.back { p } else { 1. - p };
+                let p = if transit.back {
+                    if let (Some(start_p), Some(duration)) = (transit.interrupt_position, transit.interrupt_duration) {
+                        if duration > 0.001 {
+                            let elapsed = (t - transit.start_time).max(0.);
+                            let p_return = (elapsed / duration).clamp(0., 1.);
+                            start_p * (1. - p_return)
+                        } else {
+                            0.
+                        }
+                    } else {
+                        let p = ((t - transit.start_time) / TRANSIT_TIME).clamp(0., 1.);
+                        (1. - p).powi(4)
+                    }
+                } else {
+                    let p = ((t - transit.start_time) / TRANSIT_TIME).clamp(0., 1.);
+                    1. - (1. - p).powi(4)
+                };
                 let r = Rect::tween(&fr, &ui.screen_rect(), p);
                 let path = r.rounded(0.02 * (1. - p));
                 ui.fill_path(&path, (Texture2D::clone(&transit.chart.illu.texture.1), r.feather(0.01 * (1. - p))));
