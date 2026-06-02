@@ -264,6 +264,13 @@ impl Page for LibraryPage {
         Ok(())
     }
 
+    fn enter(&mut self, s: &mut SharedState) -> Result<()> {
+        if self.chosen == ChartListType::Local {
+            self.sync_local(s);
+        }
+        Ok(())
+    }
+
     fn touch(&mut self, touch: &Touch, s: &mut SharedState) -> Result<bool> {
         let t = s.t;
         if self.order_menu.showing() {
