@@ -193,6 +193,50 @@ impl InlineInputBox {
         let p = touch.position;
         let in_rect = self.rect.contains(p);
         let cursor = self.find_nearest_cursor(p.x, p.y);
+        match touch.phase {
+            TouchPhase::Started => {}
+            TouchPhase::Moved | TouchPhase::Stationary => {}
+            TouchPhase::Ended | TouchPhase::Cancelled => {
+                if self.context_menu.visible && !matches!(self.state.touch_mode, TouchMode::Wating) {
+                    if self.context_menu.rect.contains(p) {
+                        for (i, btn_rect) in self.context_menu.items.iter().enumerate() {
+                            if btn_rect.0.contains(p) {
+                                match i {
+                                    0 => { // Select All
+                                        self.state.selection_anchor = Some(0);
+                                        self.state.cursor = self.buffer.chars().count();
+                                    }
+                                    1 => { // Copy
+                                        if let Some(text) = self.selected_text() {
+                                            clipboard_set(&text);
+                                        }
+                                    }
+                                    2 => { // Cut
+                                        if let Some(text) = self.selected_text() {
+                                            clipboard_set(&text);
+                                            self.delete_selection();
+                                        }
+                                    }
+                                    3 => { // Paste
+                                        if let Some(text) = clipboard_get().map(|s| s.to_string()) {
+                                            self.delete_selection();
+                                            let byte_pos = self.byte_at(self.state.cursor);
+                                            self.buffer.insert_str(byte_pos, &text);
+                                            self.state.cursor += text.chars().count();
+                                        }
+                                    }
+                                    _ => {}
+                                }
+                                self.context_menu.visible = false;
+                                break;
+                            }
+                        }
+                    } else {
+                        self.context_menu.visible = false;
+                    }
+                }
+            }
+        }
         if is_mouse_button_down(MouseButton::Left) || is_mouse_button_released(MouseButton::Left) {
             match touch.phase {
                 TouchPhase::Moved | TouchPhase::Stationary => {
@@ -202,44 +246,6 @@ impl InlineInputBox {
                     false
                 }
                 TouchPhase::Ended | TouchPhase::Cancelled => {
-                    if self.context_menu.visible {
-                        if self.context_menu.rect.contains(p) {
-                            for (i, btn_rect) in self.context_menu.items.iter().enumerate() {
-                                if btn_rect.0.contains(p) {
-                                    match i {
-                                        0 => { // Select All
-                                            self.state.selection_anchor = Some(0);
-                                            self.state.cursor = self.buffer.chars().count();
-                                        }
-                                        1 => { // Copy
-                                            if let Some(text) = self.selected_text() {
-                                                clipboard_set(&text);
-                                            }
-                                        }
-                                        2 => { // Cut
-                                            if let Some(text) = self.selected_text() {
-                                                clipboard_set(&text);
-                                                self.delete_selection();
-                                            }
-                                        }
-                                        3 => { // Paste
-                                            if let Some(text) = clipboard_get().map(|s| s.to_string()) {
-                                                self.delete_selection();
-                                                let byte_pos = self.byte_at(self.state.cursor);
-                                                self.buffer.insert_str(byte_pos, &text);
-                                                self.state.cursor += text.chars().count();
-                                            }
-                                        }
-                                        _ => {}
-                                    }
-                                    self.context_menu.visible = false;
-                                    break;
-                                }
-                            }
-                        } else {
-                            self.context_menu.visible = false;
-                        }
-                    }
                     false
                 }
                 TouchPhase::Started => {
@@ -295,19 +301,11 @@ impl InlineInputBox {
                             if dist > 0.05 {
                                 self.state.touch_mode = TouchMode::Scrolling;
                                 self.state.manual_scroll = true;
-                            } else if dt > 0.5 {
-                                if self.selection_range().is_some() & !self.password {
-                                    if let Some(text) = self.selected_text() {
-                                        clipboard_set(&text);
-                                        self.state.selection_anchor = None;
-                                    }
-                                    self.state.touch_mode = TouchMode::Wating;
-                                } else {
-                                    self.state.touch_mode = TouchMode::Selecting;
-                                    self.state.cursor = cursor;
-                                    self.state.selection_anchor = Some((cursor - 1).max(0));
-                                    self.state.manual_scroll = false;
-                                }
+                            } else if dt > 0.5 && self.state.selection_anchor.is_none() {
+                                self.state.touch_mode = TouchMode::Selecting;
+                                self.state.cursor = cursor;
+                                self.state.selection_anchor = Some(cursor);
+                                self.state.manual_scroll = false;
                             }
                         }
                         TouchMode::Scrolling => {
@@ -324,7 +322,19 @@ impl InlineInputBox {
                     false
                 }
                 TouchPhase::Ended | TouchPhase::Cancelled => {
-                    if matches!(self.state.touch_mode, TouchMode::None) && in_rect {
+                    let dx = p.x - self.state.touch_start_pos.0;
+                    let dy = p.y - self.state.touch_start_pos.1;
+                    let dist = (dx * dx + dy * dy).sqrt();
+                    let dt = get_time() - self.state.touch_start_time;
+                    if dt > 0.5 && dist <= 0.05 && !self.password && self.rect.contains(p) && !self.context_menu.visible {
+                        self.context_menu.visible = true;
+                        self.context_menu.position = (
+                            p.x.max(self.rect.x).min(self.rect.right() - CONTEXT_MENU_MENU_W),
+                            p.y.max(self.rect.y).min(self.rect.bottom() - CONTEXT_MENU_ITEM_Y * self.context_menu.items.len() as f32)
+                        );
+                        self.state.touch_mode = TouchMode::Wating;
+                    }
+                    if matches!(self.state.touch_mode, TouchMode::None) && in_rect && !self.context_menu.visible {
                         self.state.cursor = cursor;
                         self.state.selection_anchor = None;
                         self.state.manual_scroll = false;
