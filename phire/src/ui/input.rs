@@ -364,6 +364,26 @@ impl InlineInputBox {
         best_idx
     }
 
+    fn find_nearest_col_cursor(&self, from_cursor: usize, to_cursor: usize) -> usize {
+        if self.state.cursor_positions.is_empty() {
+            return 0;
+        }
+        let mut best_idx = 0;
+        let mut best_dist = f32::MAX;
+        let x = self.state.cursor_positions.get(from_cursor).map_or(0.0, |&(x, _)| x);
+        let y = self.state.cursor_positions.get(to_cursor).map_or(0.0, |&(_, y)| y);
+        for (i, &(px, py)) in self.state.cursor_positions.iter().enumerate() {
+            let dx = x - px;
+            let dy = y - py;
+            let dist = dx * dx + dy * dy * 10000.0;
+            if dist < best_dist {
+                best_dist = dist;
+                best_idx = i;
+            }
+        }
+        best_idx
+    }
+
     pub fn update(&mut self) {
         let now = get_time();
         let ctrl = is_key_down(KeyCode::LeftControl) || is_key_down(KeyCode::RightControl);
@@ -452,7 +472,8 @@ impl InlineInputBox {
                     let prev_start = prev_line.rfind('\n').map(|i| i + 1).unwrap_or(0);
                     let prev_col = col.min(line_start - prev_start);
                     let target_byte = prev_start + prev_col;
-                    self.state.cursor = self.buffer.char_indices().take_while(|(i, _)| *i < target_byte).count();
+                    let target_byte_adj = self.find_nearest_col_cursor(self.state.cursor, target_byte);
+                    self.state.cursor = self.buffer.char_indices().take_while(|(i, _)| *i < target_byte_adj).count();
                 }
             }
             if is_key_pressed(KeyCode::Down) {
@@ -473,7 +494,9 @@ impl InlineInputBox {
                     let next_line_end = self.buffer[next_line_start..].find('\n').map(|i| next_line_start + i).unwrap_or(self.buffer.chars().count());
                     let next_line_len = next_line_end - next_line_start;
                     let target_col = col.min(next_line_len);
-                    self.state.cursor = self.buffer.char_indices().take_while(|(i, _)| *i < next_line_start + target_col).count();
+                    let target_byte = next_line_start + target_col;
+                    let target_byte_adj = self.find_nearest_col_cursor(self.state.cursor, target_byte);
+                    self.state.cursor = self.buffer.char_indices().take_while(|(i, _)| *i < target_byte_adj).count();
                 }
             }
         }
