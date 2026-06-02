@@ -535,7 +535,7 @@ impl Page for LibraryPage {
     }
 
     fn on_back_pressed(&mut self, s: &mut SharedState) -> bool {
-        if self.charts_view.transiting() {
+        if self.charts_view.transiting() && !self.charts_view.transiting_back() {
             self.charts_view.cancel_transit(s.t);
             true
         } else {

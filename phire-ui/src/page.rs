@@ -271,13 +271,13 @@ impl Fader {
     }
 
     pub fn back_from(&mut self, t: f32) {
-        let frac = if self.start_time.is_nan() {
-            1.
+        let p = if self.start_time.is_nan() {
+            0.0
         } else {
-            ((t - self.start_time) / self.time).clamp(0., 1.)
+            let p = ((t - self.start_time) / self.time).clamp(0., 1.);
+            1.0 - (1.0 - (1.0 - p).powi(3)).powf(1.0/3.0)
         };
-        let remaining = (1. - frac).max(0.01);
-        self.start_time = t - remaining * self.time;
+        self.start_time = t - p * self.time;
         self.back = true;
     }
 

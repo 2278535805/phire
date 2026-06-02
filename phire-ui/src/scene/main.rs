@@ -328,9 +328,32 @@ impl Scene for MainScene {
                 }
                 NextPage::None => {}
             }
-        } else if let Some(true) = s.fader.done(s.t) {
-            self.pages.pop().unwrap().exit()?;
-            self.pages.last_mut().unwrap().enter(s)?;
+        } else if s.fader.is_forward() {
+            s.fader.done(s.t);
+        } else {
+            let pos = self.pages.len() - 2;
+            match self.pages[pos].next_page() {
+                NextPage::Overlay(mut sub) => {
+                    self.pages.pop().unwrap().exit()?;
+                    sub.enter(s)?;
+                    if !sub.can_play_bgm() {
+                        if let Some(bgm) = &mut self.bgm {
+                            let _ = bgm.fade_out(0.5);
+                        }
+                    }
+                    self.pages.push(sub);
+                    s.fader.sub(s.t);
+                }
+                NextPage::Pop => {
+                    self.pop();
+                }
+                NextPage::None => {
+                    if s.fader.done(s.t).is_some() {
+                        self.pages.pop().unwrap().exit()?;
+                        self.pages.last_mut().unwrap().enter(s)?;
+                    }
+                }
+            }
         }
         if let Some(bgm) = &mut self.bgm {
             if BGM_VOLUME_UPDATED.fetch_and(false, Ordering::Relaxed) {
