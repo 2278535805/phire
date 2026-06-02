@@ -386,6 +386,32 @@ impl InlineInputBox {
         best_idx
     }
 
+    fn cursor_right(&mut self, shift: bool) {
+        if shift {
+            if self.state.selection_anchor.is_none() {
+                self.state.selection_anchor = Some(self.state.cursor);
+            }
+        } else {
+            self.state.selection_anchor = None;
+        }
+        if self.state.cursor < self.buffer.chars().count() {
+            self.state.cursor += 1;
+        }
+    }
+
+    fn cursor_left(&mut self, shift: bool) {
+        if shift {
+            if self.state.selection_anchor.is_none() {
+                self.state.selection_anchor = Some(self.state.cursor);
+            }
+        } else {
+            self.state.selection_anchor = None;
+        }
+        if self.state.cursor > 0 {
+            self.state.cursor -= 1;
+        }
+    }
+
     fn cursor_up(&mut self, shift: bool) {
         if shift {
             if self.state.selection_anchor.is_none() {
@@ -438,31 +464,13 @@ impl InlineInputBox {
         // Arrow keys
         if is_key_pressed(KeyCode::Right) {
             self.state.right_arrow_time = Some(now);
-            if shift {
-                if self.state.selection_anchor.is_none() {
-                    self.state.selection_anchor = Some(self.state.cursor);
-                }
-            } else {
-                self.state.selection_anchor = None;
-            }
-            if self.state.cursor < self.buffer.chars().count() {
-                self.state.cursor += 1;
-            }
+            self.cursor_right(shift);
         } else if let Some(arrow_time) = self.state.right_arrow_time {
             if is_key_down(KeyCode::Right) {
                 if now - arrow_time > 0.5 {
                     if self.state.last_cursor_time.map_or(true, |t| now - t > 0.02) {
                         self.state.last_cursor_time = Some(now);
-                        if shift {
-                            if self.state.selection_anchor.is_none() {
-                                self.state.selection_anchor = Some(self.state.cursor);
-                            }
-                        } else {
-                            self.state.selection_anchor = None;
-                        }
-                        if self.state.cursor < self.buffer.chars().count() {
-                            self.state.cursor += 1;
-                        }
+                        self.cursor_right(shift);
                     }
                 }
             } else {
@@ -471,31 +479,13 @@ impl InlineInputBox {
         }
         if is_key_pressed(KeyCode::Left) {
             self.state.left_arrow_time = Some(now);
-            if shift {
-                if self.state.selection_anchor.is_none() {
-                    self.state.selection_anchor = Some(self.state.cursor);
-                }
-            } else {
-                self.state.selection_anchor = None;
-            }
-            if self.state.cursor > 0 {
-                self.state.cursor -= 1;
-            }
+            self.cursor_left(shift);
         } else if let Some(arrow_time) = self.state.left_arrow_time {
             if is_key_down(KeyCode::Left) {
                 if now - arrow_time > 0.5 {
                     if self.state.last_cursor_time.map_or(true, |t| now - t > 0.02) {
                         self.state.last_cursor_time = Some(now);
-                        if shift {
-                            if self.state.selection_anchor.is_none() {
-                                self.state.selection_anchor = Some(self.state.cursor);
-                            }
-                        } else {
-                            self.state.selection_anchor = None;
-                        }
-                        if self.state.cursor > 0 {
-                            self.state.cursor -= 1;
-                        }
+                        self.cursor_left(shift);
                     }
                 }
             } else {
