@@ -163,8 +163,11 @@ impl ChartsView {
         if let Some(transit) = &mut self.transit {
             let elapsed = (t - transit.start_time).max(0.);
             let p = (elapsed / TRANSIT_TIME).clamp(0., 1.);
-            transit.interrupt_position = Some(1. - (1. - p).powi(4));
-            transit.interrupt_duration = Some(elapsed);
+            let interrupt_position = 1. - (1. - p).powi(4);
+            transit.interrupt_position = Some(interrupt_position);
+            let start = 1.0 - interrupt_position.powf(1.0/4.0);
+            let interrupt_duration = TRANSIT_TIME * (1.0 - start);
+            transit.interrupt_duration = Some(interrupt_duration);
             transit.start_time = t;
             transit.back = true;
             transit.done = false;
@@ -407,10 +410,12 @@ impl ChartsView {
             if let Some(fr) = transit.rect {
                 let p = if transit.back {
                     if let (Some(start_p), Some(duration)) = (transit.interrupt_position, transit.interrupt_duration) {
-                        if duration > 0.001 {
+                        if duration > 0. {
                             let elapsed = (t - transit.start_time).max(0.);
-                            let p_return = (elapsed / duration).clamp(0., 1.);
-                            start_p * (1. - p_return)
+                            let p_raw = (elapsed / duration).clamp(0., 1.);
+                            let p_start = 1. - start_p.powf(1.0/4.0);
+                            let p = p_start + (1. - p_start) * p_raw;
+                            (1. - p).powi(4)
                         } else {
                             0.
                         }
