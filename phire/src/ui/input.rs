@@ -47,6 +47,15 @@ pub struct InlineInputBox {
 }
 
 #[derive(Default)]
+enum TouchMode {
+    #[default]
+    None,
+    Selecting,
+    Scrolling,
+    Wating,
+}
+
+#[derive(Default)]
 struct State {
     active: bool,
     cursor: usize,
@@ -65,7 +74,7 @@ struct State {
 
     touch_start_pos: (f32, f32),
     touch_start_time: f64,
-    touch_mode: u8,
+    touch_mode: TouchMode,
     touch_start_scroll_x: f32,
     touch_start_scroll_y: f32,
     touch_scale_x: f32,
@@ -269,7 +278,7 @@ impl InlineInputBox {
                     if in_rect {
                         self.state.touch_start_pos = (p.x, p.y);
                         self.state.touch_start_time = get_time();
-                        self.state.touch_mode = 0;
+                        self.state.touch_mode = TouchMode::None;
                         self.state.touch_start_scroll_x = self.state.scroll_x;
                         self.state.touch_start_scroll_y = self.state.scroll_y;
                     }
@@ -282,9 +291,9 @@ impl InlineInputBox {
                     let dt = get_time() - self.state.touch_start_time;
 
                     match self.state.touch_mode {
-                        0 => {
+                        TouchMode::None => {
                             if dist > 0.05 {
-                                self.state.touch_mode = 1;
+                                self.state.touch_mode = TouchMode::Scrolling;
                                 self.state.manual_scroll = true;
                             } else if dt > 0.5 {
                                 if self.selection_range().is_some() & !self.password {
@@ -292,22 +301,22 @@ impl InlineInputBox {
                                         clipboard_set(&text);
                                         self.state.selection_anchor = None;
                                     }
-                                    self.state.touch_mode = 3;
+                                    self.state.touch_mode = TouchMode::Wating;
                                 } else {
-                                    self.state.touch_mode = 2;
+                                    self.state.touch_mode = TouchMode::Selecting;
                                     self.state.cursor = cursor;
                                     self.state.selection_anchor = Some((cursor - 1).max(0));
                                     self.state.manual_scroll = false;
                                 }
                             }
                         }
-                        1 => {
+                        TouchMode::Scrolling => {
                             let dx_ui = dx * self.state.touch_scale_x;
                             let dy_ui = dy * self.state.touch_scale_y;
                             self.state.scroll_x = self.state.touch_start_scroll_x - dx_ui;
                             self.state.scroll_y = self.state.touch_start_scroll_y - dy_ui;
                         }
-                        2 => {
+                        TouchMode::Selecting => {
                             self.state.cursor = cursor;
                         }
                         _ => {}
@@ -315,12 +324,12 @@ impl InlineInputBox {
                     false
                 }
                 TouchPhase::Ended | TouchPhase::Cancelled => {
-                    if self.state.touch_mode == 0 && in_rect {
+                    if matches!(self.state.touch_mode, TouchMode::None) && in_rect {
                         self.state.cursor = cursor;
                         self.state.selection_anchor = None;
                         self.state.manual_scroll = false;
                     }
-                    self.state.touch_mode = 0;
+                    self.state.touch_mode = TouchMode::None;
                     false
                 }
             }
