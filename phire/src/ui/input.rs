@@ -66,6 +66,8 @@ struct State {
 
     left_arrow_time: Option<f64>,
     right_arrow_time: Option<f64>,
+    up_arrow_time: Option<f64>,
+    down_arrow_time: Option<f64>,
     last_cursor_time: Option<f64>,
 
     cursor_positions: Vec<(f32, f32)>,
@@ -384,6 +386,50 @@ impl InlineInputBox {
         best_idx
     }
 
+    fn cursor_up(&mut self, shift: bool) {
+        if shift {
+            if self.state.selection_anchor.is_none() {
+                self.state.selection_anchor = Some(self.state.cursor);
+            }
+        } else {
+            self.state.selection_anchor = None;
+        }
+        let before = self.text_before();
+        if let Some(line_start) = before.rfind('\n') {
+            let col = before.len() - line_start - 1;
+            let prev_line = &before[..line_start];
+            let prev_start = prev_line.rfind('\n').map(|i| i + 1).unwrap_or(0);
+            let prev_col = col.min(line_start - prev_start);
+            let target_byte = prev_start + prev_col;
+            let target_byte_adj = self.find_nearest_col_cursor(self.state.cursor, target_byte);
+            self.state.cursor = self.buffer.char_indices().take_while(|(i, _)| *i < target_byte_adj).count();
+        }
+    }
+
+    fn cursor_down(&mut self, shift: bool) {
+        if shift {
+            if self.state.selection_anchor.is_none() {
+                self.state.selection_anchor = Some(self.state.cursor);
+            }
+        } else {
+            self.state.selection_anchor = None;
+        }
+        let before = self.text_before();
+        let before_byte = self.byte_at(self.state.cursor);
+        let line_start_byte = before.rfind('\n').map(|i| i + 1).unwrap_or(0);
+        let col = before_byte - line_start_byte;
+        let after = &self.buffer[before_byte..];
+        if let Some(rel_nl) = after.find('\n') {
+            let next_line_start = before_byte + rel_nl + 1;
+            let next_line_end = self.buffer[next_line_start..].find('\n').map(|i| next_line_start + i).unwrap_or(self.buffer.chars().count());
+            let next_line_len = next_line_end - next_line_start;
+            let target_col = col.min(next_line_len);
+            let target_byte = next_line_start + target_col;
+            let target_byte_adj = self.find_nearest_col_cursor(self.state.cursor, target_byte);
+            self.state.cursor = self.buffer.char_indices().take_while(|(i, _)| *i < target_byte_adj).count();
+        }
+    }
+
     pub fn update(&mut self) {
         let now = get_time();
         let ctrl = is_key_down(KeyCode::LeftControl) || is_key_down(KeyCode::RightControl);
@@ -458,45 +504,33 @@ impl InlineInputBox {
         }
         if self.multiline {
             if is_key_pressed(KeyCode::Up) {
-                if shift {
-                    if self.state.selection_anchor.is_none() {
-                        self.state.selection_anchor = Some(self.state.cursor);
+                self.state.up_arrow_time = Some(now);
+                self.cursor_up(shift);
+            } else if let Some(arrow_time) = self.state.up_arrow_time {
+                if is_key_down(KeyCode::Up) {
+                    if now - arrow_time > 0.5 {
+                        if self.state.last_cursor_time.map_or(true, |t| now - t > 0.02) {
+                            self.state.last_cursor_time = Some(now);
+                            self.cursor_up(shift);
+                        }
                     }
                 } else {
-                    self.state.selection_anchor = None;
-                }
-                let before = self.text_before();
-                if let Some(line_start) = before.rfind('\n') {
-                    let col = before.len() - line_start - 1;
-                    let prev_line = &before[..line_start];
-                    let prev_start = prev_line.rfind('\n').map(|i| i + 1).unwrap_or(0);
-                    let prev_col = col.min(line_start - prev_start);
-                    let target_byte = prev_start + prev_col;
-                    let target_byte_adj = self.find_nearest_col_cursor(self.state.cursor, target_byte);
-                    self.state.cursor = self.buffer.char_indices().take_while(|(i, _)| *i < target_byte_adj).count();
+                    self.state.up_arrow_time = None;
                 }
             }
             if is_key_pressed(KeyCode::Down) {
-                if shift {
-                    if self.state.selection_anchor.is_none() {
-                        self.state.selection_anchor = Some(self.state.cursor);
+                self.state.down_arrow_time = Some(now);
+                self.cursor_down(shift);
+            } else if let Some(arrow_time) = self.state.down_arrow_time {
+                if is_key_down(KeyCode::Down) {
+                    if now - arrow_time > 0.5 {
+                        if self.state.last_cursor_time.map_or(true, |t| now - t > 0.02) {
+                            self.state.last_cursor_time = Some(now);
+                            self.cursor_down(shift);
+                        }
                     }
                 } else {
-                    self.state.selection_anchor = None;
-                }
-                let before = self.text_before();
-                let before_byte = self.byte_at(self.state.cursor);
-                let line_start_byte = before.rfind('\n').map(|i| i + 1).unwrap_or(0);
-                let col = before_byte - line_start_byte;
-                let after = &self.buffer[before_byte..];
-                if let Some(rel_nl) = after.find('\n') {
-                    let next_line_start = before_byte + rel_nl + 1;
-                    let next_line_end = self.buffer[next_line_start..].find('\n').map(|i| next_line_start + i).unwrap_or(self.buffer.chars().count());
-                    let next_line_len = next_line_end - next_line_start;
-                    let target_col = col.min(next_line_len);
-                    let target_byte = next_line_start + target_col;
-                    let target_byte_adj = self.find_nearest_col_cursor(self.state.cursor, target_byte);
-                    self.state.cursor = self.buffer.char_indices().take_while(|(i, _)| *i < target_byte_adj).count();
+                    self.state.down_arrow_time = None;
                 }
             }
         }
