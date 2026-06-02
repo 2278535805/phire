@@ -222,7 +222,10 @@ impl Scene for MainScene {
                 s.update(tm);
                 return self.pages.last_mut().unwrap().touch(touch, s);
             }
-            return Ok(false);
+            let pos = self.pages.len() - 2;
+            let s = &mut self.state;
+            s.update(tm);
+            return self.pages[pos].touch(touch, s);
         }
         if self.import_task.is_some() {
             return Ok(true);

@@ -276,7 +276,7 @@ impl Page for LibraryPage {
         if self.rating.touch(touch, t) {
             return Ok(true);
         }
-        if self.charts_view.transiting() {
+        if self.charts_view.transiting() && !self.charts_view.transiting_back() {
             return Ok(true);
         }
         if self.btn_local.touch(touch, t) {

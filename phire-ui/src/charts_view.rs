@@ -155,6 +155,10 @@ impl ChartsView {
         self.transit.is_some()
     }
 
+    pub fn transiting_back(&self) -> bool {
+        self.transit.as_ref().map_or(false, |t| t.back)
+    }
+
     pub fn cancel_transit(&mut self, t: f32) {
         if let Some(transit) = &mut self.transit {
             let elapsed = (t - transit.start_time).max(0.);
