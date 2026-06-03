@@ -1,3 +1,6 @@
+mod character;
+pub use character::CharacterPage;
+
 mod event;
 pub use event::EventPage;
 

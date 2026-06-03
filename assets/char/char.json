@@ -12,6 +12,10 @@
     "intro": {
       "en-US": "Intro",
       "zh-CN": "简介"
+    },
+    "skill": {
+      "en-US": "-",
+      "zh-CN": "-"
     }
   },
   {
@@ -27,6 +31,10 @@
     "intro": {
       "en-US": "Intro",
       "zh-CN": "简介"
+    },
+    "skill": {
+      "en-US": "Oblibion - Seal the Lost Memory",
+      "zh-CN": "忘却 - 将丢失的记忆在此封印"
     }
   },
   {
@@ -42,6 +50,10 @@
     "intro": {
       "en-US": "Intro",
       "zh-CN": "简介"
+    },
+    "skill": {
+      "en-US": "Remembrance - Only by retrieving everything can we move forward",
+      "zh-CN": "回忆 - 唯有找回一切，才能继续前行"
     }
   }
 ]

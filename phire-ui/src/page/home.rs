@@ -2,7 +2,7 @@ phire::tl_file!("home");
 
 use std::sync::Arc;
 
-use super::{LibraryPage, NextPage, Page, ResPackPage, SFader, SettingsPage, SharedState};
+use super::{CharacterPage, LibraryPage, NextPage, Page, ResPackPage, SFader, SettingsPage, SharedState};
 use crate::{
     anim::Anim, character::Character, client::{Client, LoginParams, User, UserManager, recv_raw}, dir, get_data, get_data_mut, icons::Icons, login::Login, save_data, scene::ProfileScene, sync_data
 };
@@ -186,7 +186,8 @@ impl Page for HomePage {
             return Ok(true);
         }
         if self.char_btn.touch(touch) {
-            println!("character touched");
+            button_hit_large();
+            self.next_page = Some(NextPage::Overlay(Box::new(CharacterPage::new(self.character.clone()))));
             return Ok(true);
         }
         Ok(false)
@@ -288,7 +289,7 @@ impl Page for HomePage {
                 // ui.fill_rect(ui.screen_rect(), (Texture2D::clone(illu), r, ScaleType::CropCenter, semi_white(p)));
                 let time_y = (t * 0.5).sin() * 0.02;
                 let r = Rect::new(
-                    -self.character.illu_adjust.2 * 0.5 + offset.x * 0.4 + self.character.illu_adjust.0,
+                    -self.character.illu_adjust.2 * 0.5 + offset.x * 0.4 + self.character.illu_adjust.0 - 0.2,
                     -self.character.illu_adjust.3 * 0.5 + offset.y * 0.4 + time_y + self.character.illu_adjust.1,
                     self.character.illu_adjust.2,
                     self.character.illu_adjust.3

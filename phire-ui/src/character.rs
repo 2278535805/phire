@@ -14,6 +14,7 @@ pub struct Character {
     pub id: String,
     pub name: HashMap<String, String>,
     pub intro: HashMap<String, String>,
+    pub skill: HashMap<String, String>,
     pub illust: String,
     pub illustrator: String,
 
@@ -45,6 +46,14 @@ impl Character {
             .unwrap_or("")
     }
 
+    pub fn skill(&self) -> &str {
+        let lang = get_data().language.as_deref().unwrap_or("en-US");
+        self.skill.get(lang)
+            .or_else(|| self.skill.get("en-US"))
+            .map(|s| s.as_str())
+            .unwrap_or("")
+    }
+
     pub async fn load_first() -> Result<Self> {
         let data = Self::load_all().await?;
         let first = data.first().ok_or_else(|| anyhow::anyhow!("No characters found"))?;
@@ -69,6 +78,7 @@ impl Character {
             id: data.id.clone(),
             name: data.name.clone(),
             intro: data.intro.clone(),
+            skill: data.skill.clone(),
             illust: data.illust.clone(),
             illustrator: data.illustrator.clone(),
 
