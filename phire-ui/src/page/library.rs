@@ -265,7 +265,7 @@ impl Page for LibraryPage {
     }
 
     fn enter(&mut self, s: &mut SharedState) -> Result<()> {
-        if self.chosen == ChartListType::Local {
+        if self.charts_view.is_empty() && self.chosen == ChartListType::Local {
             self.sync_local(s);
         }
         Ok(())

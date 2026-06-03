@@ -142,6 +142,10 @@ impl ChartsView {
         self.charts = None;
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.charts.is_none()
+    }
+
     pub fn set(&mut self, t: f32, charts: Vec<ChartDisplayItem>) {
         self.charts = Some(charts);
         self.fader.sub(t);
