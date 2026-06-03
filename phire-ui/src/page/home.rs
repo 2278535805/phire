@@ -4,24 +4,18 @@ use std::sync::Arc;
 
 use super::{LibraryPage, NextPage, Page, ResPackPage, SFader, SettingsPage, SharedState};
 use crate::{
-    client::{recv_raw, Client, LoginParams, User, UserManager},
-    dir, get_data, get_data_mut,
-    icons::Icons,
-    login::Login,
-    save_data,
-    scene::ProfileScene,
-    sync_data,
+    anim::Anim, character::Character, client::{Client, LoginParams, User, UserManager, recv_raw}, dir, get_data, get_data_mut, icons::Icons, login::Login, save_data, scene::ProfileScene, sync_data
 };
 use ::rand::{random, rng, Rng};
 use anyhow::Result;
 use image::DynamicImage;
 use macroquad::prelude::*;
 use phire::{
-    ext::{semi_black, semi_white, RectExt, SafeTexture, ScaleType},
+    ext::{RectExt, SafeTexture, ScaleType, semi_black, semi_white},
     info::ChartInfo,
-    scene::{show_error, NextScene},
+    scene::{NextScene, show_error},
     task::Task,
-    ui::{button_hit_large, DRectButton, Ui},
+    ui::{DRectButton, RectButton, Ui, button_hit_large},
 };
 use serde::Deserialize;
 use tracing::warn;
@@ -30,7 +24,11 @@ const BOARD_SWITCH_TIME: f32 = 4.;
 const BOARD_TRANSIT_TIME: f32 = 1.2;
 
 pub struct HomePage {
-    character: SafeTexture,
+    character: Character,
+    char_screen_p: Anim<f32>,
+    char_appear_p: Anim<f32>,
+    char_btn: RectButton,
+    
     icons: Arc<Icons>,
 
     btn_play: DRectButton,
@@ -61,7 +59,7 @@ pub struct HomePage {
 
 impl HomePage {
     pub async fn new() -> Result<Self> {
-        let character = SafeTexture::from(load_texture("char.png").await?).with_mipmap();
+        let character = Character::new().await?;
         let update_task = if get_data().config.offline_mode {
             None
         } else if let Some(u) = &get_data().me {
@@ -78,6 +76,10 @@ impl HomePage {
         };
         Ok(Self {
             character,
+            char_screen_p: Anim::new(0.),
+            char_appear_p: Anim::new(0.),
+            char_btn: RectButton::new(),
+
             icons: Arc::new(Icons::new().await?),
 
             btn_play: DRectButton::new().with_radius(0.00).with_delta(-0.006).with_elevation(0.000).no_sound(),
@@ -268,13 +270,30 @@ impl Page for HomePage {
 
     fn render(&mut self, ui: &mut Ui, s: &mut SharedState) -> Result<()> {
         let t = s.t;
+        let rt = s.rt;
+        let cp = self.char_screen_p.now(rt);
         let pad = 0.04;
 
         let offset = s.gyro_offset;
 
         s.render_fader(ui, |ui, c| {
-            let r = Rect::new(offset.x * 0.4 - 0.9, offset.y * 0.4 - ui.top + 0.1, 1.5, 1.5);
-            ui.fill_rect(r, (Texture2D::clone(&self.character), r, ScaleType::CropCenter, c));
+            // let r = Rect::new(-1. + 0.14 * cp, -ui.top + 0.12, 1., 1.7);
+            if let Some(illu) = &self.character.illu {
+                // let p = self.char_appear_p.now(t);
+                // let (ox, oy, ow, oh) = self.character.illu_adjust;
+                // let r = Rect::new(r.x + ox, r.y + (1. - p) * 0.05 + oy, r.w + ow, r.h + oh);
+                // ui.fill_rect(ui.screen_rect(), (Texture2D::clone(illu), r, ScaleType::CropCenter, semi_white(p)));
+                let time_y = (t * 0.5).sin() * 0.02;
+                let r = Rect::new(
+                    -self.character.illu_adjust.2 * 0.5 + offset.x * 0.4 + self.character.illu_adjust.0,
+                    -self.character.illu_adjust.3 * 0.5 + offset.y * 0.4 + cp + time_y + self.character.illu_adjust.1,
+                    self.character.illu_adjust.2,
+                    self.character.illu_adjust.3
+                );
+                ui.fill_rect(r, semi_white(0.25));
+                ui.fill_rect(r, (Texture2D::clone(illu), r, ScaleType::CropCenter, c));
+            }
+            // self.char_btn.set(ui, r);
         });
 
         // play button

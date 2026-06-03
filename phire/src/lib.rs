@@ -5,6 +5,7 @@ pub mod dir;
 pub mod ext;
 pub mod fs;
 pub mod info;
+pub mod json;
 pub mod judge;
 pub mod l10n;
 pub mod parse;

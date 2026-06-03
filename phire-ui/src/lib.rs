@@ -3,6 +3,8 @@ phire::tl_file!("common" ttl crate::);
 #[cfg(feature = "closed")]
 mod inner;
 
+mod anim;
+mod character;
 mod charts_view;
 mod client;
 mod data;
