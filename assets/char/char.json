@@ -1,0 +1,47 @@
+[
+  {
+    "id": "feilas",
+    "illust": "/char/feilas.png",
+    "illustrator": "零玖F",
+    "baseline": false,
+    "illu_adjust": [0.0, 0.2, 1.5, 1.5],
+    "name": {
+      "en-US": "Feilas",
+      "zh-CN": "Feilas"
+    },
+    "intro": {
+      "en-US": "Intro",
+      "zh-CN": "简介"
+    }
+  },
+  {
+    "id": "hikarin",
+    "illust": "/char/hikarin.png",
+    "illustrator": "NuanR_Mxi",
+    "baseline": false,
+    "illu_adjust": [0.0, 0.2, 1.5, 1.5],
+    "name": {
+      "en-US": "Hikarin",
+      "zh-CN": "枫"
+    },
+    "intro": {
+      "en-US": "Intro",
+      "zh-CN": "简介"
+    }
+  },
+  {
+    "id": "blua",
+    "illust": "/char/blua.png",
+    "illustrator": "NekoFTR from Twirdora ©CalitrE Studio",
+    "baseline": false,
+    "illu_adjust": [0.0, 0.2, 1.5, 1.5],
+    "name": {
+      "en-US": "Blua",
+      "zh-CN": "蓝梦"
+    },
+    "intro": {
+      "en-US": "Intro",
+      "zh-CN": "简介"
+    }
+  }
+]

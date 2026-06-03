@@ -59,7 +59,7 @@ pub struct HomePage {
 
 impl HomePage {
     pub async fn new() -> Result<Self> {
-        let character = Character::new().await?;
+        let character = Character::load_first().await?;
         let update_task = if get_data().config.offline_mode {
             None
         } else if let Some(u) = &get_data().me {
@@ -185,6 +185,10 @@ impl Page for HomePage {
             }
             return Ok(true);
         }
+        if self.char_btn.touch(touch) {
+            println!("character touched");
+            return Ok(true);
+        }
         Ok(false)
     }
 
@@ -271,7 +275,6 @@ impl Page for HomePage {
     fn render(&mut self, ui: &mut Ui, s: &mut SharedState) -> Result<()> {
         let t = s.t;
         let rt = s.rt;
-        let cp = self.char_screen_p.now(rt);
         let pad = 0.04;
 
         let offset = s.gyro_offset;
@@ -286,14 +289,13 @@ impl Page for HomePage {
                 let time_y = (t * 0.5).sin() * 0.02;
                 let r = Rect::new(
                     -self.character.illu_adjust.2 * 0.5 + offset.x * 0.4 + self.character.illu_adjust.0,
-                    -self.character.illu_adjust.3 * 0.5 + offset.y * 0.4 + cp + time_y + self.character.illu_adjust.1,
+                    -self.character.illu_adjust.3 * 0.5 + offset.y * 0.4 + time_y + self.character.illu_adjust.1,
                     self.character.illu_adjust.2,
                     self.character.illu_adjust.3
                 );
-                ui.fill_rect(r, semi_white(0.25));
                 ui.fill_rect(r, (Texture2D::clone(illu), r, ScaleType::CropCenter, c));
+                self.char_btn.set(ui, r);
             }
-            // self.char_btn.set(ui, r);
         });
 
         // play button
