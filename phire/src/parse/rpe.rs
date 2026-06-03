@@ -632,7 +632,7 @@ async fn parse_judge_line(
                     res.map_value(|v| v * factor);
                     Ok(res)
                 }
-                let image_factor = if rpe.texture == "line.png" { 4000. / RPE_WIDTH / 6. } else { 2. / RPE_WIDTH };
+                let factor = if rpe.texture == "line.png" { 4000. / RPE_WIDTH / 6. } else { 2. / RPE_WIDTH };
                 rpe.extended
                     .as_ref()
                     .map(|e| -> Result<_> {
@@ -640,14 +640,14 @@ async fn parse_judge_line(
                             parse(
                                 r,
                                 &e.scale_x_events,
-                                image_factor,
+                                factor,
                                 bezier_map,
                             )?,
-                            parse(r, &e.scale_y_events, image_factor, bezier_map)?,
+                            parse(r, &e.scale_y_events, factor, bezier_map)?,
                         ))
                     })
                     .transpose()?
-                    .unwrap_or(AnimVector::fixed(Vector::new(image_factor, image_factor)))
+                    .unwrap_or(AnimVector::fixed(Vector::new(factor, factor)))
             },
         },
         color: if let Some(events) = rpe.extended.as_ref().and_then(|e| e.color_events.as_ref()) {
