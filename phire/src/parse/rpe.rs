@@ -632,7 +632,7 @@ async fn parse_judge_line(
                     res.map_value(|v| v * factor);
                     Ok(res)
                 }
-                let factor = if rpe.texture == "line.png" { 4000. / RPE_WIDTH / 6. } else { 2. / RPE_WIDTH };
+                let factor = if rpe.texture == "line.png" { 1. } else { 2. / RPE_WIDTH };
                 rpe.extended
                     .as_ref()
                     .map(|e| -> Result<_> {
