@@ -289,6 +289,8 @@ impl Page for HomePage {
                 );
                 ui.fill_rect(r, (Texture2D::clone(illu), r, ScaleType::Inside, c));
                 self.char_btn.set(ui, r);
+            } else {
+                self.char_btn.set(ui, ui.screen_rect());
             }
         });
 
