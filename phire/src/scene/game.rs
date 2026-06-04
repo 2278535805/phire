@@ -580,33 +580,29 @@ impl GameScene {
             };
             let mut text_size = 0.98 * scale_ratio;
             let max_width = 0.55 * aspect_ratio;
-            let mut text = ui.text(&combo)
-                .size(text_size)
-                .color(Color::new(0., 0., 0., 0.));
-            let ct = text.measure().center();
-            let text_width = text.measure().w;
+            let text = ui.text(&combo).size(text_size).measure();
+            let text_width = text.w;
             if text_width > max_width {
                 text_size *= max_width / text_width
             }
-            let combo_y = top + eps * 1.55 - (1. - p) * 0.4 + ct.y;
-            let btm = text.anchor(0.5, 0.5).pos(0., combo_y).draw().bottom() + 0.015;
-            self.chart.with_element(ui, res, UIElement::ComboNumber, Some((0., combo_y)), Some((0., combo_y)), |ui, color| {
-                ui.text(&combo)
-                    .pos(0., combo_y)
-                    .anchor(0.5, 0.5)
-                    .color(Color { a: color.a * c.a, ..color })
-                    .size(text_size)
-                    .multiline()
-                    .draw();
+            let combo_y = top + eps * 1.55 - (1. - p) * 0.4 + 0.055;
+            let btm = self.chart.with_element(ui, res, UIElement::ComboNumber, Some((0., combo_y)), Some((0., combo_y)), |ui, color| {
+                draw_text_aligned_opt_width(
+                    ui,
+                    &combo,
+                    0., combo_y,
+                    (0.5, 0.5),
+                    text_size,
+                    Color { a: color.a * c.a, ..color },
+                    0.55 * aspect_ratio
+                ).bottom() + 0.03 + 0.005
             });
-            let mut text = ui.text(&res.config.combo).size(0.34 * scale_ratio);
-            let ct = text.measure().center();
-            self.chart.with_element(ui, res, UIElement::Combo, Some((0., btm + ct.y)), Some((0., btm + ct.y)), |ui, color| {
+            self.chart.with_element(ui, res, UIElement::Combo, Some((0., btm)), Some((0., btm)), |ui, color| {
                 if (cfg!(feature = "play") && res.config.autoplay()) || validate_combo(&res.config.combo) || res.config.combo.len() > 50 {
-                    draw_text_aligned(ui, "AUTOPLAY", 0., btm + ct.y, (0.5, 0.5), 0.34 * scale_ratio, Color { a: color.a * c.a, ..color });
+                    draw_text_aligned(ui, "AUTOPLAY", 0., btm, (0.5, 0.5), 0.34 * scale_ratio, Color { a: color.a * c.a, ..color });
                     return;
                 }
-                draw_text_aligned_opt_width(ui, &res.config.combo, 0., btm + ct.y, (0.5, 0.5), 0.34 * scale_ratio, Color { a: color.a * c.a, ..color }, 0.55 * aspect_ratio);
+                draw_text_aligned_opt_width(ui, &res.config.combo, 0., btm, (0.5, 0.5), 0.34 * scale_ratio, Color { a: color.a * c.a, ..color }, 0.55 * aspect_ratio);
             });
         }
         let lf = -aspect_ratio + margin;

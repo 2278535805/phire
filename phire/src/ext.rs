@@ -175,12 +175,14 @@ pub fn get_viewport() -> (i32, i32, i32, i32) {
 pub fn draw_text_aligned(ui: &mut Ui, text: &str, x: f32, y: f32, anchor: (f32, f32), scale: f32, color: Color) -> Rect {
     ui.text(text).pos(x, y).anchor(anchor.0, anchor.1).size(scale).color(color).multiline().draw()
 }
+
 pub fn draw_text_aligned_opt_width(ui: &mut Ui, text: &str, x: f32, y: f32, anchor: (f32, f32), mut scale: f32, color: Color, max_width: f32) -> Rect {
-    let text_width = ui.text(text).size(scale).multiline().measure().w;
+    let mut text = ui.text(text).size(scale).pos(x, y).anchor(anchor.0, anchor.1).color(color).multiline();
+    let text_width = text.measure().w;
     if text_width > max_width {
         scale *= max_width / text_width
     }
-    ui.text(text).pos(x, y).anchor(anchor.0, anchor.1).size(scale).color(color).multiline().draw()
+    text.size(scale).draw()
 }
 
 pub fn draw_text_aligned_opt(ui: &mut Ui, text: &str, x: f32, y: f32, anchor: (f32, f32), mut scale: f32, color: Color, max_width: f32, max_height: f32) -> Rect {
