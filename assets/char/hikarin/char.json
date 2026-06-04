@@ -20,7 +20,7 @@
     "mode": {
       "speedBased": {
         "withJudge": {
-          "successFactor": 0.5,
+          "successFactor": 0.4,
           "failureFactor": 1.0,
           "punishFactor": 0.0,
           "maxSpeed": 0.0,
@@ -31,7 +31,7 @@
           "failureFactor": 0.0,
           "punishFactor": 0.2,
           "maxSpeed": 1.0,
-          "minSpeed": -0.5
+          "minSpeed": -0.4
         }
       }
     },
@@ -41,7 +41,7 @@
     "goodHeal": false,
     "badHeal": false,
     "perfectFactor": 1.0,
-    "goodFactor": 0.0,
-    "badFactor": -4.0
+    "goodFactor": -3.0,
+    "badFactor": -8.0
   }
 }
