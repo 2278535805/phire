@@ -81,7 +81,7 @@ impl EndingScene {
         record_data: Option<Vec<u8>>,
         record: Option<SimpleRecord>,
     ) -> Result<Self> {
-        let index = icon_index(result.score.round() as u32, result.num_of_notes == result.max_combo);
+        let index = icon_index(result.score.round() as u32, result.num_of_notes == result.max_combo, result.track_complete);
         let mut audio = create_audio_manger(config)?;
         let bgm = audio.create_music(
             endings[index].clone(),

@@ -1936,7 +1936,7 @@ impl Scene for SongScene {
         // bottom bar
         let s = 0.25;
         let r = Rect::new(-0.94, ui.top - s - 0.06, s, s);
-        let icon = self.record.as_ref().map_or(7, |it| icon_index(it.score as _, it.full_combo));
+        let icon = self.record.as_ref().map_or(7, |it| icon_index(it.score as _, it.full_combo, it.track_complete));
         ui.fill_rect(r, (Texture2D::clone(&self.rank_icons[icon]), r, ScaleType::Fit, c));
         let score = self.record.as_ref().map(|it| it.score).unwrap_or_default();
         let score = (score as f64 / 1_000_000.0 * self.info.score_total as f64) as u32;

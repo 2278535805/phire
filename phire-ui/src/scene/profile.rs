@@ -388,7 +388,7 @@ impl Scene for ProfileScene {
                                         .render_shadow(ui, r, t, c.a, |r| (Texture2D::clone(&item.illu.texture.0), r, ScaleType::CropCenter, c));
                                     ui.fill_path(&path, semi_black(0.6));
 
-                                    let icon = icon_index(item.record.score as _, item.record.full_combo);
+                                    let icon = icon_index(item.record.score as _, item.record.full_combo, true);
                                     let s = r.h - pad * 2.;
                                     let ir = Rect::new(r.x + pad, r.y + pad, s, s);
                                     ui.fill_rect(ir, (Texture2D::clone(&self.rank_icons[icon]), ir, ScaleType::Fit, c));

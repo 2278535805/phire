@@ -44,7 +44,9 @@ impl Page for CharacterPage {
             if btn.touch(touch) {
                 self.selected = i;
                 s.character = self.characters[i].clone();
-                get_data_mut().character_id = self.characters[i].id.clone();
+                let data = get_data_mut();
+                data.character_id = self.characters[i].id.clone();
+                data.config.health_mode = self.characters[i].health_mode.clone().map_or_else(|| None, |mode| Some(mode));
                 return Ok(true);
             }
         }
@@ -70,28 +72,28 @@ impl Page for CharacterPage {
             if let Some(character) = self.characters.get(self.selected) {
                 if let Some(illu) = &character.illu {
                     let r = Rect::new(
-                        character.illu_adjust.0 - character.illu_adjust.2 * 0.5 - 0.2,
-                        character.illu_adjust.1 - character.illu_adjust.3 * 0.5,
-                        character.illu_adjust.2,
-                        character.illu_adjust.3,
+                        character.position.0 - character.position.2 * 0.5 - 0.2,
+                        character.position.1 - character.position.3 * 0.5,
+                        character.position.2,
+                        character.position.3,
                     );
-                    ui.fill_rect(r, (Texture2D::clone(illu), r, ScaleType::CropCenter, c));
+                    ui.fill_rect(r, (Texture2D::clone(illu), r, ScaleType::Inside, c));
                 }
 
                 let name = character.name();
                 let skill = character.skill();
                 let illustrator = &character.illustrator;
 
-                let info_x = -0.5;
+                let info_x = -0.2;
                 let info_y = -0.6 * top;
-                let info_w = 0.5;
-                let info_h = 0.2;
+                let info_w = 0.6;
+                let info_h = 0.25;
 
                 ui.fill_rect(Rect::new(info_x - info_w * 0.5, info_y - info_h * 0.5, info_w, info_h), semi_black(0.5 * c.a));
 
                 draw_text_aligned_opt_width(ui,
                     name,
-                    info_x, info_y - 0.04,
+                    info_x, info_y - 0.03,
                     (0.5, 0.5),
                     0.5,
                     Color::new(1., 1., 1., 0.9 * c.a),
@@ -99,7 +101,7 @@ impl Page for CharacterPage {
                 );
 
                 draw_text_aligned_opt_width(ui,
-                    skill, info_x, info_y + 0.04,
+                    skill, info_x, info_y + 0.03,
                     (0.5, 0.5),
                     0.35,
                     Color::new(1., 1., 1., 0.8 * c.a),

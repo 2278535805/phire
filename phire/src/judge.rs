@@ -248,7 +248,7 @@ impl JudgeInner {
         }
     }
 
-    pub fn result(&self) -> PlayResult {
+    pub fn result(&self, track_complete: bool) -> PlayResult {
         let early = self.diffs.iter().filter(|it| **it < 0.).count() as u32;
         PlayResult {
             score: self.score(),
@@ -259,6 +259,7 @@ impl JudgeInner {
             early,
             late: self.diffs.len() as u32 - early,
             std: 0.,
+            track_complete,
         }
     }
 
@@ -1057,8 +1058,8 @@ impl Judge {
     }
 
     #[inline]
-    pub fn result(&self) -> PlayResult {
-        self.inner.result()
+    pub fn result(&self, track_complete: bool) -> PlayResult {
+        self.inner.result(track_complete)
     }
 
     #[inline]
@@ -1163,17 +1164,19 @@ pub struct PlayResult {
     pub early: u32,
     pub late: u32,
     pub std: f32,
+    pub track_complete: bool,
 }
 
-pub fn icon_index(score: u32, full_combo: bool) -> usize {
-    match (score, full_combo) {
-        (x, _) if x >= 1000000 => 0,
-        (_, true) => 1,
-        (x, _) if x < 700000 => 7,
-        (x, _) if x < 820000 => 6,
-        (x, _) if x < 880000 => 5,
-        (x, _) if x < 920000 => 4,
-        (x, _) if x < 960000 => 3,
-        (_, false) => 2,
+pub fn icon_index(score: u32, full_combo: bool, track_complete: bool) -> usize {
+    match (score, full_combo, track_complete) {
+        (_, _, false) => 7,
+        (x, _, _) if x >= 1000000 => 0,
+        (_, true, _) => 1,
+        (x, _, _) if x < 700000 => 7,
+        (x, _, _) if x < 820000 => 6,
+        (x, _, _) if x < 880000 => 5,
+        (x, _, _) if x < 920000 => 4,
+        (x, _, _) if x < 960000 => 3,
+        (_, false, _) => 2,
     }
 }

@@ -51,6 +51,8 @@ pub struct SimpleRecord {
     pub score: u32,
     pub accuracy: f32,
     pub full_combo: bool,
+    #[serde(default)]
+    pub track_complete: bool,
 }
 
 impl SimpleRecord {
@@ -66,6 +68,10 @@ impl SimpleRecord {
         }
         if other.full_combo & !self.full_combo {
             self.full_combo = other.full_combo;
+            changed = true;
+        }
+        if other.track_complete & !self.track_complete {
+            self.track_complete = other.track_complete;
             changed = true;
         }
         changed
@@ -1134,6 +1140,7 @@ impl Scene for GameScene {
                 #[cfg(feature = "play")]
                 let is_ending = is_ending || self.res.health.state.track_failed;
                 if is_ending {
+                    let track_complete = self.res.health.state.now_health >= self.res.health.config.complete_health;
                     if self.res.config.autoplay() {
                         self.judge.commit_all(&mut self.chart);
                     }
@@ -1149,7 +1156,7 @@ impl Scene for GameScene {
                             }
                         }
                     }
-                    let result = self.judge.result();
+                    let result = self.judge.result(track_complete);
                     let record = if self.res.config.autoplay() || self.res.config.speed < 1.0 - 1e-3 {
                         None
                     } else {
@@ -1157,6 +1164,7 @@ impl Scene for GameScene {
                             score: result.score as _,
                             accuracy: result.accuracy as _,
                             full_combo: result.max_combo == result.num_of_notes,
+                            track_complete,
                         })
                     };
                     self.next_scene = match self.mode {
@@ -1168,7 +1176,7 @@ impl Scene for GameScene {
                             self.res.icon_retry.clone(),
                             self.res.icon_proceed.clone(),
                             self.res.info.clone(),
-                            self.judge.result(),
+                            self.judge.result(track_complete),
                             self.res.challenge_icons[self.res.config.challenge_color.clone() as usize].clone(),
                             &self.res.config,
                             self.res.res_pack.endings.clone(),

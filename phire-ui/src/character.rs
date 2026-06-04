@@ -3,13 +3,14 @@ phire::tl_file!("character");
 use std::collections::HashMap;
 
 use macroquad::texture::load_texture;
-use phire::ext::SafeTexture;
+use phire::{ext::SafeTexture, health::HealthConfig};
 use serde::{Deserialize, Serialize};
 use anyhow::Result;
 
 use crate::get_data;
 
 #[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Character {
     pub id: String,
     pub name: HashMap<String, String>,
@@ -23,7 +24,9 @@ pub struct Character {
     #[serde(default)]
     pub baseline: bool,
 
-    pub illu_adjust: (f32, f32, f32, f32),
+    pub position: (f32, f32, f32, f32),
+
+    pub health_mode: Option<HealthConfig>,
 
     #[serde(skip)]
     pub illu: Option<SafeTexture>,
@@ -88,8 +91,8 @@ impl Character {
             name_size: data.name_size,
             baseline: data.baseline,
 
-            illu_adjust: data.illu_adjust,
-
+            position: data.position,
+            health_mode: data.health_mode.clone(),
             illu: Some(illu.with_mipmap()),
         })
     }
