@@ -6,6 +6,7 @@ use macroquad::texture::load_texture;
 use phire::{ext::SafeTexture, health::HealthConfig};
 use serde::{Deserialize, Serialize};
 use anyhow::Result;
+use tracing::error;
 
 use crate::get_data;
 
@@ -60,12 +61,18 @@ impl Character {
     pub async fn load_by_id(id: &str) -> Result<Self> {
         let data = Self::load_all().await?;
         let character = data.iter().find(|c| c.id == id).map_or_else(|| &data[0], |c| c);
-        Self::new(character).await
+        Self::new(character.clone()).await
     }
 
     pub async fn load_all() -> Result<Vec<Self>> {
-        let data = macroquad::file::load_string("/char/char.json").await?;
-        let data: Vec<Character> = serde_json::from_str(&data)?;
+        let list = macroquad::file::load_string("char.json").await?;
+        let list: Vec<String> = serde_json::from_str(&list)?;
+        let mut data = Vec::new();
+        for ch in list {
+            let char = macroquad::file::load_string(&ch).await?;
+            let char: Character = serde_json::from_str(&char)?;
+            data.push(char);
+        }
         Ok(data)
     }
 
@@ -73,27 +80,33 @@ impl Character {
         let data = Self::load_all().await?;
         let mut result = Vec::new();
         for ch in data {
-            result.push(Self::new(&ch).await?);
+            result.push(Self::new(ch).await?);
         }
         Ok(result)
     }
 
-    async fn new(data: &Character) -> Result<Self> {
-        let illu: SafeTexture = load_texture(&data.illust).await?.into();
+    async fn new(data: Character) -> Result<Self> {
+        let illu = if let Ok(illu) = load_texture(&data.illust).await {
+            let illu: SafeTexture = illu.into();
+            Some(illu.with_mipmap())
+        } else {
+            error!("failed to load character illustration {}", data.illust);
+            None
+        };
         Ok(Self {
-            id: data.id.clone(),
-            name: data.name.clone(),
-            intro: data.intro.clone(),
-            skill: data.skill.clone(),
-            illust: data.illust.clone(),
-            illustrator: data.illustrator.clone(),
+            id: data.id,
+            name: data.name,
+            intro: data.intro,
+            skill: data.skill,
+            illust: data.illust,
+            illustrator: data.illustrator,
 
             name_size: data.name_size,
             baseline: data.baseline,
 
             position: data.position,
-            health_mode: data.health_mode.clone(),
-            illu: Some(illu.with_mipmap()),
+            health_mode: data.health_mode,
+            illu,
         })
     }
 }
