@@ -4,7 +4,7 @@
     "illust": "/char/feilas.png",
     "illustrator": "零玖F",
     "baseline": false,
-    "illu_adjust": [0.0, 0.2, 1.5, 1.5],
+    "illu_adjust": [0.1, 0.2, 1.5, 1.5],
     "name": {
       "en-US": "Feilas",
       "zh-CN": "Feilas"

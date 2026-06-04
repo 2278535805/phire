@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use super::{CharacterPage, LibraryPage, NextPage, Page, ResPackPage, SFader, SettingsPage, SharedState};
 use crate::{
-    anim::Anim, character::Character, client::{Client, LoginParams, User, UserManager, recv_raw}, dir, get_data, get_data_mut, icons::Icons, login::Login, save_data, scene::ProfileScene, sync_data
+    client::{Client, LoginParams, User, UserManager, recv_raw}, dir, get_data, get_data_mut, icons::Icons, login::Login, save_data, scene::ProfileScene, sync_data
 };
 use ::rand::{random, rng, Rng};
 use anyhow::Result;
@@ -24,9 +24,6 @@ const BOARD_SWITCH_TIME: f32 = 4.;
 const BOARD_TRANSIT_TIME: f32 = 1.2;
 
 pub struct HomePage {
-    character: Character,
-    char_screen_p: Anim<f32>,
-    char_appear_p: Anim<f32>,
     char_btn: RectButton,
     
     icons: Arc<Icons>,
@@ -59,7 +56,6 @@ pub struct HomePage {
 
 impl HomePage {
     pub async fn new() -> Result<Self> {
-        let character = Character::load_first().await?;
         let update_task = if get_data().config.offline_mode {
             None
         } else if let Some(u) = &get_data().me {
@@ -75,9 +71,6 @@ impl HomePage {
             None
         };
         Ok(Self {
-            character,
-            char_screen_p: Anim::new(0.),
-            char_appear_p: Anim::new(0.),
             char_btn: RectButton::new(),
 
             icons: Arc::new(Icons::new().await?),
@@ -187,7 +180,7 @@ impl Page for HomePage {
         }
         if self.char_btn.touch(touch) {
             button_hit_large();
-            self.next_page = Some(NextPage::Overlay(Box::new(CharacterPage::new(self.character.clone()))));
+            self.next_page = Some(NextPage::Overlay(Box::new(CharacterPage::new(s.character.id.clone(), s.all_characters.clone())?)));
             return Ok(true);
         }
         Ok(false)
@@ -279,20 +272,21 @@ impl Page for HomePage {
         let pad = 0.04;
 
         let offset = s.gyro_offset;
+        let character = s.character.clone();
 
         s.render_fader(ui, |ui, c| {
             // let r = Rect::new(-1. + 0.14 * cp, -ui.top + 0.12, 1., 1.7);
-            if let Some(illu) = &self.character.illu {
+            if let Some(illu) = &character.illu {
                 // let p = self.char_appear_p.now(t);
                 // let (ox, oy, ow, oh) = self.character.illu_adjust;
                 // let r = Rect::new(r.x + ox, r.y + (1. - p) * 0.05 + oy, r.w + ow, r.h + oh);
                 // ui.fill_rect(ui.screen_rect(), (Texture2D::clone(illu), r, ScaleType::CropCenter, semi_white(p)));
                 let time_y = (t * 0.5).sin() * 0.02;
                 let r = Rect::new(
-                    -self.character.illu_adjust.2 * 0.5 + offset.x * 0.4 + self.character.illu_adjust.0 - 0.2,
-                    -self.character.illu_adjust.3 * 0.5 + offset.y * 0.4 + time_y + self.character.illu_adjust.1,
-                    self.character.illu_adjust.2,
-                    self.character.illu_adjust.3
+                    -character.illu_adjust.2 * 0.5 + offset.x * 0.4 + character.illu_adjust.0 - 0.2,
+                    -character.illu_adjust.3 * 0.5 + offset.y * 0.4 + time_y + character.illu_adjust.1,
+                    character.illu_adjust.2,
+                    character.illu_adjust.3
                 );
                 ui.fill_rect(r, (Texture2D::clone(illu), r, ScaleType::CropCenter, c));
                 self.char_btn.set(ui, r);

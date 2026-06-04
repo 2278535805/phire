@@ -54,15 +54,9 @@ impl Character {
             .unwrap_or("")
     }
 
-    pub async fn load_first() -> Result<Self> {
-        let data = Self::load_all().await?;
-        let first = data.first().ok_or_else(|| anyhow::anyhow!("No characters found"))?;
-        Self::new(first).await
-    }
-
     pub async fn load_by_id(id: &str) -> Result<Self> {
         let data = Self::load_all().await?;
-        let character = data.iter().find(|c| c.id == id).ok_or_else(|| anyhow::anyhow!("Character with id '{}' not found", id))?;
+        let character = data.iter().find(|c| c.id == id).map_or_else(|| &data[0], |c| c);
         Self::new(character).await
     }
 
@@ -70,6 +64,15 @@ impl Character {
         let data = macroquad::file::load_string("/char/char.json").await?;
         let data: Vec<Character> = serde_json::from_str(&data)?;
         Ok(data)
+    }
+
+    pub async fn new_all() -> Result<Vec<Self>> {
+        let data = Self::load_all().await?;
+        let mut result = Vec::new();
+        for ch in data {
+            result.push(Self::new(&ch).await?);
+        }
+        Ok(result)
     }
 
     async fn new(data: &Character) -> Result<Self> {

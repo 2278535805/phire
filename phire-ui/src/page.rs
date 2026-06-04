@@ -23,11 +23,7 @@ pub use settings::SettingsPage;
 use tokio::sync::Notify;
 
 use crate::{
-    client::File,
-    data::BriefChartInfo,
-    dir, get_data,
-    images::Images,
-    scene::{fs_from_path, ChartOrder},
+    character::Character, client::File, data::BriefChartInfo, dir, get_data, images::Images, scene::{ChartOrder, fs_from_path}
 };
 use anyhow::Result;
 use image::DynamicImage;
@@ -414,6 +410,8 @@ pub struct SharedState {
     pub icons: [SafeTexture; 8],
 
     pub gyro_offset: Vec2,
+    pub character: Character,
+    pub all_characters: Vec<Character>,
 }
 
 pub const RESTORE_RATE: f32 = 0.005;
@@ -425,6 +423,9 @@ impl SharedState {
     pub async fn new() -> Result<Self> {
         let font = FontArc::try_from_vec(load_file("halva.ttf").await?)?;
         let painter = TextPainter::new(font);
+        let all_characters = Character::new_all().await?;
+        let character = all_characters.iter().find(|c| c.id == get_data().character_id).map_or_else(|| &all_characters[0], |c| c).clone();
+
         Ok(Self {
             t: 0.,
             rt: 0.,
@@ -434,6 +435,8 @@ impl SharedState {
 
             icons: Resource::load_icons().await?,
             gyro_offset: Vec2::ZERO,
+            character,
+            all_characters,
         })
     }
 

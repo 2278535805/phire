@@ -105,6 +105,7 @@ pub struct Data {
     pub respacks: Vec<String>,
     pub respack_id: usize,
     pub accept_invalid_cert: bool,
+    pub character_id: String,
 }
 
 impl Data {
