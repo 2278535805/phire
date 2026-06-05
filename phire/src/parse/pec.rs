@@ -258,6 +258,9 @@ fn parse_judge_line(mut pec: PECJudgeLine, id: usize, max_time: f64) -> Result<J
             translation: AnimVector(parse_events(pec.move_events.0, id, "move X")?, parse_events(pec.move_events.1, id, "move Y")?),
             rotation: parse_events(pec.rotate_events, id, "rotate")?,
             scale: AnimVector(AnimFloat::fixed(3.91 / 6.), AnimFloat::default()),
+            translation_z: None,
+            rotation_3d: None,
+            scale_z: None,
         },
         color: Anim::default(),
         ctrl_obj: RefCell::default(),
@@ -271,6 +274,7 @@ fn parse_judge_line(mut pec: PECJudgeLine, id: usize, max_time: f64) -> Result<J
         z_index: 0,
         show_below: false,
         attach_ui: None,
+        camera: None,
 
         cache,
     })

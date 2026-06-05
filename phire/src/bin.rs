@@ -1,13 +1,14 @@
 use crate::{
     core::{
-        Anim, AnimVector, BezierTween, BpmList, Chart, ChartExtra, ChartSettings, ClampedTween, CtrlObject, JudgeLine, JudgeLineCache, JudgeLineKind, Keyframe, Note, NoteKind, Object, StaticTween, TextData, Tweenable, UIElement
+        Anim, AnimFloat, AnimVector, BezierTween, BpmList, Chart, ChartExtra, ChartSettings, ClampedTween, CtrlObject, JudgeLine, JudgeLineCache, JudgeLineKind, Keyframe, Note, NoteKind, Object, StaticTween, TextData, Tweenable, UIElement
     },
     judge::{HitSound, JudgeStatus},
     parse::process_lines,
 };
 use anyhow::{bail, Result};
 use byteorder::{LittleEndian as LE, ReadBytesExt, WriteBytesExt};
-use macroquad::{prelude::Color, texture::Texture2D};
+use macroquad::{prelude::{Color, vec3}, texture::Texture2D};
+use macroquad::camera::{Camera3D, Projection};
 use rustc_hash::FxHashMap;
 use std::{
     cell::RefCell,
@@ -355,21 +356,44 @@ impl<T: BinaryData + Tweenable> BinaryData for Anim<T> {
 
 impl BinaryData for Object {
     fn read_binary<R: Read>(r: &mut BinaryReader<R>) -> Result<Self> {
+        let has_3d = r.read::<bool>()?;
         Ok(Self {
             alpha: r.read()?,
             scale: AnimVector(r.read()?, r.read()?),
             rotation: r.read()?,
             translation: AnimVector(r.read()?, r.read()?),
+            translation_z: if has_3d { Some(r.read()?) } else { None },
+            rotation_3d: if has_3d {
+                let rx: AnimFloat = r.read()?;
+                let ry: AnimFloat = r.read()?;
+                let rz: AnimFloat = r.read()?;
+                Some((rx, ry, rz))
+            } else {
+                None
+            },
+            scale_z: if has_3d { Some(r.read()?) } else { None },
         })
     }
 
     fn write_binary<W: Write>(&self, w: &mut BinaryWriter<W>) -> Result<()> {
+        w.write_val(self.has_3d())?;
         w.write(&self.alpha)?;
         w.write(&self.scale.0)?;
         w.write(&self.scale.1)?;
         w.write(&self.rotation)?;
         w.write(&self.translation.0)?;
         w.write(&self.translation.1)?;
+        if let Some(ref tz) = self.translation_z {
+            w.write(tz)?;
+        }
+        if let Some((ref rx, ref ry, ref rz)) = self.rotation_3d {
+            w.write(rx)?;
+            w.write(ry)?;
+            w.write(rz)?;
+        }
+        if let Some(ref sz) = self.scale_z {
+            w.write(sz)?;
+        }
         Ok(())
     }
 }
@@ -459,6 +483,55 @@ impl BinaryData for Note {
     }
 }
 
+impl BinaryData for Camera3D {
+    fn read_binary<R: Read>(r: &mut BinaryReader<R>) -> Result<Self> {
+        let px: f32 = r.read()?;
+        let py: f32 = r.read()?;
+        let pz: f32 = r.read()?;
+        let tx: f32 = r.read()?;
+        let ty: f32 = r.read()?;
+        let tz: f32 = r.read()?;
+        let ux: f32 = r.read()?;
+        let uy: f32 = r.read()?;
+        let uz: f32 = r.read()?;
+        let fovy: f32 = r.read()?;
+        let aspect: Option<f32> = r.read()?;
+        let is_perspective: bool = r.read()?;
+        let z_near: f32 = r.read()?;
+        let z_far: f32 = r.read()?;
+        Ok(Self {
+            position: vec3(px, py, pz),
+            target: vec3(tx, ty, tz),
+            up: vec3(ux, uy, uz),
+            fovy,
+            aspect,
+            projection: if is_perspective { Projection::Perspective } else { Projection::Orthographics },
+            render_target: None,
+            viewport: None,
+            z_near,
+            z_far,
+        })
+    }
+
+    fn write_binary<W: Write>(&self, w: &mut BinaryWriter<W>) -> Result<()> {
+        w.write_val(self.position.x)?;
+        w.write_val(self.position.y)?;
+        w.write_val(self.position.z)?;
+        w.write_val(self.target.x)?;
+        w.write_val(self.target.y)?;
+        w.write_val(self.target.z)?;
+        w.write_val(self.up.x)?;
+        w.write_val(self.up.y)?;
+        w.write_val(self.up.z)?;
+        w.write_val(self.fovy)?;
+        w.write(&self.aspect)?;
+        w.write_val(matches!(self.projection, Projection::Perspective))?;
+        w.write_val(self.z_near)?;
+        w.write_val(self.z_far)?;
+        Ok(())
+    }
+}
+
 impl BinaryData for JudgeLine {
     fn read_binary<R: Read>(r: &mut BinaryReader<R>) -> Result<Self> {
         r.reset_time();
@@ -481,6 +554,7 @@ impl BinaryData for JudgeLine {
         let ctrl_obj = RefCell::new(r.read()?);
         let incline = r.read()?;
         let z_index = r.read()?;
+        let camera = r.read()?;
 
         let cache = JudgeLineCache::new(&mut notes);
         Ok(Self {
@@ -498,6 +572,7 @@ impl BinaryData for JudgeLine {
             ctrl_obj,
             incline,
             z_index,
+            camera,
 
             cache,
         })
@@ -534,6 +609,7 @@ impl BinaryData for JudgeLine {
         w.write(self.ctrl_obj.borrow().deref())?;
         w.write(&self.incline)?;
         w.write(&self.z_index)?;
+        w.write(&self.camera)?;
         Ok(())
     }
 }

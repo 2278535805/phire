@@ -12,7 +12,8 @@ use crate::{
 };
 use anyhow::{Context, Result};
 use image::{codecs::gif, AnimationDecoder, DynamicImage, ImageError};
-use macroquad::prelude::{Color, WHITE};
+use macroquad::prelude::{Color, WHITE, vec3};
+use macroquad::camera::{Camera3D, Projection};
 use rustc_hash::FxHashMap;
 use sasa::AudioClip;
 use serde::{Deserialize, Serialize};
@@ -41,6 +42,18 @@ fn f32_one() -> f32 {
 
 fn f64_one() -> f64 {
     1.
+}
+
+fn default_z_near() -> f32 {
+    0.01
+}
+
+fn default_z_far() -> f32 {
+    10000.0
+}
+
+fn default_fovy() -> f32 {
+    45.0
 }
 
 fn i32_one() -> i32 {
@@ -167,6 +180,48 @@ impl From<RGBColor> for Color {
 
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct RPECamera {
+    #[serde(default)]
+    position: [f32; 3],
+    #[serde(default)]
+    target: [f32; 3],
+    #[serde(default = "default_up")]
+    up: [f32; 3],
+    #[serde(default = "default_fovy")]
+    fovy: f32,
+    #[serde(default)]
+    aspect: Option<f32>,
+    #[serde(default)]
+    perspective: bool,
+    #[serde(default = "default_z_near")]
+    z_near: f32,
+    #[serde(default = "default_z_far")]
+    z_far: f32,
+}
+
+fn default_up() -> [f32; 3] {
+    [0.0, 1.0, 0.0]
+}
+
+impl RPECamera {
+    fn to_camera3d(&self) -> Camera3D {
+        Camera3D {
+            position: vec3(self.position[0], self.position[1], self.position[2]),
+            target: vec3(self.target[0], self.target[1], self.target[2]),
+            up: vec3(self.up[0], self.up[1], self.up[2]),
+            fovy: self.fovy.to_radians(),
+            aspect: self.aspect,
+            projection: if self.perspective { Projection::Perspective } else { Projection::Orthographics },
+            render_target: None,
+            viewport: None,
+            z_near: self.z_near,
+            z_far: self.z_far,
+        }
+    }
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RPEExtendedEvents {
     color_events: Option<Vec<RPEEvent<RGBColor>>>,
     text_events: Option<Vec<RPETextEvent>>,
@@ -175,6 +230,12 @@ pub struct RPEExtendedEvents {
     incline_events: Option<Vec<RPEEvent>>,
     paint_events: Option<Vec<RPEEvent>>,
     gif_events: Option<Vec<RPEEvent>>,
+    camera: Option<RPECamera>,
+    translation_z_events: Option<Vec<RPEEvent>>,
+    rotation_x_events: Option<Vec<RPEEvent>>,
+    rotation_y_events: Option<Vec<RPEEvent>>,
+    rotation_z_events: Option<Vec<RPEEvent>>,
+    scale_z_events: Option<Vec<RPEEvent>>,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -508,6 +569,9 @@ async fn parse_notes(
                     AnimVector(AnimFloat::fixed(note.size), AnimFloat::fixed(note.size))
                 },
                 rotation: AnimFloat::default(),
+                translation_z: None,
+                rotation_3d: None,
+                scale_z: None,
             },
             kind,
             hitsound,
@@ -608,6 +672,67 @@ async fn parse_judge_line(
     let mut height = parse_speed_events(r, &event_layers, bezier_map, max_time)?;
     let mut notes = parse_notes(r, rpe.notes.unwrap_or_default(), fs, &mut height, hitsounds).await?;
     let cache = JudgeLineCache::new(&mut notes);
+    let has_3d = rpe.extended.as_ref().map_or(false, |e| {
+        e.translation_z_events.is_some()
+            || e.rotation_x_events.is_some()
+            || e.rotation_y_events.is_some()
+            || e.rotation_z_events.is_some()
+            || e.scale_z_events.is_some()
+    });
+
+    let translation_z = if has_3d {
+        Some(
+            rpe.extended
+                .as_ref()
+                .and_then(|e| e.translation_z_events.as_ref())
+                .map(|events| parse_events(r, events, None, bezier_map))
+                .transpose()?
+                .unwrap_or_default(),
+        )
+    } else {
+        None
+    };
+
+    let rotation_3d = if has_3d {
+        let rx = rpe
+            .extended
+            .as_ref()
+            .and_then(|e| e.rotation_x_events.as_ref())
+            .map(|events| parse_events(r, events, None, bezier_map))
+            .transpose()?
+            .unwrap_or_default();
+        let ry = rpe
+            .extended
+            .as_ref()
+            .and_then(|e| e.rotation_y_events.as_ref())
+            .map(|events| parse_events(r, events, None, bezier_map))
+            .transpose()?
+            .unwrap_or_default();
+        let rz = rpe
+            .extended
+            .as_ref()
+            .and_then(|e| e.rotation_z_events.as_ref())
+            .map(|events| parse_events(r, events, None, bezier_map))
+            .transpose()?
+            .unwrap_or_default();
+        Some((rx, ry, rz))
+    } else {
+        None
+    };
+
+    let scale_z = if has_3d {
+        Some(
+            rpe.extended
+                .as_ref()
+                .and_then(|e| e.scale_z_events.as_ref())
+                .map(|events| parse_events(r, events, None, bezier_map))
+                .transpose()?
+                .unwrap_or_default(),
+        )
+    } else {
+        None
+    };
+
     Ok(JudgeLine {
         object: Object {
             alpha: events_with_factor(r, &event_layers, |it| &it.alpha_events, 1. / 255., "alpha", bezier_map)?,
@@ -649,6 +774,9 @@ async fn parse_judge_line(
                     .transpose()?
                     .unwrap_or(AnimVector::fixed(Vector::new(factor, factor)))
             },
+            translation_z,
+            rotation_3d,
+            scale_z,
         },
         color: if let Some(events) = rpe.extended.as_ref().and_then(|e| e.color_events.as_ref()) {
             parse_events(r, events, Some(WHITE), bezier_map).with_context(|| ptl!("color-events-parse-failed"))?
@@ -751,6 +879,7 @@ async fn parse_judge_line(
         z_index: rpe.z_order,
         show_below: rpe.is_cover != 1,
         attach_ui: rpe.attach_ui,
+        camera: rpe.extended.as_ref().and_then(|e| e.camera.as_ref().map(|c| c.to_camera3d())),
 
         cache,
     })

@@ -2,7 +2,7 @@ use super::{MSRenderTarget, Matrix, Point, NOTE_WIDTH_RATIO_BASE};
 use crate::{
     config::Config,
     core::tween::Tweenable,
-    ext::{SafeTexture, create_audio_manger, nalgebra_to_glm},
+    ext::{SafeTexture, create_audio_manger, nalgebra_to_glm, nalgebra4_to_glm},
     fs::FileSystem,
     health::Health,
     info::ChartInfo,
@@ -789,6 +789,13 @@ impl Resource {
     #[inline]
     pub fn apply_model_of(&mut self, mat: &Matrix, f: impl FnOnce(&mut Self)) {
         unsafe { get_internal_gl() }.quad_gl.push_model_matrix(nalgebra_to_glm(mat));
+        f(self);
+        unsafe { get_internal_gl() }.quad_gl.pop_model_matrix();
+    }
+
+    #[inline]
+    pub fn apply_model_3d(&mut self, mat: &nalgebra::Matrix4<f32>, f: impl FnOnce(&mut Self)) {
+        unsafe { get_internal_gl() }.quad_gl.push_model_matrix(nalgebra4_to_glm(mat));
         f(self);
         unsafe { get_internal_gl() }.quad_gl.pop_model_matrix();
     }

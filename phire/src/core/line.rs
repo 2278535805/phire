@@ -166,6 +166,7 @@ pub struct JudgeLine {
     pub z_index: i32,
     pub show_below: bool,
     pub attach_ui: Option<UIElement>,
+    pub camera: Option<Camera3D>,
 
     pub cache: JudgeLineCache,
     pub anchor: [f32; 2],
@@ -305,217 +306,296 @@ impl JudgeLine {
     pub fn render(&self, ui: &mut Ui, res: &mut Resource, lines: &[JudgeLine], bpm_list: &mut BpmList, settings: &ChartSettings, id: usize) {
         let alpha = self.object.now_alpha();
         let color = self.color.now_opt();
-        res.with_model(self.now_transform(res, lines), |res| {
-            res.with_model(self.object.now_scale(), |res| {
-                res.apply_model(|res| match &self.kind {
-                    JudgeLineKind::Normal => {
-                        if res.config.render_line {
-                            let mut color = color.unwrap_or(res.judge_line_color);
-                            color.a = parse_alpha(color.a * alpha.max(0.0), if res.info.fold_animation { 1.0 } else { res.alpha }, 0.15, res.config.chart_debug_line > 0.);
-                            if color.a == 0.0 {
-                                return;
-                            }
-                            let len = if settings.line_reference_y_axis {
-                                res.info.line_length / res.aspect_ratio
-                            } else {
-                                res.info.line_length
-                            };
-                            let thickness = if settings.line_reference_y_axis {
-                                0.0150 / res.aspect_ratio
-                            } else {
-                                0.0100
-                            };
-                            draw_line(-len, 0., len, 0., thickness, color);
-                        }
-                    }
-                    JudgeLineKind::Texture(texture, _) => {
-                        if res.config.render_line_extra {
-                            let mut color = color.unwrap_or(WHITE);
-                            color.a = parse_alpha(alpha.max(0.0), res.alpha, 0.15, res.config.chart_debug_line > 0.);
-                            if color.a == 0.0 {
-                                return;
-                            }
-                            // let hf = vec2(texture.width() / res.aspect_ratio, texture.height() / res.aspect_ratio);
-                            let hf = vec2(texture.width(), texture.height()); // Sync RPE
-                            draw_texture_ex(
-                                texture,
-                                -hf.x * self.anchor[0],
-                                -hf.y * self.anchor[1],
-                                color,
-                                DrawTextureParams {
-                                    dest_size: Some(hf),
-                                    flip_y: true,
-                                    ..Default::default()
-                                },
-                            );
-                        }
-                    }
-                    JudgeLineKind::TextureGif(anim, frames, _) => {
-                        if res.config.render_line_extra {
-                            let t = anim.now_opt().unwrap_or(0.0);
-                            let frame = frames.get_prog_frame(t);
-                            let mut color = color.unwrap_or(WHITE);
-                            color.a = parse_alpha(alpha.max(0.0), res.alpha, 0.15, res.config.chart_debug_line > 0.);
-                            if color.a == 0.0 {
-                                return;
-                            }
-                            let hf = vec2(frame.width(), frame.height());
-                            draw_texture_ex(
-                                frame,
-                                -hf.x * self.anchor[0],
-                                -hf.y * self.anchor[1],
-                                color,
-                                DrawTextureParams {
-                                    dest_size: Some(hf),
-                                    flip_y: true,
-                                    ..Default::default()
-                                },
-                            );
-                        }
-                    }
-                    JudgeLineKind::Text(anim) => {
-                        if res.config.render_line_extra {
-                            let mut color = color.unwrap_or(WHITE);
-                            color.a = parse_alpha(alpha.max(0.0), res.alpha, 0.15, res.config.chart_debug_line > 0.);
-                            if color.a == 0.0 {
-                                return;
-                            }
-                            res.apply_model_of(&Matrix::identity().append_nonuniform_scaling(&Vector::new(1., -1.)), |res| {
-                                let now = anim.now();
-                                let mut painter = now.font_id.and_then(|id| res.fonts.get(id)).map(|cell| cell.borrow_mut());
-                                ui.text(&now.text).pos(0., 0.).anchor(self.anchor[0], -self.anchor[1] + 1.).size(1.).color(color).multiline().draw_with_font(painter.as_deref_mut());
-                            });
-                        }
-                    }
-                    JudgeLineKind::Paint(anim, state) => {
-                        if res.config.render_line_extra {
-                            let mut color = color.unwrap_or(WHITE);
-                            color.a = parse_alpha(alpha.max(0.0) * 2.55, res.alpha, 0.15, res.config.chart_debug_line > 0.);
-                            let mut gl = unsafe { get_internal_gl() };
-                            let mut guard = state.borrow_mut();
-                            let vp = get_viewport();
-                            let pass = *guard.0.get_or_insert_with(|| {
-                                let ctx = &mut gl.quad_context;
-                                let tex = ctx.new_render_texture(
-                                    TextureParams {
-                                        width: vp.2 as _,
-                                        height: vp.3 as _,
-                                        format: miniquad::TextureFormat::RGBA8,
-                                        kind: miniquad::TextureKind::Texture2D,
-                                        min_filter: FilterMode::Linear,
-                                        mag_filter: FilterMode::Linear,
-                                        mipmap_filter: miniquad::MipmapFilterMode::None,
-                                        allocate_mipmaps: false,
-                                        sample_count: 1,
-                                        wrap: TextureWrap::Clamp,
-                                    },
-                                );
-                                ctx.new_render_pass(tex, None)
-                            });
-                            gl.flush();
-                            let old_pass = gl.quad_gl.get_active_render_pass();
-                            gl.quad_gl.render_pass(Some(pass));
-                            gl.quad_gl.viewport(None);
-                            let size = anim.now();
-                            if size <= 0. {
-                                if guard.1 {
-                                    clear_background(Color::default());
-                                    guard.1 = false;
-                                }
-                            } else {
-                                ui.fill_circle(0., 0., size / vp.2 as f32 * 2., color);
-                                guard.1 = true;
-                            }
-                            gl.flush();
-                            gl.quad_gl.render_pass(old_pass);
-                            gl.quad_gl.viewport(Some(vp));
-                        }
-                    }
-                })
+        if let Some(ref cam) = self.camera {
+            push_camera_state();
+            set_camera(cam);
+        }
+
+        let transform_3d = self.object.now_transform_3d(res);
+        if let Some(mat3d) = transform_3d {
+            let scale = self.object.scale.now_with_def(1.0, 1.0);
+            let sz = self.object.scale_z.as_ref().map_or(1.0, |z| z.now_opt().unwrap_or(1.0));
+            let scale_3d = nalgebra::Matrix4::new(
+                scale.x, 0.0, 0.0, 0.0,
+                0.0, scale.y, 0.0, 0.0,
+                0.0, 0.0, sz, 0.0,
+                0.0, 0.0, 0.0, 1.0,
+            );
+            let full = mat3d * scale_3d;
+            res.apply_model_3d(&full, |res| {
+                self.render_content(ui, res, lines, bpm_list, settings, id, alpha, color);
             });
-            if let JudgeLineKind::Paint(_, state) = &self.kind {
-                let guard = state.borrow_mut();
-                if guard.1 && res.config.render_line_extra {
-                    let mut gl = unsafe { get_internal_gl() };
-                    let ctx = &mut gl.quad_context;
-                    let tex = ctx.render_pass_texture(*guard.0.as_ref().unwrap());
-                    let top = 1. / res.aspect_ratio;
-                    draw_texture_ex(
-                        &Texture2D::from_miniquad_texture(tex),
-                        -1.,
-                        -top,
-                        WHITE,
-                        DrawTextureParams {
-                            dest_size: Some(vec2(2., top * 2.)),
-                            ..Default::default()
-                        },
-                    );
+        } else {
+            res.with_model(self.now_transform(res, lines), |res| {
+                self.render_content(ui, res, lines, bpm_list, settings, id, alpha, color);
+            });
+        }
+
+        if self.camera.is_some() {
+            pop_camera_state();
+        }
+    }
+
+    fn render_content(&self, ui: &mut Ui, res: &mut Resource, lines: &[JudgeLine], bpm_list: &mut BpmList, settings: &ChartSettings, id: usize, alpha: f32, color: Option<Color>) {
+        res.with_model(self.object.now_scale(), |res| {
+            res.apply_model(|res| match &self.kind {
+                JudgeLineKind::Normal => {
+                    if res.config.render_line {
+                        let mut color = color.unwrap_or(res.judge_line_color);
+                        color.a = parse_alpha(color.a * alpha.max(0.0), if res.info.fold_animation { 1.0 } else { res.alpha }, 0.15, res.config.chart_debug_line > 0.);
+                        if color.a == 0.0 {
+                            return;
+                        }
+                        let len = if settings.line_reference_y_axis {
+                            res.info.line_length / res.aspect_ratio
+                        } else {
+                            res.info.line_length
+                        };
+                        let thickness = if settings.line_reference_y_axis {
+                            0.0150 / res.aspect_ratio
+                        } else {
+                            0.0100
+                        };
+                        draw_line(-len, 0., len, 0., thickness, color);
+                    }
+                }
+                JudgeLineKind::Texture(texture, _) => {
+                    if res.config.render_line_extra {
+                        let mut color = color.unwrap_or(WHITE);
+                        color.a = parse_alpha(alpha.max(0.0), res.alpha, 0.15, res.config.chart_debug_line > 0.);
+                        if color.a == 0.0 {
+                            return;
+                        }
+                        let hf = vec2(texture.width(), texture.height());
+                        draw_texture_ex(
+                            texture,
+                            -hf.x * self.anchor[0],
+                            -hf.y * self.anchor[1],
+                            color,
+                            DrawTextureParams {
+                                dest_size: Some(hf),
+                                flip_y: true,
+                                ..Default::default()
+                            },
+                        );
+                    }
+                }
+                JudgeLineKind::TextureGif(anim, frames, _) => {
+                    if res.config.render_line_extra {
+                        let t = anim.now_opt().unwrap_or(0.0);
+                        let frame = frames.get_prog_frame(t);
+                        let mut color = color.unwrap_or(WHITE);
+                        color.a = parse_alpha(alpha.max(0.0), res.alpha, 0.15, res.config.chart_debug_line > 0.);
+                        if color.a == 0.0 {
+                            return;
+                        }
+                        let hf = vec2(frame.width(), frame.height());
+                        draw_texture_ex(
+                            frame,
+                            -hf.x * self.anchor[0],
+                            -hf.y * self.anchor[1],
+                            color,
+                            DrawTextureParams {
+                                dest_size: Some(hf),
+                                flip_y: true,
+                                ..Default::default()
+                            },
+                        );
+                    }
+                }
+                JudgeLineKind::Text(anim) => {
+                    if res.config.render_line_extra {
+                        let mut color = color.unwrap_or(WHITE);
+                        color.a = parse_alpha(alpha.max(0.0), res.alpha, 0.15, res.config.chart_debug_line > 0.);
+                        if color.a == 0.0 {
+                            return;
+                        }
+                        res.apply_model_of(&Matrix::identity().append_nonuniform_scaling(&Vector::new(1., -1.)), |res| {
+                            let now = anim.now();
+                            let mut painter = now.font_id.and_then(|id| res.fonts.get(id)).map(|cell| cell.borrow_mut());
+                            ui.text(&now.text).pos(0., 0.).anchor(self.anchor[0], -self.anchor[1] + 1.).size(1.).color(color).multiline().draw_with_font(painter.as_deref_mut());
+                        });
+                    }
+                }
+                JudgeLineKind::Paint(anim, state) => {
+                    if res.config.render_line_extra {
+                        let mut color = color.unwrap_or(WHITE);
+                        color.a = parse_alpha(alpha.max(0.0) * 2.55, res.alpha, 0.15, res.config.chart_debug_line > 0.);
+                        let mut gl = unsafe { get_internal_gl() };
+                        let mut guard = state.borrow_mut();
+                        let vp = get_viewport();
+                        let pass = *guard.0.get_or_insert_with(|| {
+                            let ctx = &mut gl.quad_context;
+                            let tex = ctx.new_render_texture(
+                                TextureParams {
+                                    width: vp.2 as _,
+                                    height: vp.3 as _,
+                                    format: miniquad::TextureFormat::RGBA8,
+                                    kind: miniquad::TextureKind::Texture2D,
+                                    min_filter: FilterMode::Linear,
+                                    mag_filter: FilterMode::Linear,
+                                    mipmap_filter: miniquad::MipmapFilterMode::None,
+                                    allocate_mipmaps: false,
+                                    sample_count: 1,
+                                    wrap: TextureWrap::Clamp,
+                                },
+                            );
+                            ctx.new_render_pass(tex, None)
+                        });
+                        gl.flush();
+                        let old_pass = gl.quad_gl.get_active_render_pass();
+                        gl.quad_gl.render_pass(Some(pass));
+                        gl.quad_gl.viewport(None);
+                        let size = anim.now();
+                        if size <= 0. {
+                            if guard.1 {
+                                clear_background(Color::default());
+                                guard.1 = false;
+                            }
+                        } else {
+                            ui.fill_circle(0., 0., size / vp.2 as f32 * 2., color);
+                            guard.1 = true;
+                        }
+                        gl.flush();
+                        gl.quad_gl.render_pass(old_pass);
+                        gl.quad_gl.viewport(Some(vp));
+                    }
+                }
+            })
+        });
+        if let JudgeLineKind::Paint(_, state) = &self.kind {
+            let guard = state.borrow_mut();
+            if guard.1 && res.config.render_line_extra {
+                let mut gl = unsafe { get_internal_gl() };
+                let ctx = &mut gl.quad_context;
+                let tex = ctx.render_pass_texture(*guard.0.as_ref().unwrap());
+                let top = 1. / res.aspect_ratio;
+                draw_texture_ex(
+                    &Texture2D::from_miniquad_texture(tex),
+                    -1.,
+                    -top,
+                    WHITE,
+                    DrawTextureParams {
+                        dest_size: Some(vec2(2., top * 2.)),
+                        ..Default::default()
+                    },
+                );
+            }
+        }
+        let mut config = RenderConfig {
+            settings,
+            ctrl_obj: &mut self.ctrl_obj.borrow_mut(),
+            line_height: self.height.now(),
+            appear_before: f64::INFINITY,
+            invisible_time: f64::INFINITY,
+            draw_below: self.show_below,
+            incline_sin: self.incline.now_opt().map(|it| it.to_radians().sin()).unwrap_or_default(),
+        };
+        if res.config.has_mod(Mods::FADE_OUT) {
+            config.invisible_time = LIMIT_BAD;
+        }
+        let mut line_set_debug_alpha = false;
+        if alpha < 0.0 {
+            if !settings.pe_alpha_extension {
+                if res.config.chart_debug_note > 0. {
+                    line_set_debug_alpha = true;
+                } else {
+                    return;
                 }
             }
-            let mut config = RenderConfig {
-                settings,
-                ctrl_obj: &mut self.ctrl_obj.borrow_mut(),
-                line_height: self.height.now(),
-                appear_before: f64::INFINITY,
-                invisible_time: f64::INFINITY,
-                draw_below: self.show_below,
-                incline_sin: self.incline.now_opt().map(|it| it.to_radians().sin()).unwrap_or_default(),
-            };
-            if res.config.has_mod(Mods::FADE_OUT) {
-                config.invisible_time = LIMIT_BAD;
-            }
-            let mut line_set_debug_alpha = false;
-            if alpha < 0.0 {
-                if !settings.pe_alpha_extension {
+            let w = (-alpha).floor() as u32;
+            match w {
+                1 => {
                     if res.config.chart_debug_note > 0. {
                         line_set_debug_alpha = true;
                     } else {
                         return;
                     }
                 }
-                let w = (-alpha).floor() as u32;
-                match w {
-                    1 => {
-                        if res.config.chart_debug_note > 0. {
-                            line_set_debug_alpha = true;
-                        } else {
-                            return;
+                2 => {
+                    config.draw_below = false;
+                }
+                w if (100..1000).contains(&w) => {
+                    config.appear_before = (w as f64 - 100.) / 10.;
+                }
+                w if (1000..2000).contains(&w) => {
+                    // TODO unsupported
+                }
+                _ => {}
+            }
+        }
+        let vw = 1.01 / res.config.chart_ratio;
+        let (vw, vh) = if res.config.rotation_mode {
+            (vw, vw.max(vw / res.aspect_ratio))
+        } else {
+            (vw, vw / res.aspect_ratio)
+        };
+        let p = [
+            res.screen_to_world(Point::new(-vw, -vh)),
+            res.screen_to_world(Point::new(-vw, vh)),
+            res.screen_to_world(Point::new(vw, -vh)),
+            res.screen_to_world(Point::new(vw, vh)),
+        ];
+        let height_above = p[0].y.max(p[1].y.max(p[2].y.max(p[3].y))) as f64;
+        let height_below = p[0].y.min(p[1].y.min(p[2].y.min(p[3].y))) as f64;
+        let agg = res.config.aggressive_chart;
+        let mut height = self.height.clone();
+        let aspect_ratio = res.aspect_ratio as f64;
+        if res.config.note_scale > 0. && res.config.render_note {
+            for index in &self.cache.above_indices {
+                let speed = self.notes[*index].speed;
+                for note in self.notes[*index..].iter() {
+                    if !note.above || speed != note.speed {
+                        break;
+                    }
+                    if matches!(note.judge, JudgeStatus::Judged) && !matches!(note.kind, NoteKind::Hold { .. }) {
+                        continue;
+                    }
+                    if agg {
+                        let line_height = match note.kind {
+                            NoteKind::Hold { end_time, .. } => {
+                                let time = if res.time < end_time {
+                                    res.time.min(note.time)
+                                } else {
+                                    res.time
+                                };
+                                height.set_time(time);
+                                height.now()
+                            }
+                            _ => {
+                                config.line_height
+                            }
+                        };
+                        let note_height = ((note.height - line_height) * speed + note.object.translation.1.now() as f64) / aspect_ratio;
+                        match note.kind {
+                            NoteKind::Hold { end_height, .. } => {
+                                let end_height = ((end_height - line_height) * speed + note.object.translation.1.now() as f64) / aspect_ratio;
+                                if note_height < height_below && end_height < height_below {
+                                    continue;
+                                }
+                                if note_height > height_above && end_height > height_above {
+                                    break;
+                                }
+                            },
+                            _ => {
+                                if note_height < height_below {
+                                    continue;
+                                }
+                                if note_height > height_above {
+                                    break;
+                                }
+                            }
                         }
                     }
-                    2 => {
-                        config.draw_below = false;
-                    }
-                    w if (100..1000).contains(&w) => {
-                        config.appear_before = (w as f64 - 100.) / 10.;
-                    }
-                    w if (1000..2000).contains(&w) => {
-                        // TODO unsupported
-                    }
-                    _ => {}
+                    note.render(ui, res, &mut config, bpm_list, line_set_debug_alpha, id, height_above, height_below);
                 }
             }
-            let vw = 1.01 / res.config.chart_ratio;
-            let (vw, vh) = if res.config.rotation_mode {
-                (vw, vw.max(vw / res.aspect_ratio))
-            } else {
-                (vw, vw / res.aspect_ratio)
-            };
-            let p = [
-                res.screen_to_world(Point::new(-vw, -vh)),
-                res.screen_to_world(Point::new(-vw, vh)),
-                res.screen_to_world(Point::new(vw, -vh)),
-                res.screen_to_world(Point::new(vw, vh)),
-            ];
-            let height_above = p[0].y.max(p[1].y.max(p[2].y.max(p[3].y))) as f64;
-            let height_below = p[0].y.min(p[1].y.min(p[2].y.min(p[3].y))) as f64;
-            let agg = res.config.aggressive_chart;
-            let mut height = self.height.clone();
-            let aspect_ratio = res.aspect_ratio as f64;
-            if res.config.note_scale > 0. && res.config.render_note {
-                for index in &self.cache.above_indices {
+
+            res.with_model(Matrix::identity().append_nonuniform_scaling(&Vector::new(1.0, -1.0)), |res| {
+                for index in &self.cache.below_indices {
                     let speed = self.notes[*index].speed;
                     for note in self.notes[*index..].iter() {
-                        if !note.above || speed != note.speed {
+                        if speed != note.speed {
                             break;
                         }
                         if matches!(note.judge, JudgeStatus::Judged) && !matches!(note.kind, NoteKind::Hold { .. }) {
@@ -537,162 +617,111 @@ impl JudgeLine {
                                 }
                             };
                             let note_height = ((note.height - line_height) * speed + note.object.translation.1.now() as f64) / aspect_ratio;
-                            match note.kind {   
+                            match note.kind {
                                 NoteKind::Hold { end_height, .. } => {
                                     let end_height = ((end_height - line_height) * speed + note.object.translation.1.now() as f64) / aspect_ratio;
-                                    if note_height < height_below && end_height < height_below {
+                                    if note_height < -height_above && end_height < -height_above {
                                         continue;
                                     }
-                                    if note_height > height_above && end_height > height_above {
+                                    if note_height > -height_below && end_height > -height_below {
                                         break;
                                     }
                                 },
                                 _ => {
-                                    if note_height < height_below {
+                                    if note_height < -height_above {
                                         continue;
                                     }
-                                    if note_height > height_above {
+                                    if note_height > -height_below {
                                         break;
                                     }
                                 }
                             }
                         }
-                        note.render(ui, res, &mut config, bpm_list, line_set_debug_alpha, id, height_above, height_below);
+                        note.render(ui, res, &mut config, bpm_list, line_set_debug_alpha, id, -height_below, -height_above);
                     }
                 }
+            });
+        }
+        if res.config.chart_debug_line > 0. {
+            res.with_model(Matrix::identity().append_nonuniform_scaling(&Vector::new(1.0, -1.0)), |res| {
+                res.apply_model(|res| {
+                    let kind = match &self.kind {
+                        JudgeLineKind::Normal => {
+                            if !res.config.render_line { return };
+                            String::new()
+                        },
+                        JudgeLineKind::Text(text) => {
+                            if !res.config.render_line_extra { return };
+                            format!(" text:{}", text.now().text)
+                        },
+                        JudgeLineKind::Texture(_, name) => {
+                            if !res.config.render_line_extra { return };
+                            format!(" img:{}", name)
+                        },
+                        JudgeLineKind::TextureGif(_, frames, name) => {
+                            if !res.config.render_line_extra { return };
+                            format!(" gif:{}/{}", name, frames.total_time())
+                        },
+                        JudgeLineKind::Paint(_, _) => {
+                            if !res.config.render_line_extra { return };
+                            " paint".to_string()
+                        },
+                    };
 
-                res.with_model(Matrix::identity().append_nonuniform_scaling(&Vector::new(1.0, -1.0)), |res| {
-                    for index in &self.cache.below_indices {
-                        let speed = self.notes[*index].speed;
-                        for note in self.notes[*index..].iter() {
-                            if speed != note.speed {
-                                break;
-                            }
-                            if matches!(note.judge, JudgeStatus::Judged) && !matches!(note.kind, NoteKind::Hold { .. }) {
-                                continue;
-                            }
-                            if agg {
-                                let line_height = match note.kind {
-                                    NoteKind::Hold { end_time, .. } => {
-                                        let time = if res.time < end_time {
-                                            res.time.min(note.time)
-                                        } else {
-                                            res.time
-                                        };
-                                        height.set_time(time);
-                                        height.now()
-                                    }
-                                    _ => {
-                                        config.line_height
-                                    }
-                                };
-                                let note_height = ((note.height - line_height) * speed + note.object.translation.1.now() as f64) / aspect_ratio;
-                                match note.kind {   
-                                    NoteKind::Hold { end_height, .. } => {
-                                        let end_height = ((end_height - line_height) * speed + note.object.translation.1.now() as f64) / aspect_ratio;
-                                        if note_height < -height_above && end_height < -height_above {
-                                            continue;
-                                        }
-                                        if note_height > -height_below && end_height > -height_below {
-                                            break;
-                                        }
-                                    },
-                                    _ => {
-                                        if note_height < -height_above {
-                                            continue;
-                                        }
-                                        if note_height > -height_below {
-                                            break;
-                                        }
-                                    }
-                                }
-                            }
-                            note.render(ui, res, &mut config, bpm_list, line_set_debug_alpha, id, -height_below, -height_above);
+                    let parent = if let Some(parent) = self.parent {
+                        format!("({})", parent)
+                    } else {
+                        String::new()
+                    };
+                    let line_height_ulp_in_f32 = {
+                        if !config.line_height.is_nan() & !config.line_height.is_infinite() {
+                            f32::EPSILON * config.line_height.abs() as f32
+                        } else {
+                            0.0
                         }
-                    }
-                });
-            }
-            if res.config.chart_debug_line > 0. {
-                res.with_model(Matrix::identity().append_nonuniform_scaling(&Vector::new(1.0, -1.0)), |res| {
-                    res.apply_model(|res| {
-                        let kind = match &self.kind {
-                            JudgeLineKind::Normal => {
-                                if !res.config.render_line { return };
-                                String::new()
-                            },
-                            JudgeLineKind::Text(text) => {
-                                if !res.config.render_line_extra { return };
-                                format!(" text:{}", text.now().text)
-                            },
-                            JudgeLineKind::Texture(_, name) => {
-                                if !res.config.render_line_extra { return };
-                                format!(" img:{}", name)
-                            },
-                            JudgeLineKind::TextureGif(_, frames, name) => {
-                                if !res.config.render_line_extra { return };
-                                format!(" gif:{}/{}", name, frames.total_time())
-                            },
-                            JudgeLineKind::Paint(_, _) => {
-                                if !res.config.render_line_extra { return };
-                                " paint".to_string()
-                            },
-                        };
-
-                        let parent = if let Some(parent) = self.parent {
-                            format!("({})", parent)
-                        } else {
-                            String::new()
-                        };
-                        let line_height_ulp_in_f32 = {
-                            if !config.line_height.is_nan() & !config.line_height.is_infinite() {
-                                f32::EPSILON * config.line_height.abs() as f32
+                    };
+                    let line_height_ulp_string = {
+                            if line_height_ulp_in_f32 > 0.0018518519 {
+                                format!("(Speed too high! ULP: {:.4})", line_height_ulp_in_f32)
                             } else {
-                                0.0
-                            }
-                        };
-                        let line_height_ulp_string = {
-                                if line_height_ulp_in_f32 > 0.0018518519 {
-                                    format!("(Speed too high! ULP: {:.4})", line_height_ulp_in_f32)
-                                } else {
-                                    String::new()
-                                }
-                        };
-                        let z_index = {
-                            if self.z_index == 0 {
                                 String::new()
-                            } else {
-                                format!(" z:{}", self.z_index)
                             }
-                        };
-                        let attach_ui = {
-                            let num = self.attach_ui.map_or(0, |it| it as u8);
-                            if num == 0 {
-                                String::new()
-                            } else {
-                                format!(" a_ui:{}", num)
-                            }
-                        };
-                        let anchor = if self.anchor[0] == 0.5 && self.anchor[1] == 0.5 {
+                    };
+                    let z_index = {
+                        if self.z_index == 0 {
                             String::new()
                         } else {
-                            format!(" anc:{} {}", self.anchor[0], self.anchor[1])
-                        };
-                        let color = if line_height_ulp_in_f32 > 0.018518519 { // 10px error in 1080P
-                            Color::new(1., 0., 0., parse_alpha(alpha, res.alpha, 0.15, res.config.chart_debug_line > 0.))
-                        } else if line_height_ulp_in_f32 > 0.0018518519 { // 1px error in 1080P
-                            Color::new(1., 1., 0., parse_alpha(alpha, res.alpha, 0.15, res.config.chart_debug_line > 0.))
+                            format!(" z:{}", self.z_index)
+                        }
+                    };
+                    let attach_ui = {
+                        let num = self.attach_ui.map_or(0, |it| it as u8);
+                        if num == 0 {
+                            String::new()
                         } else {
-                            Color::new(1., 1., 1., parse_alpha(alpha, res.alpha, 0.15, res.config.chart_debug_line > 0.))
-                        };
-                        ui.text(format!("[{}]{} h:{:.2}{}{}{}{}{}", id, parent, config.line_height, line_height_ulp_string, z_index, attach_ui, anchor, kind))
-                        .pos(0., -res.config.chart_debug_line * 0.1)
-                        .anchor(0.5, 1.)
-                        .size(res.config.chart_debug_line)
-                        .color(color)
-                        .draw();
-                    });
+                            format!(" a_ui:{}", num)
+                        }
+                    };
+                    let anchor = if self.anchor[0] == 0.5 && self.anchor[1] == 0.5 {
+                        String::new()
+                    } else {
+                        format!(" anc:{} {}", self.anchor[0], self.anchor[1])
+                    };
+                    let color = if line_height_ulp_in_f32 > 0.018518519 { // 10px error in 1080P
+                        Color::new(1., 0., 0., parse_alpha(alpha, res.alpha, 0.15, res.config.chart_debug_line > 0.))
+                    } else if line_height_ulp_in_f32 > 0.0018518519 { // 1px error in 1080P
+                        Color::new(1., 1., 0., parse_alpha(alpha, res.alpha, 0.15, res.config.chart_debug_line > 0.))
+                    } else {
+                        Color::new(1., 1., 1., parse_alpha(alpha, res.alpha, 0.15, res.config.chart_debug_line > 0.))
+                    };
+                    ui.text(format!("[{}]{} h:{:.2}{}{}{}{}{}", id, parent, config.line_height, line_height_ulp_string, z_index, attach_ui, anchor, kind))
+                    .pos(0., -res.config.chart_debug_line * 0.1)
+                    .anchor(0.5, 1.)
+                    .size(res.config.chart_debug_line)
+                    .color(color)
+                    .draw();
                 });
-            }
-        });
+            });
+        }
     }
 }

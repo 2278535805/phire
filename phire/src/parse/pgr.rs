@@ -261,7 +261,10 @@ fn parse_judge_line(pgr: PgrJudgeLine, max_time: f64, format_version: u32) -> Re
                     3 => parse_move_events(r, pgr.move_events).with_context(|| ptl!("move-events-parse-failed"))?,
                     _ => ptl!(bail "unknown-format-version"),
                 }
-            }
+            },
+            translation_z: None,
+            rotation_3d: None,
+            scale_z: None,
         },
         color: Anim::default(),
         ctrl_obj: RefCell::default(),
@@ -275,6 +278,7 @@ fn parse_judge_line(pgr: PgrJudgeLine, max_time: f64, format_version: u32) -> Re
         z_index: 0,
         show_below: false,
         attach_ui: None,
+        camera: None,
 
         cache,
     })

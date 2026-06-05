@@ -161,6 +161,15 @@ pub fn nalgebra_to_glm(mat: &Matrix) -> Mat4 {
     ])
 }
 
+pub fn nalgebra4_to_glm(mat: &nalgebra::Matrix4<f32>) -> Mat4 {
+    Mat4::from_cols_array(&[
+        mat.m11, mat.m21, mat.m31, mat.m41,
+        mat.m12, mat.m22, mat.m32, mat.m42,
+        mat.m13, mat.m23, mat.m33, mat.m43,
+        mat.m14, mat.m24, mat.m34, mat.m44,
+    ])
+}
+
 pub fn get_viewport() -> (i32, i32, i32, i32) {
     let gl = unsafe { get_internal_gl() };
     let vp = gl.quad_gl.get_viewport();
