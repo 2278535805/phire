@@ -148,9 +148,9 @@ impl Chart {
                     let color = line.color.now_opt().unwrap_or(res.judge_line_color);
                     let line_scale = line.object.scale.now_with_def(1.0, 1.0);
                     let mat = Rotation2::new(
-                        self.lines[attach.line].fetch_rot(&self.lines).to_radians() * attach.rotation_factor).to_homogeneous()
-                        .append_translation(&self.lines[attach.line].fetch_pos(res, &self.lines).component_mul(&Vector2::new(attach.position_x_factor, attach.position_y_factor)));
-                    res.apply_model_of(&mat, |res| {
+                        self.lines[attach.line].fetch_rot(&self.lines).to_radians() * attach.rotation_factor).to_homogeneous().to_homogeneous()
+                        .append_translation(&self.lines[attach.line].fetch_pos_3d(res, &self.lines).component_mul(&Vector3::new(attach.position_x_factor, attach.position_y_factor, attach.position_z_factor)));
+                    res.apply_model_of_3d(&mat.append_nonuniform_scaling(&Vector3::new(1., 1., 1.)), |res| {
                         video.render(
                             res.time,
                             res.aspect_ratio,
@@ -159,7 +159,7 @@ impl Chart {
                         );
                     });
                 } else {
-                    res.apply_model_of(&Matrix3::identity(), |res| {
+                    res.apply_model_of_3d(&Matrix4::identity().append_nonuniform_scaling(&Vector3::new(1., 1., 1.)), |res| {
                         video.render(res.time, res.aspect_ratio, WHITE, None);
                     });
                 }

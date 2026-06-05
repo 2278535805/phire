@@ -94,7 +94,7 @@ impl Object {
     pub fn now_scale_3d(&self) -> Matrix4<f32> {
         let scale = self.scale.now_with_def(1.0, 1.0);
         let sz = self.scale_z.as_ref().map_or(1.0, |z| z.now_opt().unwrap_or(1.0));
-        Matrix4::new_nonuniform_scaling(&Vector3::new(scale.x, scale.y, sz))
+        Matrix4::identity().append_nonuniform_scaling(&Vector3::new(scale.x, scale.y, sz))
     }
 
     pub fn now_scale_wrt_point(&self, scale_point: Vector2) -> Matrix3 {

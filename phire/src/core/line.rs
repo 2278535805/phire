@@ -287,6 +287,26 @@ impl JudgeLine {
         self.object.now_translation(res)
     }
 
+    pub fn fetch_pos_3d(&self, res: &Resource, lines: &[JudgeLine]) -> Vector3 {
+        if let Some(parent) = self.parent {
+            let parent = &lines[parent];
+            let parent_pos = parent.fetch_pos_3d(res, lines);
+            let local_tr = self.object.now_translation(res);
+            let local_tr_z = self.object.translation_z.as_ref().map_or(0.0, |z| z.now());
+            let local = Vector3::new(local_tr.x, local_tr.y, local_tr_z);
+            if parent.object.has_3d() {
+                let rotated = parent.object.now_rotation_3d().transform_vector(&local);
+                return parent_pos + rotated;
+            }
+            let rot_2d = Rotation2::new(parent.fetch_rot(lines).to_radians());
+            let rotated = rot_2d * Vector2::new(local.x, local.y);
+            return parent_pos + Vector3::new(rotated.x, rotated.y, local.z);
+        }
+        let tr = self.object.now_translation(res);
+        let tr_z = self.object.translation_z.as_ref().map_or(0.0, |z| z.now());
+        Vector3::new(tr.x, tr.y, tr_z)
+    }
+
     pub fn fetch_rot(&self, lines: &[JudgeLine]) -> f32 {
         let mut rot = self.object.rotation.now();
         if self.rotate_with_parent {
@@ -297,6 +317,22 @@ impl JudgeLine {
         rot
     }
 
+    pub fn fetch_rot_3d(&self, lines: &[JudgeLine]) -> Matrix4 {
+        if self.rotate_with_parent {
+            if let Some(parent) = self.parent {
+                let parent = &lines[parent];
+                if parent.object.has_3d() {
+                    return parent.fetch_rot_3d(lines) * self.object.now_rotation_3d();
+                }
+                let parent_rot_2d: Matrix4 = Rotation2::new(parent.fetch_rot(lines).to_radians())
+                    .to_homogeneous()
+                    .to_homogeneous();
+                return parent_rot_2d * self.object.now_rotation_3d();
+            }
+        }
+        self.object.now_rotation_3d()
+    }
+
     pub fn now_transform(&self, res: &Resource, lines: &[JudgeLine]) -> Matrix3 {
         Rotation2::new(self.fetch_rot(lines).to_radians())
             .to_homogeneous()
@@ -304,10 +340,8 @@ impl JudgeLine {
     }
 
     pub fn now_transform_3d(&self, res: &Resource, lines: &[JudgeLine]) -> Matrix4 {
-        let pos = self.fetch_pos(res, lines);
-        let tr_z = self.object.translation_z.as_ref().map_or(0.0, |z| z.now());
-        let translation = Matrix4::new_translation(&nalgebra::Vector3::new(pos.x, pos.y, tr_z));
-        translation * self.object.now_rotation_3d()
+        let pos = self.fetch_pos_3d(res, lines);
+        self.fetch_rot_3d(lines).append_translation(&pos)
     }
 
     pub fn render(&self, ui: &mut Ui, res: &mut Resource, lines: &[JudgeLine], bpm_list: &mut BpmList, settings: &ChartSettings, id: usize) {
@@ -318,18 +352,9 @@ impl JudgeLine {
             set_camera(cam);
         }
 
-        let transform_3d = self.now_transform_3d(res, lines);
-        {
-            let full = transform_3d * self.object.now_scale_3d();
-            res.with_model_3d(full, |res| {
-                self.render_content(ui, res, bpm_list, settings, id, alpha, color);
-            });
-        }
-        //  else {
-        //     res.with_model(self.now_transform(res, lines), |res| {
-        //         self.render_content(ui, res, lines, bpm_list, settings, id, alpha, color);
-        //     });
-        // }
+        res.with_model_3d(self.now_transform_3d(res, lines) * self.object.now_scale_3d(), |res| {
+            self.render_content(ui, res, bpm_list, settings, id, alpha, color);
+        });
 
         if self.camera.is_some() {
             pop_camera_state();

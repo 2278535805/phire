@@ -26,6 +26,8 @@ pub struct VideoAttach {
     #[serde(default = "f32_one")]
     pub position_y_factor: f32,
     #[serde(default = "f32_one")]
+    pub position_z_factor: f32,
+    #[serde(default = "f32_one")]
     pub rotation_factor: f32,
     #[serde(default = "f32_one")]
     pub alpha_factor: f32,
