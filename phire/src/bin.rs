@@ -1,6 +1,6 @@
 use crate::{
     core::{
-        Anim, AnimFloat, AnimVector, BezierTween, BpmList, Chart, ChartExtra, ChartSettings, ClampedTween, CtrlObject, JudgeLine, JudgeLineCache, JudgeLineKind, Keyframe, Note, NoteKind, Object, StaticTween, TextData, Tweenable, UIElement
+        Anim, AnimFloat, AnimVector2, AnimVector3, BezierTween, BpmList, Chart, ChartExtra, ChartSettings, ClampedTween, CtrlObject, JudgeLine, JudgeLineCache, JudgeLineKind, Keyframe, Note, NoteKind, Object, StaticTween, TextData, Tweenable, UIElement
     },
     judge::{HitSound, JudgeStatus},
     parse::process_lines,
@@ -356,44 +356,27 @@ impl<T: BinaryData + Tweenable> BinaryData for Anim<T> {
 
 impl BinaryData for Object {
     fn read_binary<R: Read>(r: &mut BinaryReader<R>) -> Result<Self> {
-        let has_3d = r.read::<bool>()?;
         Ok(Self {
             alpha: r.read()?,
-            scale: AnimVector(r.read()?, r.read()?),
-            rotation: r.read()?,
-            translation: AnimVector(r.read()?, r.read()?),
-            translation_z: if has_3d { Some(r.read()?) } else { None },
-            rotation_3d: if has_3d {
-                let rx: AnimFloat = r.read()?;
-                let ry: AnimFloat = r.read()?;
-                let rz: AnimFloat = r.read()?;
-                Some((rx, ry, rz))
-            } else {
-                None
-            },
-            scale_z: if has_3d { Some(r.read()?) } else { None },
+            scale: AnimVector2(r.read()?, r.read()?),
+            translation: AnimVector2(r.read()?, r.read()?),
+            translation_z: r.read()?,
+            rotation_3d: AnimVector3(r.read()?, r.read()?, r.read()?),
+            scale_z: r.read()?,
         })
     }
 
     fn write_binary<W: Write>(&self, w: &mut BinaryWriter<W>) -> Result<()> {
-        w.write_val(self.has_3d())?;
         w.write(&self.alpha)?;
         w.write(&self.scale.0)?;
         w.write(&self.scale.1)?;
-        w.write(&self.rotation)?;
         w.write(&self.translation.0)?;
         w.write(&self.translation.1)?;
-        if let Some(ref tz) = self.translation_z {
-            w.write(tz)?;
-        }
-        if let Some((ref rx, ref ry, ref rz)) = self.rotation_3d {
-            w.write(rx)?;
-            w.write(ry)?;
-            w.write(rz)?;
-        }
-        if let Some(ref sz) = self.scale_z {
-            w.write(sz)?;
-        }
+        w.write(&self.translation_z)?;
+        w.write(&self.rotation_3d.0)?;
+        w.write(&self.rotation_3d.1)?;
+        w.write(&self.rotation_3d.2)?;
+        w.write(&self.scale_z)?;
         Ok(())
     }
 }

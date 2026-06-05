@@ -178,7 +178,7 @@ unsafe impl Send for JudgeLine {}
 impl JudgeLine {
     pub fn update(&mut self, res: &mut Resource, tr: Matrix3, bpm_list: &mut BpmList, index: usize) {
         // self.object.set_time(res.time); // this is done by chart, chart has to calculate transform for us
-        let rot = self.object.rotation.now();
+        let rot = self.object.rotation_3d.2.now();
         self.height.set_time(res.time);
         let line_height = self.height.now();
         let mut ctrl_obj = self.ctrl_obj.borrow_mut();
@@ -292,23 +292,18 @@ impl JudgeLine {
             let parent = &lines[parent];
             let parent_pos = parent.fetch_pos_3d(res, lines);
             let local_tr = self.object.now_translation(res);
-            let local_tr_z = self.object.translation_z.as_ref().map_or(0.0, |z| z.now());
+            let local_tr_z = self.object.translation_z.now();
             let local = Vector3::new(local_tr.x, local_tr.y, local_tr_z);
-            if parent.object.has_3d() {
-                let rotated = parent.object.now_rotation_3d().transform_vector(&local);
-                return parent_pos + rotated;
-            }
-            let rot_2d = Rotation2::new(parent.fetch_rot(lines).to_radians());
-            let rotated = rot_2d * Vector2::new(local.x, local.y);
-            return parent_pos + Vector3::new(rotated.x, rotated.y, local.z);
+            let rotated = parent.object.now_rotation_3d().transform_vector(&local);
+            return parent_pos + rotated;
         }
         let tr = self.object.now_translation(res);
-        let tr_z = self.object.translation_z.as_ref().map_or(0.0, |z| z.now());
+        let tr_z = self.object.translation_z.now();
         Vector3::new(tr.x, tr.y, tr_z)
     }
 
     pub fn fetch_rot(&self, lines: &[JudgeLine]) -> f32 {
-        let mut rot = self.object.rotation.now();
+        let mut rot = self.object.rotation_3d.2.now();
         if self.rotate_with_parent {
             if let Some(parent) = self.parent {
                 rot += lines[parent].fetch_rot(lines);
@@ -320,14 +315,7 @@ impl JudgeLine {
     pub fn fetch_rot_3d(&self, lines: &[JudgeLine]) -> Matrix4 {
         if self.rotate_with_parent {
             if let Some(parent) = self.parent {
-                let parent = &lines[parent];
-                if parent.object.has_3d() {
-                    return parent.fetch_rot_3d(lines) * self.object.now_rotation_3d();
-                }
-                let parent_rot_2d: Matrix4 = Rotation2::new(parent.fetch_rot(lines).to_radians())
-                    .to_homogeneous()
-                    .to_homogeneous();
-                return parent_rot_2d * self.object.now_rotation_3d();
+                return lines[parent].fetch_rot_3d(lines) * self.object.now_rotation_3d();
             }
         }
         self.object.now_rotation_3d()

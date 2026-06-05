@@ -148,7 +148,7 @@ fn draw_center(res: &Resource, tex: Texture2D, order: i8, scale: f32, color: Col
 
 impl Note {
     pub fn rotation(&self, line: &JudgeLine) -> f32 {
-        line.object.rotation.now() + if self.above { 0. } else { 180. }
+        line.object.rotation_3d.2.now() + if self.above { 0. } else { 180. }
     }
 
     pub fn update(&mut self, res: &mut Resource, parent_rot: f32, parent_tr: &Matrix3, ctrl_obj: &mut CtrlObject, line_height: f64, bpm_list: &mut BpmList, index: usize) {
@@ -218,7 +218,7 @@ impl Note {
         let mut tr = self.object.now_translation(res);
         tr.x *= incline_val * ctrl_obj.pos.now_opt().unwrap_or(1.);
         tr.y += base;
-        let tr_z = self.object.translation_z.as_ref().map_or(0.0, |z| z.now());
+        let tr_z = self.object.translation_z.now();
 
         let mut scale = self.object.scale.now_with_def(1.0, 1.0);
         if !can_scale_x {
@@ -229,7 +229,7 @@ impl Note {
             scale.y = 1.0;
         };
         scale.y *= ctrl_obj.size.now_opt().unwrap_or(1.0);
-        let sz = self.object.scale_z.as_ref().map_or(1.0, |z| z.now_opt().unwrap_or(1.0));
+        let sz = self.object.scale_z.now_opt().unwrap_or(1.0);
 
         let scale_3d = Vector3::new(scale.x, scale.y, sz);
         let translation = Vector3::new(tr.x, tr.y, tr_z);

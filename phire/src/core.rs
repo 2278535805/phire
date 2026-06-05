@@ -13,7 +13,7 @@ pub type Matrix3 = nalgebra::Matrix3<f32>;
 pub type Matrix4 = nalgebra::Matrix4<f32>;
 
 mod anim;
-pub use anim::{Anim, AnimFloat, AnimFloatF64, AnimVector, Keyframe};
+pub use anim::{Anim, AnimFloat, AnimFloatF64, AnimVector2, AnimVector3, Keyframe};
 
 mod chart;
 pub use chart::{Chart, ChartExtra, ChartSettings, HitSoundMap};

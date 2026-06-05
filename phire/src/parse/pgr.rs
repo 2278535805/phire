@@ -3,7 +3,7 @@ crate::tl_file!("parser" ptl);
 use super::process_lines;
 use crate::{
     core::{
-        Anim, AnimFloat, AnimFloatF64, AnimVector, BpmList, Chart, ChartExtra, ChartSettings, JudgeLine, JudgeLineCache, JudgeLineKind, Keyframe, Note, NoteKind, Object, HEIGHT_RATIO
+        Anim, AnimFloat, AnimFloatF64, AnimVector2, AnimVector3, BpmList, Chart, ChartExtra, ChartSettings, HEIGHT_RATIO, JudgeLine, JudgeLineCache, JudgeLineKind, Keyframe, Note, NoteKind, Object
     },
     ext::NotNanExt,
     judge::{HitSound, JudgeStatus},
@@ -130,7 +130,7 @@ fn parse_float_events(r: f64, mut pgr: Vec<PgrEvent>) -> Result<AnimFloat> {
     Ok(AnimFloat::new(kfs))
 }
 
-fn parse_move_events(r: f64, mut pgr: Vec<PgrEvent>) -> Result<AnimVector> {
+fn parse_move_events(r: f64, mut pgr: Vec<PgrEvent>) -> Result<AnimVector2> {
     validate_events!(pgr);
     let mut kf1 = Vec::<Keyframe<f32>>::new();
     let mut kf2 = Vec::<Keyframe<f32>>::new();
@@ -154,10 +154,10 @@ fn parse_move_events(r: f64, mut pgr: Vec<PgrEvent>) -> Result<AnimVector> {
     for kf in &mut kf2 {
         kf.value = -1. + kf.value * 2.;
     }
-    Ok(AnimVector(AnimFloat::new(kf1), AnimFloat::new(kf2)))
+    Ok(AnimVector2(AnimFloat::new(kf1), AnimFloat::new(kf2)))
 }
 
-fn parse_move_events_fv1(r: f64, mut pgr: Vec<PgrEvent>) -> Result<AnimVector> {
+fn parse_move_events_fv1(r: f64, mut pgr: Vec<PgrEvent>) -> Result<AnimVector2> {
     validate_events!(pgr);
     let mut kf1 = Vec::<Keyframe<f32>>::new();
     let mut kf2 = Vec::<Keyframe<f32>>::new();
@@ -185,7 +185,7 @@ fn parse_move_events_fv1(r: f64, mut pgr: Vec<PgrEvent>) -> Result<AnimVector> {
     for kf in &mut kf2 {
         kf.value = (-520. + kf.value * 2.) / 520.;
     }
-    Ok(AnimVector(AnimFloat::new(kf1), AnimFloat::new(kf2)))
+    Ok(AnimVector2(AnimFloat::new(kf1), AnimFloat::new(kf2)))
 }
 
 fn parse_notes(r: f64, mut pgr: Vec<PgrNote>, _speed: &mut AnimFloatF64, height: &mut AnimFloatF64, above: bool) -> Result<Vec<Note>> {
@@ -216,7 +216,7 @@ fn parse_notes(r: f64, mut pgr: Vec<PgrNote>, _speed: &mut AnimFloatF64, height:
             let hitsound = HitSound::default_from_kind(&kind);
             Ok(Note {
                 object: Object {
-                    translation: AnimVector(AnimFloat::fixed(pgr.position_x * (2. * 9. / 160.)), AnimFloat::default()),
+                    translation: AnimVector2(AnimFloat::fixed(pgr.position_x * (2. * 9. / 160.)), AnimFloat::default()),
                     ..Default::default()
                 },
                 kind,
@@ -253,8 +253,7 @@ fn parse_judge_line(pgr: PgrJudgeLine, max_time: f64, format_version: u32) -> Re
     Ok(JudgeLine {
         object: Object {
             alpha: parse_float_events(r, pgr.alpha_events).with_context(|| ptl!("alpha-events-parse-failed"))?,
-            scale: AnimVector(AnimFloat::fixed(5.75 / 6.0), AnimFloat::default()),
-            rotation: parse_float_events(r, pgr.rotate_events).with_context(|| ptl!("rotate-events-parse-failed"))?,
+            scale: AnimVector2(AnimFloat::fixed(5.75 / 6.0), AnimFloat::default()),
             translation: {
                 match format_version {
                     1 => parse_move_events_fv1(r, pgr.move_events).with_context(|| ptl!("move-events-parse-failed"))?,
@@ -262,9 +261,13 @@ fn parse_judge_line(pgr: PgrJudgeLine, max_time: f64, format_version: u32) -> Re
                     _ => ptl!(bail "unknown-format-version"),
                 }
             },
-            translation_z: None,
-            rotation_3d: None,
-            scale_z: None,
+            translation_z: AnimFloat::default(),
+            rotation_3d: AnimVector3(
+                AnimFloat::default(),
+                AnimFloat::default(),
+                parse_float_events(r, pgr.rotate_events).with_context(|| ptl!("rotate-events-parse-failed"))?
+            ),
+            scale_z: AnimFloat::default(),
         },
         color: Anim::default(),
         ctrl_obj: RefCell::default(),

@@ -1,6 +1,6 @@
 use crate::{
     config::Config,
-    core::{BadNote, Chart, NOTE_WIDTH_RATIO_BASE, Note, NoteKind, Point2, Resource, Vector2},
+    core::{BadNote, Chart, NOTE_WIDTH_RATIO_BASE, Note, NoteKind, Point2, Point3, Resource, Vector2},
     ext::{NotNanExt, get_viewport},
 };
 use macroquad::prelude::{
@@ -524,16 +524,16 @@ impl Judge {
             })
             .collect();
         // pos[line][touch]
-        let mut pos = Vec::<Vec<Option<Point2>>>::with_capacity(chart.lines.len());
+        let mut pos = Vec::<Vec<Option<Point3>>>::with_capacity(chart.lines.len());
         for id in 0..chart.lines.len() {
             chart.lines[id].object.set_time(t);
-            let inv = chart.lines[id].now_transform(res, &chart.lines).try_inverse().unwrap();
+            let inv = chart.lines[id].now_transform_3d(res, &chart.lines).try_inverse().unwrap();
             pos.push(
                 touches
                     .iter()
                     .map(|touch| {
                         let p = touch.position;
-                        let p = inv.transform_point(&Point2::new(p.x, -p.y));
+                        let p = inv.transform_point(&Point3::new(p.x, -p.y, 0.));
                         fn ok(f: f32) -> bool {
                             matches!(f.classify(), FpCategory::Zero | FpCategory::Subnormal | FpCategory::Normal)
                         }

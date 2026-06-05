@@ -3,7 +3,7 @@ crate::tl_file!("parser" ptl);
 use super::{process_lines, RPE_TWEEN_MAP};
 use crate::{
     core::{
-        Anim, AnimFloat, AnimFloatF64, AnimVector, BezierTween, BpmList, Chart, ChartExtra, ChartSettings, ClampedTween, CtrlObject, EPS, GeneralIntegralTween, GifFrames, HEIGHT_RATIO, HitSoundMap, IntegralClampedTween, IntegralStaticTween, JudgeLine, JudgeLineCache, JudgeLineKind, Keyframe, Note, NoteKind, Object, SpeedIntegralTween, StaticTween, TextData, Triple, TweenFunction, Tweenable, UIElement, Vector2
+        Anim, AnimFloat, AnimFloatF64, AnimVector2, AnimVector3, BezierTween, BpmList, Chart, ChartExtra, ChartSettings, ClampedTween, CtrlObject, EPS, GeneralIntegralTween, GifFrames, HEIGHT_RATIO, HitSoundMap, IntegralClampedTween, IntegralStaticTween, JudgeLine, JudgeLineCache, JudgeLineKind, Keyframe, Note, NoteKind, Object, SpeedIntegralTween, StaticTween, TextData, Triple, TweenFunction, Tweenable, UIElement, Vector2
     },
     ext::{NotNanExt, SafeTexture},
     fs::FileSystem,
@@ -159,6 +159,9 @@ pub struct RPEEventLayer {
     alpha_events: Option<Vec<RPEEvent>>,
     move_x_events: Option<Vec<RPEEvent>>,
     move_y_events: Option<Vec<RPEEvent>>,
+    move_z_events: Option<Vec<RPEEvent>>,
+    rotate_x_events: Option<Vec<RPEEvent>>,
+    rotate_y_events: Option<Vec<RPEEvent>>,
     rotate_events: Option<Vec<RPEEvent>>,
     speed_events: Option<Vec<RPEEvent<f64>>>,
 }
@@ -231,10 +234,6 @@ pub struct RPEExtendedEvents {
     paint_events: Option<Vec<RPEEvent>>,
     gif_events: Option<Vec<RPEEvent>>,
     camera: Option<RPECamera>,
-    translation_z_events: Option<Vec<RPEEvent>>,
-    rotation_x_events: Option<Vec<RPEEvent>>,
-    rotation_y_events: Option<Vec<RPEEvent>>,
-    rotation_z_events: Option<Vec<RPEEvent>>,
     scale_z_events: Option<Vec<RPEEvent>>,
 }
 
@@ -562,16 +561,13 @@ async fn parse_notes(
                     let alpha = note.alpha.min(255) as f32 / 255.;
                     AnimFloat::new(vec![Keyframe::new(0.0, 0.0, 0), Keyframe::new(time - note.visible_time, alpha, 0)])
                 },
-                translation: AnimVector(AnimFloat::fixed(note.position_x / (RPE_WIDTH / 2.)), AnimFloat::fixed(y_offset)),
+                translation: AnimVector2(AnimFloat::fixed(note.position_x / (RPE_WIDTH / 2.)), AnimFloat::fixed(y_offset)),
                 scale: if note.size == 1.0 {
-                    AnimVector::default()
+                    AnimVector2::default()
                 } else {
-                    AnimVector(AnimFloat::fixed(note.size), AnimFloat::fixed(note.size))
+                    AnimVector2(AnimFloat::fixed(note.size), AnimFloat::fixed(note.size))
                 },
-                rotation: AnimFloat::default(),
-                translation_z: None,
-                rotation_3d: None,
-                scale_z: None,
+                ..Default::default()
             },
             kind,
             hitsound,
@@ -672,72 +668,37 @@ async fn parse_judge_line(
     let mut height = parse_speed_events(r, &event_layers, bezier_map, max_time)?;
     let mut notes = parse_notes(r, rpe.notes.unwrap_or_default(), fs, &mut height, hitsounds).await?;
     let cache = JudgeLineCache::new(&mut notes);
-    let has_3d = rpe.extended.as_ref().map_or(false, |e| {
-        e.translation_z_events.is_some()
-            || e.rotation_x_events.is_some()
-            || e.rotation_y_events.is_some()
-            || e.rotation_z_events.is_some()
-            || e.scale_z_events.is_some()
-    });
-
-    let translation_z = if has_3d {
-        Some(
-            rpe.extended
-                .as_ref()
-                .and_then(|e| e.translation_z_events.as_ref())
-                .map(|events| parse_events(r, events, None, bezier_map))
-                .transpose()?
-                .unwrap_or_default(),
-        )
-    } else {
-        None
+    let translation_z = {
+        let anis: Vec<_> = event_layers
+            .iter()
+            .filter_map(|it| it.move_z_events.as_ref().map(|es| parse_events(r, es, None, bezier_map)))
+            .collect::<Result<_>>()
+            .with_context(|| ptl!("type-events-parse-failed", "type" => "translation Z"))?;
+        let res = AnimFloat::chain(anis);
+        if res.is_default() {
+            AnimFloat::fixed(0.0)
+        } else {
+            res
+        }
     };
 
-    let rotation_3d = if has_3d {
-        let rx = rpe
-            .extended
-            .as_ref()
-            .and_then(|e| e.rotation_x_events.as_ref())
-            .map(|events| parse_events(r, events, None, bezier_map))
-            .transpose()?
-            .unwrap_or_default();
-        let ry = rpe
-            .extended
-            .as_ref()
-            .and_then(|e| e.rotation_y_events.as_ref())
-            .map(|events| parse_events(r, events, None, bezier_map))
-            .transpose()?
-            .unwrap_or_default();
-        let rz = rpe
-            .extended
-            .as_ref()
-            .and_then(|e| e.rotation_z_events.as_ref())
-            .map(|events| parse_events(r, events, None, bezier_map))
-            .transpose()?
-            .unwrap_or_default();
-        Some((rx, ry, rz))
-    } else {
-        None
-    };
+    let rotation_3d = AnimVector3(
+        events_with_factor(r, &event_layers, |it| &it.rotate_x_events, -1., "rotate_x", bezier_map)?,
+        events_with_factor(r, &event_layers, |it| &it.rotate_y_events, -1., "rotate_y", bezier_map)?,
+        events_with_factor(r, &event_layers, |it| &it.rotate_events, -1., "rotate", bezier_map)?,
+    );
 
-    let scale_z = if has_3d {
-        Some(
-            rpe.extended
-                .as_ref()
-                .and_then(|e| e.scale_z_events.as_ref())
-                .map(|events| parse_events(r, events, None, bezier_map))
-                .transpose()?
-                .unwrap_or_default(),
-        )
-    } else {
-        None
-    };
+    let scale_z = rpe.extended
+        .as_ref()
+        .and_then(|e| e.scale_z_events.as_ref())
+        .map(|events| parse_events(r, events, None, bezier_map))
+        .transpose()?
+        .unwrap_or_default();
 
     Ok(JudgeLine {
         object: Object {
             alpha: events_with_factor(r, &event_layers, |it| &it.alpha_events, 1. / 255., "alpha", bezier_map)?,
-            rotation: events_with_factor(r, &event_layers, |it| &it.rotate_events, -1., "rotate", bezier_map)?,
-            translation: AnimVector(
+            translation: AnimVector2(
                 events_with_factor(r, &event_layers, |it| &it.move_x_events, 2. / RPE_WIDTH, "move X", bezier_map)?,
                 events_with_factor(r, &event_layers, |it| &it.move_y_events, 2. / RPE_HEIGHT, "move Y", bezier_map)?,
             ),
@@ -761,7 +722,7 @@ async fn parse_judge_line(
                 rpe.extended
                     .as_ref()
                     .map(|e| -> Result<_> {
-                        Ok(AnimVector(
+                        Ok(AnimVector2(
                             parse(
                                 r,
                                 &e.scale_x_events,
@@ -772,7 +733,7 @@ async fn parse_judge_line(
                         ))
                     })
                     .transpose()?
-                    .unwrap_or(AnimVector::fixed(Vector2::new(factor, factor)))
+                    .unwrap_or(AnimVector2::fixed(Vector2::new(factor, factor)))
             },
             translation_z,
             rotation_3d,
@@ -917,7 +878,7 @@ fn get_bezier_map(rpe: &RPEChart) -> BezierMap {
     let mut map = FxHashMap::default();
     for line in &rpe.judge_line_list {
         for event_layer in line.event_layers.iter().flatten() {
-            process_bezier!(event_layer, &mut map, alpha_events, move_x_events, move_y_events, rotate_events);
+            process_bezier!(event_layer, &mut map, alpha_events, move_x_events, move_y_events, rotate_events, move_z_events, rotate_x_events, rotate_y_events);
         }
         if let Some(ext_layer) = &line.extended {
             process_bezier!(ext_layer, &mut map, paint_events, scale_x_events, scale_y_events, gif_events, incline_events, color_events);

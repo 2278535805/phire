@@ -1,3 +1,5 @@
+use crate::core::Vector3;
+
 use super::{StaticTween, TweenFunction, TweenId, Tweenable, Vector2};
 use std::rc::Rc;
 
@@ -141,10 +143,11 @@ impl<T: Tweenable + Default> Anim<T> {
 
 pub type AnimFloat = Anim<f32>;
 pub type AnimFloatF64 = Anim<f64>;
-#[derive(Default)]
-pub struct AnimVector(pub AnimFloat, pub AnimFloat);
 
-impl AnimVector {
+#[derive(Default)]
+pub struct AnimVector2(pub AnimFloat, pub AnimFloat);
+
+impl AnimVector2 {
     pub fn fixed(v: Vector2) -> Self {
         Self(AnimFloat::fixed(v.x), AnimFloat::fixed(v.y))
     }
@@ -160,5 +163,28 @@ impl AnimVector {
 
     pub fn now_with_def(&self, x: f32, y: f32) -> Vector2 {
         Vector2::new(self.0.now_opt().unwrap_or(x), self.1.now_opt().unwrap_or(y))
+    }
+}
+
+#[derive(Default)]
+pub struct AnimVector3(pub AnimFloat, pub AnimFloat, pub AnimFloat);
+
+impl AnimVector3 {
+    pub fn fixed(v: Vector3) -> Self {
+        Self(AnimFloat::fixed(v.x), AnimFloat::fixed(v.y), AnimFloat::fixed(v.z))
+    }
+
+    pub fn set_time(&mut self, time: f64) {
+        self.0.set_time(time);
+        self.1.set_time(time);
+        self.2.set_time(time);
+    }
+
+    pub fn now(&self) -> Vector3 {
+        Vector3::new(self.0.now(), self.1.now(), self.2.now())
+    }
+
+    pub fn now_with_def(&self, x: f32, y: f32, z: f32) -> Vector3 {
+        Vector3::new(self.0.now_opt().unwrap_or(x), self.1.now_opt().unwrap_or(y), self.2.now_opt().unwrap_or(z))
     }
 }
