@@ -1,7 +1,7 @@
-use super::{MSRenderTarget, Matrix, Point, NOTE_WIDTH_RATIO_BASE};
+use super::{MSRenderTarget, Matrix3, Point2, NOTE_WIDTH_RATIO_BASE};
 use crate::{
     config::Config,
-    core::tween::Tweenable,
+    core::{Matrix4, Point3, tween::Tweenable},
     ext::{SafeTexture, create_audio_manger, nalgebra_to_glm, nalgebra4_to_glm},
     fs::FileSystem,
     health::Health,
@@ -499,7 +499,8 @@ pub struct Resource {
 
     pub note_buffer: RefCell<NoteBuffer>,
 
-    pub model_stack: Vec<Matrix>,
+    pub model_stack: Vec<Matrix3>,
+    pub model_stack_3d: Vec<Matrix4>,
     #[cfg(feature = "play")]
     pub shake_play_mode_deque: VecDeque<(f64, f32)>, // time, acceleration
     #[cfg(feature = "play")]
@@ -666,7 +667,8 @@ impl Resource {
 
             note_buffer: RefCell::new(NoteBuffer::default()),
 
-            model_stack: vec![Matrix::identity()],
+            model_stack: vec![Matrix3::identity()],
+            model_stack_3d: vec![Matrix4::identity()],
             #[cfg(feature = "play")]
             shake_play_mode_deque: VecDeque::new(),
             #[cfg(feature = "play")]
@@ -691,7 +693,7 @@ impl Resource {
         if !self.config.particle {
             return;
         }
-        let pt = self.world_to_screen(Point::default());
+        let pt = self.world_to_screen(Point2::default());
 
         if self.config.aggressive_particle {
             if pt.x.abs() > 1.2 * self.config.chart_ratio || pt.y.abs() * self.config.chart_ratio * self.aspect_ratio > 1.2 {
@@ -765,16 +767,24 @@ impl Resource {
         true
     }
 
-    pub fn world_to_screen(&self, pt: Point) -> Point {
+    pub fn world_to_screen(&self, pt: Point2) -> Point2 {
         self.model_stack.last().unwrap().transform_point(&pt)
     }
 
-    pub fn screen_to_world(&self, pt: Point) -> Point {
+    pub fn screen_to_world(&self, pt: Point2) -> Point2 {
         self.model_stack.last().unwrap().try_inverse().unwrap().transform_point(&pt)
     }
 
+    pub fn world_to_screen_3d(&self, pt: Point3) -> Point3 {
+        self.model_stack_3d.last().unwrap().transform_point(&pt)
+    }
+
+    pub fn screen_to_world_3d(&self, pt: Point3) -> Point3 {
+        self.model_stack_3d.last().unwrap().try_inverse().unwrap().transform_point(&pt)
+    }
+
     #[inline]
-    pub fn with_model(&mut self, model: Matrix, f: impl FnOnce(&mut Self)) {
+    pub fn with_model(&mut self, model: Matrix3, f: impl FnOnce(&mut Self)) {
         let model = self.model_stack.last().unwrap() * model;
         self.model_stack.push(model);
         f(self);
@@ -787,14 +797,27 @@ impl Resource {
     }
 
     #[inline]
-    pub fn apply_model_of(&mut self, mat: &Matrix, f: impl FnOnce(&mut Self)) {
+    pub fn apply_model_of(&mut self, mat: &Matrix3, f: impl FnOnce(&mut Self)) {
         unsafe { get_internal_gl() }.quad_gl.push_model_matrix(nalgebra_to_glm(mat));
         f(self);
         unsafe { get_internal_gl() }.quad_gl.pop_model_matrix();
     }
 
     #[inline]
-    pub fn apply_model_3d(&mut self, mat: &nalgebra::Matrix4<f32>, f: impl FnOnce(&mut Self)) {
+    pub fn with_model_3d(&mut self, model: Matrix4, f: impl FnOnce(&mut Self)) {
+        let model = self.model_stack_3d.last().unwrap() * model;
+        self.model_stack_3d.push(model);
+        f(self);
+        self.model_stack_3d.pop();
+    }
+
+    #[inline]
+    pub fn apply_model_3d(&mut self, f: impl FnOnce(&mut Self)) {
+        self.apply_model_of_3d(&self.model_stack_3d.last().unwrap().clone(), f);
+    }
+
+    #[inline]
+    pub fn apply_model_of_3d(&mut self, mat: &Matrix4, f: impl FnOnce(&mut Self)) {
         unsafe { get_internal_gl() }.quad_gl.push_model_matrix(nalgebra4_to_glm(mat));
         f(self);
         unsafe { get_internal_gl() }.quad_gl.pop_model_matrix();

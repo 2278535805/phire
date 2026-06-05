@@ -1,6 +1,6 @@
 use crate::{
     config::Config,
-    core::{Matrix, Point, Vector},
+    core::{Matrix3, Point2, Vector2},
     ui::Ui,
 };
 use anyhow::{anyhow, Result};
@@ -149,7 +149,7 @@ impl From<DynamicImage> for SafeTexture {
 
 pub static BLACK_TEXTURE: Lazy<SafeTexture> = Lazy::new(|| Texture2D::from_rgba8(1, 1, &[0, 0, 0, 255]).into());
 
-pub fn nalgebra_to_glm(mat: &Matrix) -> Mat4 {
+pub fn nalgebra_to_glm(mat: &Matrix3) -> Mat4 {
     /*
         [11] [12]  0  [13]
         [21] [22]  0  [23]
@@ -157,7 +157,10 @@ pub fn nalgebra_to_glm(mat: &Matrix) -> Mat4 {
         [31] [32]  0  [33]
     */
     Mat4::from_cols_array(&[
-        mat.m11, mat.m21, 0., mat.m31, mat.m12, mat.m22, 0., mat.m32, 0., 0., 1., 0., mat.m13, mat.m23, 0., mat.m33,
+        mat.m11, mat.m21, 0., mat.m31,
+        mat.m12, mat.m22, 0., mat.m32,
+        0.,      0.,      1., 0.,
+        mat.m13, mat.m23, 0., mat.m33,
     ])
 }
 
@@ -269,10 +272,10 @@ pub fn draw_parallelogram_ex(rect: Rect, texture: Option<(&Texture2D, Rect)>, to
     let l = rect.h * PARALLELOGRAM_SLOPE;
     let gl = unsafe { get_internal_gl() }.quad_gl;
     let p = [
-        Point::new(rect.x + l, rect.y),
-        Point::new(rect.right(), rect.y),
-        Point::new(rect.x, rect.bottom()),
-        Point::new(rect.right() - l, rect.bottom()),
+        Point2::new(rect.x + l, rect.y),
+        Point2::new(rect.right(), rect.y),
+        Point2::new(rect.x, rect.bottom()),
+        Point2::new(rect.right() - l, rect.bottom()),
     ];
     let v = if let Some((tex, tex_rect)) = texture {
         let lt = tex_rect.h * tex.height() * PARALLELOGRAM_SLOPE / tex.width();
@@ -321,15 +324,15 @@ pub fn draw_illustration(tex: &Texture2D, x: f32, y: f32, w: f32, h: f32, color:
 }
 
 
-fn drop_shadow(p: [Point; 4], alpha: f32) {
+fn drop_shadow(p: [Point2; 4], alpha: f32) {
     const RADIUS: f32 = 0.018;
     let len = (PARALLELOGRAM_SLOPE * PARALLELOGRAM_SLOPE + 1.).sqrt();
-    let n1 = Vector::new(PARALLELOGRAM_SLOPE / len - 1., -1. / len) * RADIUS;
-    let n2 = Vector::new(n1.x + RADIUS * 2., n1.y);
+    let n1 = Vector2::new(PARALLELOGRAM_SLOPE / len - 1., -1. / len) * RADIUS;
+    let n2 = Vector2::new(n1.x + RADIUS * 2., n1.y);
     let c1 = Color::new(0., 0., 0., alpha * 0.06);
     //let c2 = Color::default();
     let c2 = Color::new(0., 0., 0., 0.);
-    let v = |p: Point, c: Color| Vertex::new(p.x, p.y, 0., 0., 0., c);
+    let v = |p: Point2, c: Color| Vertex::new(p.x, p.y, 0., 0., 0., c);
     let p = [
         v(p[0], c1),
         v(p[0] + n1, c2),

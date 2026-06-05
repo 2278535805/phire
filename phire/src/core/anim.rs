@@ -1,4 +1,4 @@
-use super::{StaticTween, TweenFunction, TweenId, Tweenable, Vector};
+use super::{StaticTween, TweenFunction, TweenId, Tweenable, Vector2};
 use std::rc::Rc;
 
 #[derive(Clone)]
@@ -145,7 +145,7 @@ pub type AnimFloatF64 = Anim<f64>;
 pub struct AnimVector(pub AnimFloat, pub AnimFloat);
 
 impl AnimVector {
-    pub fn fixed(v: Vector) -> Self {
+    pub fn fixed(v: Vector2) -> Self {
         Self(AnimFloat::fixed(v.x), AnimFloat::fixed(v.y))
     }
 
@@ -154,11 +154,11 @@ impl AnimVector {
         self.1.set_time(time);
     }
 
-    pub fn now(&self) -> Vector {
-        Vector::new(self.0.now(), self.1.now())
+    pub fn now(&self) -> Vector2 {
+        Vector2::new(self.0.now(), self.1.now())
     }
 
-    pub fn now_with_def(&self, x: f32, y: f32) -> Vector {
-        Vector::new(self.0.now_opt().unwrap_or(x), self.1.now_opt().unwrap_or(y))
+    pub fn now_with_def(&self, x: f32, y: f32) -> Vector2 {
+        Vector2::new(self.0.now_opt().unwrap_or(x), self.1.now_opt().unwrap_or(y))
     }
 }

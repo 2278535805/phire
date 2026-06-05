@@ -1,7 +1,7 @@
 crate::tl_file!("parser");
 
-use super::{BpmList, Effect, JudgeLine, JudgeLineKind, Matrix, Resource, UIElement, Vector};
-use crate::{core::Object, fs::FileSystem, judge::JudgeStatus, ui::{TextPainter, Ui}};
+use super::{BpmList, Effect, JudgeLine, JudgeLineKind, Matrix3, Resource, UIElement, Vector2};
+use crate::{core::{Matrix4, Object, Vector3}, fs::FileSystem, judge::JudgeStatus, ui::{TextPainter, Ui}};
 use anyhow::{Context, Result};
 use macroquad::prelude::*;
 use rustc_hash::FxHashMap;
@@ -37,7 +37,7 @@ pub struct Chart {
 
     order: Vec<usize>,
     attach_ui: [Option<usize>; 7],
-    trs: Vec<Matrix>,
+    trs: Vec<Matrix3>,
 }
 
 impl Chart {
@@ -81,10 +81,10 @@ impl Chart {
                 let mut tr = line.fetch_pos(res, lines);
                 tr.y *= -res.aspect_ratio;
                 tr.x *= res.aspect_ratio;
-                let sc = object.now_scale_wrt_point(scale_point.map_or_else(Vector::default, |(x, y)| Vector::new(x, y)));
+                let sc = object.now_scale_wrt_point(scale_point.map_or_else(Vector2::default, |(x, y)| Vector2::new(x, y)));
                 let ro = 
-                Object::new_rotation_wrt_point(Rotation2::new(-line.fetch_rot(lines).to_radians()), rotation_point.map_or_else(Vector::default, |(x, y)| Vector::new(x, y)));
-                Matrix::new_translation(&tr) * ro * sc
+                Object::new_rotation_wrt_point(Rotation2::new(-line.fetch_rot(lines).to_radians()), rotation_point.map_or_else(Vector2::default, |(x, y)| Vector2::new(x, y)));
+                Matrix3::new_translation(&tr) * ro * sc
             };
             let mut color = line.color.now_opt().unwrap_or(default_color);
             color.a *= object.now_alpha().max(0.); 
@@ -140,7 +140,7 @@ impl Chart {
     }
 
     pub fn render(&self, ui: &mut Ui, res: &mut Resource) {
-        res.apply_model_of(&Matrix::identity().append_nonuniform_scaling(&Vector::new(if res.config.flip_x() { -1. } else { 1. }, -1.)), |res| {
+        res.apply_model_of_3d(&Matrix4::identity().append_nonuniform_scaling(&Vector3::new(if res.config.flip_x() { -1. } else { 1. }, -1., 1.)), |res| {
             #[cfg(feature = "video")]
             for (video, attach) in &self.extra.videos {
                 if let Some(attach) = attach {
@@ -149,8 +149,8 @@ impl Chart {
                     let line_scale = line.object.scale.now_with_def(1.0, 1.0);
                     let mat = Rotation2::new(
                         self.lines[attach.line].fetch_rot(&self.lines).to_radians() * attach.rotation_factor).to_homogeneous()
-                        .append_translation(&self.lines[attach.line].fetch_pos(res, &self.lines).component_mul(&Vector::new(attach.position_x_factor, attach.position_y_factor)));
-                    res.apply_model_of(&mat.append_nonuniform_scaling(&Vector::new(1., -1.)), |res| {
+                        .append_translation(&self.lines[attach.line].fetch_pos(res, &self.lines).component_mul(&Vector2::new(attach.position_x_factor, attach.position_y_factor)));
+                    res.apply_model_of(&mat, |res| {
                         video.render(
                             res.time,
                             res.aspect_ratio,
@@ -159,7 +159,7 @@ impl Chart {
                         );
                     });
                 } else {
-                    res.apply_model_of(&Matrix::identity().append_nonuniform_scaling(&Vector::new(1., -1.)), |res| {
+                    res.apply_model_of(&Matrix3::identity(), |res| {
                         video.render(res.time, res.aspect_ratio, WHITE, None);
                     });
                 }

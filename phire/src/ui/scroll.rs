@@ -1,5 +1,5 @@
 use super::Ui;
-use crate::{core::{Matrix, Point, Vector}, judge::take_wheel};
+use crate::{core::{Matrix3, Point2, Vector2}, judge::take_wheel};
 use macroquad::{input::mouse_position, prelude::{Rect, Touch, TouchPhase, Vec2}, window::screen_height};
 use nalgebra::Translation2;
 use std::collections::VecDeque;
@@ -9,7 +9,7 @@ const EXTEND: f32 = 0.33;
 pub const WHEEL_STEP: f32 = 0.1;
 
 pub struct VelocityTracker {
-    movements: VecDeque<(f32, Point)>,
+    movements: VecDeque<(f32, Point2)>,
 }
 
 impl VelocityTracker {
@@ -25,7 +25,7 @@ impl VelocityTracker {
         self.movements.clear();
     }
 
-    pub fn push(&mut self, time: f32, position: Point) {
+    pub fn push(&mut self, time: f32, position: Point2) {
         if self.movements.len() == Self::RECORD_MAX {
             // TODO optimize
             self.movements.pop_front();
@@ -33,9 +33,9 @@ impl VelocityTracker {
         self.movements.push_back((time, position));
     }
 
-    pub fn speed(&self) -> Vector {
+    pub fn speed(&self) -> Vector2 {
         if self.movements.is_empty() {
-            return Vector::default();
+            return Vector2::default();
         }
         let n = self.movements.len() as f32;
         let lst = self.movements.back().unwrap().0;
@@ -43,9 +43,9 @@ impl VelocityTracker {
         let mut sum_x2 = 0.;
         let mut sum_x3 = 0.;
         let mut sum_x4 = 0.;
-        let mut sum_y = Point::new(0., 0.);
-        let mut sum_x_y = Point::new(0., 0.);
-        let mut sum_x2_y = Point::new(0., 0.);
+        let mut sum_y = Point2::new(0., 0.);
+        let mut sum_x_y = Point2::new(0., 0.);
+        let mut sum_x2_y = Point2::new(0., 0.);
         for (t, pt) in &self.movements {
             let t = t - lst;
             let v = pt.coords;
@@ -67,7 +67,7 @@ impl VelocityTracker {
         let s_x2x2 = sum_x4 - sum_x2 * sum_x2 / n;
         let denom = s_xx * s_x2x2 - s_xx2 * s_xx2;
         if denom == 0.0 {
-            return Vector::default();
+            return Vector2::default();
         }
         // let a = (s_x2y * s_xx - s_xy * s_xx2) / denom;
         let b = (s_xy * s_x2x2 - s_x2y * s_xx2) / denom;
@@ -130,7 +130,7 @@ impl Scroller {
                 if 0. <= val && val < self.bound {
                     self.goto = None;
                     self.tracker.reset();
-                    self.tracker.push(t, Point::new(val, 0.));
+                    self.tracker.push(t, Point2::new(val, 0.));
                     self.speed = 0.;
                     self.touch = Some((id, val, self.offset, false));
                     self.frame_touched = true;
@@ -139,7 +139,7 @@ impl Scroller {
             TouchPhase::Stationary | TouchPhase::Moved => {
                 if let Some((sid, st, st_off, unlock)) = &mut self.touch {
                     if *sid == id {
-                        self.tracker.push(t, Point::new(val, 0.));
+                        self.tracker.push(t, Point2::new(val, 0.));
                         if (*st - val).abs() > THRESHOLD {
                             *unlock = true;
                         }
@@ -152,7 +152,7 @@ impl Scroller {
             }
             TouchPhase::Ended | TouchPhase::Cancelled => {
                 if matches!(self.touch, Some((sid, ..)) if sid == id) {
-                    self.tracker.push(t, Point::new(val, 0.));
+                    self.tracker.push(t, Point2::new(val, 0.));
                     let speed = self.tracker.speed().x;
                     if speed.abs() > 0.2 {
                         self.speed = -speed * 0.4;
@@ -247,7 +247,7 @@ pub struct Scroll {
     pub x_scroller: Scroller,
     pub y_scroller: Scroller,
     size: (f32, f32),
-    matrix: Option<Matrix>,
+    matrix: Option<Matrix3>,
     horizontal: bool,
 }
 
@@ -281,7 +281,7 @@ impl Scroll {
     pub fn touch(&mut self, touch: &Touch, t: f32) -> bool {
         let Some(matrix) = self.matrix else { return false; };
         let pt = touch.position;
-        let pt = matrix.transform_point(&Point::new(pt.x, pt.y));
+        let pt = matrix.transform_point(&Point2::new(pt.x, pt.y));
         if touch.phase == TouchPhase::Started && (pt.x < 0. || pt.y < 0. || pt.x > self.size.0 || pt.y > self.size.1) {
             return false;
         }
@@ -296,7 +296,7 @@ impl Scroll {
         let extra_scroll = if let Some(matrix) = self.matrix {
             let (mx, my) = mouse_position();
             let vp = crate::ext::get_viewport();
-            let pt = Point::new(
+            let pt = Point2::new(
                 (mx - vp.0 as f32) / vp.2 as f32 * 2. - 1.,
                 ((my - (screen_height() - (vp.1 + vp.3) as f32)) / vp.3 as f32 * 2. - 1.) / (vp.2 as f32 / vp.3 as f32),
             );
@@ -320,7 +320,7 @@ impl Scroll {
     pub fn contains(&self, touch: &Touch) -> bool {
         self.matrix.is_some_and(|mat| {
             let Vec2 { x, y } = touch.position;
-            let p = mat.transform_point(&Point::new(x, y));
+            let p = mat.transform_point(&Point2::new(x, y));
             !(p.x < 0. || p.x >= self.size.0 || p.y < 0. || p.y >= self.size.1)
         })
     }

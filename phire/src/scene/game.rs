@@ -12,7 +12,7 @@ use super::{
 use crate::{
     bin::BinaryReader,
     config::{Config, Mods},
-    core::{BUFFER_SIZE, BadNote, Chart, ChartExtra, Effect, Point, Resource, UIElement},
+    core::{BUFFER_SIZE, BadNote, Chart, ChartExtra, Effect, Point2, Resource, UIElement},
     ext::{RectExt, SafeTexture, draw_text_aligned, draw_text_aligned_opt_width, ease_in_out_quartic, get_latency, parse_time, push_frame_time, screen_aspect, semi_white, validate_combo},
     fs::FileSystem,
     gyro::GYRO,
@@ -492,7 +492,7 @@ impl GameScene {
         let margin = 0.0425 * scale_ratio;
         let pause_w = 0.011 * scale_ratio;
         let pause_h = pause_w * 3.5;
-        let pause_center = Point::new(-aspect_ratio + 0.0525 * scale_ratio, top + eps * 3.6454 - (1. - p) * 0.4 + pause_h / 2.);
+        let pause_center = Point2::new(-aspect_ratio + 0.0525 * scale_ratio, top + eps * 3.6454 - (1. - p) * 0.4 + pause_h / 2.);
         if res.config.interactive
             && !tm.paused()
             && self.pause_rewind.time.is_none()
@@ -500,7 +500,7 @@ impl GameScene {
             && Judge::get_touches(res.config.chart_ratio, res.config.low_resolution_mode).iter().any(|touch| {
                 touch.phase == TouchPhase::Started && {
                     let p = touch.position;
-                    let p = Point::new(p.x * screen_aspect, p.y * screen_aspect);
+                    let p = Point2::new(p.x * screen_aspect, p.y * screen_aspect);
                     (pause_center - p).norm() < 0.05
                 }
             })
@@ -734,9 +734,9 @@ impl GameScene {
                         continue;
                     }
                     let p = touch.position;
-                    let p = Point::new(p.x, p.y);
+                    let p = Point2::new(p.x, p.y);
                     for i in -1..=1 {
-                        let ct = Point::new((s * 2. + w) * i as f32, o);
+                        let ct = Point2::new((s * 2. + w) * i as f32, o);
                         let d = p - ct;
                         if d.x.abs() <= s && d.y.abs() <= s {
                             clicked = Some(i);

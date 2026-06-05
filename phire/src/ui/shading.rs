@@ -1,11 +1,11 @@
 use crate::{
-    core::{Point, Tweenable},
-    ui::{source_of_image, Matrix, ScaleType},
+    core::{Point2, Tweenable},
+    ui::{source_of_image, Matrix3, ScaleType},
 };
 use macroquad::prelude::*;
 
 pub trait Shading {
-    fn new_vertex(&self, mat: &Matrix, p: &Point) -> Vertex;
+    fn new_vertex(&self, mat: &Matrix3, p: &Point2) -> Vertex;
     fn texture(&self) -> Option<Texture2D>;
 }
 
@@ -17,7 +17,7 @@ pub struct GradientShading {
 }
 
 impl Shading for GradientShading {
-    fn new_vertex(&self, mat: &Matrix, p: &Point) -> Vertex {
+    fn new_vertex(&self, mat: &Matrix3, p: &Point2) -> Vertex {
         let t = mat.transform_point(p);
         let color = {
             let (dx, dy) = (p.x - self.origin.0, p.y - self.origin.1);
@@ -38,7 +38,7 @@ pub struct TextureShading {
 }
 
 impl Shading for TextureShading {
-    fn new_vertex(&self, mat: &Matrix, p: &Point) -> Vertex {
+    fn new_vertex(&self, mat: &Matrix3, p: &Point2) -> Vertex {
         let t = mat.transform_point(p);
         let (_, tr, dr) = self.texture;
         let ux = (p.x - dr.x) / dr.w;
@@ -54,14 +54,14 @@ impl Shading for TextureShading {
 }
 
 pub struct RadialShading {
-    origin: Point,
+    origin: Point2,
     radius: f32,
     color: Color,
     color_end: Color,
 }
 
 impl Shading for RadialShading {
-    fn new_vertex(&self, mat: &Matrix, p: &Point) -> Vertex {
+    fn new_vertex(&self, mat: &Matrix3, p: &Point2) -> Vertex {
         let e = (p - self.origin).norm() / self.radius;
         let color = Color::tween(&self.color, &self.color_end, e);
         let t = mat.transform_point(p);
@@ -124,7 +124,7 @@ impl IntoShading for (Color, (f32, f32), Color, f32) {
     fn into_shading(self) -> Self::Target {
         let (color, origin, color_end, radius) = self;
         RadialShading {
-            origin: Point::new(origin.0, origin.1),
+            origin: Point2::new(origin.0, origin.1),
             radius,
             color,
             color_end,

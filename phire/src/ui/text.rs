@@ -1,6 +1,6 @@
 use super::Ui;
 use crate::{
-    core::{Matrix, Vector},
+    core::{Matrix3, Vector2},
     ext::get_viewport,
 };
 use glyph_brush::{
@@ -27,7 +27,7 @@ pub struct DrawText<'a, 's, 'ui> {
     baseline: bool,
     multiline: bool,
     h_align: HorizontalAlign,
-    scale: Matrix,
+    scale: Matrix3,
 }
 
 impl<'a, 's, 'ui> DrawText<'a, 's, 'ui> {
@@ -43,7 +43,7 @@ impl<'a, 's, 'ui> DrawText<'a, 's, 'ui> {
             baseline: true,
             multiline: false,
             h_align: HorizontalAlign::Left,
-            scale: Matrix::identity(),
+            scale: Matrix3::identity(),
         }
     }
 
@@ -92,7 +92,7 @@ impl<'a, 's, 'ui> DrawText<'a, 's, 'ui> {
         self
     }
 
-    pub fn scale(mut self, scale: Matrix) -> Self {
+    pub fn scale(mut self, scale: Matrix3) -> Self {
         self.scale = scale;
         self
     }
@@ -204,7 +204,7 @@ impl<'a, 's, 'ui> DrawText<'a, 's, 'ui> {
             Self::paint_on(self.ui.text_painter, section, scale, self.multiline);
         }
         self.ui
-            .with((Matrix::new_scaling(1. / s) * self.scale).append_translation(&Vector::new(rect.x, rect.y)), |ui| {
+            .with((Matrix3::new_scaling(1. / s) * self.scale).append_translation(&Vector2::new(rect.x, rect.y)), |ui| {
                 ui.apply(|ui| {
                     if let Some(painter) = painter {
                         painter.submit();

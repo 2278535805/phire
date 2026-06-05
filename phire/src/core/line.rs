@@ -1,7 +1,7 @@
-use super::{chart::ChartSettings, object::CtrlObject, Anim, AnimFloat, BpmList, Matrix, Note, Object, Point, RenderConfig, Resource, Vector};
+use super::{chart::ChartSettings, object::CtrlObject, Anim, AnimFloat, BpmList, Matrix3, Matrix4, Note, Object, Point2, RenderConfig, Resource, Vector2};
 use crate::{
     config::Mods,
-    core::{NoteKind, anim::AnimFloatF64},
+    core::{NoteKind, Vector3, anim::AnimFloatF64},
     ext::{NotNanExt, SafeTexture, get_viewport, parse_alpha},
     judge::{JudgeStatus, LIMIT_BAD},
     ui::Ui,
@@ -176,7 +176,7 @@ unsafe impl Sync for JudgeLine {}
 unsafe impl Send for JudgeLine {}
 
 impl JudgeLine {
-    pub fn update(&mut self, res: &mut Resource, tr: Matrix, bpm_list: &mut BpmList, index: usize) {
+    pub fn update(&mut self, res: &mut Resource, tr: Matrix3, bpm_list: &mut BpmList, index: usize) {
         // self.object.set_time(res.time); // this is done by chart, chart has to calculate transform for us
         let rot = self.object.rotation.now();
         self.height.set_time(res.time);
@@ -278,7 +278,7 @@ impl JudgeLine {
         self.cache.below_indices.truncate(write_idx);
     }
 
-    pub fn fetch_pos(&self, res: &Resource, lines: &[JudgeLine]) -> Vector {
+    pub fn fetch_pos(&self, res: &Resource, lines: &[JudgeLine]) -> Vector2 {
         if let Some(parent) = self.parent {
             let parent = &lines[parent];
             let parent_translation = parent.fetch_pos(res, lines);
@@ -297,10 +297,17 @@ impl JudgeLine {
         rot
     }
 
-    pub fn now_transform(&self, res: &Resource, lines: &[JudgeLine]) -> Matrix {
+    pub fn now_transform(&self, res: &Resource, lines: &[JudgeLine]) -> Matrix3 {
         Rotation2::new(self.fetch_rot(lines).to_radians())
             .to_homogeneous()
             .append_translation(&self.fetch_pos(res, lines))
+    }
+
+    pub fn now_transform_3d(&self, res: &Resource, lines: &[JudgeLine]) -> Matrix4 {
+        let pos = self.fetch_pos(res, lines);
+        let tr_z = self.object.translation_z.as_ref().map_or(0.0, |z| z.now());
+        let translation = Matrix4::new_translation(&nalgebra::Vector3::new(pos.x, pos.y, tr_z));
+        translation * self.object.now_rotation_3d()
     }
 
     pub fn render(&self, ui: &mut Ui, res: &mut Resource, lines: &[JudgeLine], bpm_list: &mut BpmList, settings: &ChartSettings, id: usize) {
@@ -311,34 +318,27 @@ impl JudgeLine {
             set_camera(cam);
         }
 
-        let transform_3d = self.object.now_transform_3d(res);
-        if let Some(mat3d) = transform_3d {
-            let scale = self.object.scale.now_with_def(1.0, 1.0);
-            let sz = self.object.scale_z.as_ref().map_or(1.0, |z| z.now_opt().unwrap_or(1.0));
-            let scale_3d = nalgebra::Matrix4::new(
-                scale.x, 0.0, 0.0, 0.0,
-                0.0, scale.y, 0.0, 0.0,
-                0.0, 0.0, sz, 0.0,
-                0.0, 0.0, 0.0, 1.0,
-            );
-            let full = mat3d * scale_3d;
-            res.apply_model_3d(&full, |res| {
-                self.render_content(ui, res, lines, bpm_list, settings, id, alpha, color);
-            });
-        } else {
-            res.with_model(self.now_transform(res, lines), |res| {
-                self.render_content(ui, res, lines, bpm_list, settings, id, alpha, color);
+        let transform_3d = self.now_transform_3d(res, lines);
+        {
+            let full = transform_3d * self.object.now_scale_3d();
+            res.with_model_3d(full, |res| {
+                self.render_content(ui, res, bpm_list, settings, id, alpha, color);
             });
         }
+        //  else {
+        //     res.with_model(self.now_transform(res, lines), |res| {
+        //         self.render_content(ui, res, lines, bpm_list, settings, id, alpha, color);
+        //     });
+        // }
 
         if self.camera.is_some() {
             pop_camera_state();
         }
     }
 
-    fn render_content(&self, ui: &mut Ui, res: &mut Resource, lines: &[JudgeLine], bpm_list: &mut BpmList, settings: &ChartSettings, id: usize, alpha: f32, color: Option<Color>) {
-        res.with_model(self.object.now_scale(), |res| {
-            res.apply_model(|res| match &self.kind {
+    fn render_content(&self, ui: &mut Ui, res: &mut Resource, bpm_list: &mut BpmList, settings: &ChartSettings, id: usize, alpha: f32, color: Option<Color>) {
+        res.with_model_3d(self.object.now_scale_3d(), |res| {
+            res.apply_model_3d(|res| match &self.kind {
                 JudgeLineKind::Normal => {
                     if res.config.render_line {
                         let mut color = color.unwrap_or(res.judge_line_color);
@@ -410,7 +410,7 @@ impl JudgeLine {
                         if color.a == 0.0 {
                             return;
                         }
-                        res.apply_model_of(&Matrix::identity().append_nonuniform_scaling(&Vector::new(1., -1.)), |res| {
+                        res.apply_model_of(&Matrix3::identity().append_nonuniform_scaling(&Vector2::new(1., -1.)), |res| {
                             let now = anim.now();
                             let mut painter = now.font_id.and_then(|id| res.fonts.get(id)).map(|cell| cell.borrow_mut());
                             ui.text(&now.text).pos(0., 0.).anchor(self.anchor[0], -self.anchor[1] + 1.).size(1.).color(color).multiline().draw_with_font(painter.as_deref_mut());
@@ -531,10 +531,10 @@ impl JudgeLine {
             (vw, vw / res.aspect_ratio)
         };
         let p = [
-            res.screen_to_world(Point::new(-vw, -vh)),
-            res.screen_to_world(Point::new(-vw, vh)),
-            res.screen_to_world(Point::new(vw, -vh)),
-            res.screen_to_world(Point::new(vw, vh)),
+            res.screen_to_world(Point2::new(-vw, -vh)),
+            res.screen_to_world(Point2::new(-vw, vh)),
+            res.screen_to_world(Point2::new(vw, -vh)),
+            res.screen_to_world(Point2::new(vw, vh)),
         ];
         let height_above = p[0].y.max(p[1].y.max(p[2].y.max(p[3].y))) as f64;
         let height_below = p[0].y.min(p[1].y.min(p[2].y.min(p[3].y))) as f64;
@@ -591,7 +591,7 @@ impl JudgeLine {
                 }
             }
 
-            res.with_model(Matrix::identity().append_nonuniform_scaling(&Vector::new(1.0, -1.0)), |res| {
+            res.with_model_3d(Matrix4::identity().append_nonuniform_scaling(&Vector3::new(1.0, -1.0, 1.0)), |res| {
                 for index in &self.cache.below_indices {
                     let speed = self.notes[*index].speed;
                     for note in self.notes[*index..].iter() {
@@ -643,8 +643,8 @@ impl JudgeLine {
             });
         }
         if res.config.chart_debug_line > 0. {
-            res.with_model(Matrix::identity().append_nonuniform_scaling(&Vector::new(1.0, -1.0)), |res| {
-                res.apply_model(|res| {
+            res.with_model_3d(Matrix4::identity().append_nonuniform_scaling(&Vector3::new(1.0, -1.0, 1.0)), |res| {
+                res.apply_model_3d(|res| {
                     let kind = match &self.kind {
                         JudgeLineKind::Normal => {
                             if !res.config.render_line { return };

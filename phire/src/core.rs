@@ -5,9 +5,12 @@ pub const HEIGHT_RATIO: f64 = 0.83175;
 
 pub const EPS: f64 = 1e-5;
 
-pub type Point = nalgebra::Point2<f32>;
-pub type Vector = nalgebra::Vector2<f32>;
-pub type Matrix = nalgebra::Matrix3<f32>;
+pub type Point2 = nalgebra::Point2<f32>;
+pub type Point3 = nalgebra::Point3<f32>;
+pub type Vector2 = nalgebra::Vector2<f32>;
+pub type Vector3 = nalgebra::Vector3<f32>;
+pub type Matrix3 = nalgebra::Matrix3<f32>;
+pub type Matrix4 = nalgebra::Matrix4<f32>;
 
 mod anim;
 pub use anim::{Anim, AnimFloat, AnimFloatF64, AnimVector, Keyframe};

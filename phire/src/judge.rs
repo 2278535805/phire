@@ -1,6 +1,6 @@
 use crate::{
     config::Config,
-    core::{BadNote, Chart, NOTE_WIDTH_RATIO_BASE, Note, NoteKind, Point, Resource, Vector},
+    core::{BadNote, Chart, NOTE_WIDTH_RATIO_BASE, Note, NoteKind, Point2, Resource, Vector2},
     ext::{NotNanExt, get_viewport},
 };
 use macroquad::prelude::{
@@ -115,15 +115,15 @@ fn check_hitsound(map: &mut HashMap<String, u8, rustc_hash::FxBuildHasher>, sfx:
 
 pub struct FlickTracker {
     threshold: f32,
-    last_point: Point,
-    last_delta: Option<Vector>,
+    last_point: Point2,
+    last_delta: Option<Vector2>,
     last_time: f32,
     flicked: bool,
     stopped: bool,
 }
 
 impl FlickTracker {
-    pub fn new(_dpi: u32, time: f32, point: Point) -> Self {
+    pub fn new(_dpi: u32, time: f32, point: Point2) -> Self {
         // TODO maybe a better approach?
         let dpi = 275;
         Self {
@@ -136,7 +136,7 @@ impl FlickTracker {
         }
     }
 
-    pub fn push(&mut self, time: f32, position: Point) {
+    pub fn push(&mut self, time: f32, position: Point2) {
         let delta = position - self.last_point;
         self.last_point = position;
         if let Some(last_delta) = &self.last_delta {
@@ -473,8 +473,8 @@ impl Judge {
         });
         self.key_down_count = self.key_down_count.saturating_add_signed(TOUCHES.with(|it| it.borrow().key_delta));
         {
-            fn to_local(Vec2 { x, y }: Vec2) -> Point {
-                Point::new(x / screen_width() * 2. - 1., y / screen_height() * 2. - 1.)
+            fn to_local(Vec2 { x, y }: Vec2) -> Point2 {
+                Point2::new(x / screen_width() * 2. - 1., y / screen_height() * 2. - 1.)
             }
             let delta = ((t / spd - self.last_time)) / (events.len() + 1) as f64;
             let mut t = self.last_time;
@@ -524,7 +524,7 @@ impl Judge {
             })
             .collect();
         // pos[line][touch]
-        let mut pos = Vec::<Vec<Option<Point>>>::with_capacity(chart.lines.len());
+        let mut pos = Vec::<Vec<Option<Point2>>>::with_capacity(chart.lines.len());
         for id in 0..chart.lines.len() {
             chart.lines[id].object.set_time(t);
             let inv = chart.lines[id].now_transform(res, &chart.lines).try_inverse().unwrap();
@@ -533,7 +533,7 @@ impl Judge {
                     .iter()
                     .map(|touch| {
                         let p = touch.position;
-                        let p = inv.transform_point(&Point::new(p.x, -p.y));
+                        let p = inv.transform_point(&Point2::new(p.x, -p.y));
                         fn ok(f: f32) -> bool {
                             matches!(f.classify(), FpCategory::Zero | FpCategory::Subnormal | FpCategory::Normal)
                         }
@@ -862,7 +862,7 @@ impl Judge {
             let note = &line.notes[id as usize];
             let mut note_transform = note.object.now(res);
             if !note.above {
-                note_transform.append_nonuniform_scaling_mut(&Vector::new(1.0, -1.0));
+                note_transform.append_nonuniform_scaling_mut(&Vector2::new(1.0, -1.0));
             }
             let line_tr = line.now_transform(res, &chart.lines);
             self.commit(
@@ -915,7 +915,7 @@ impl Judge {
                                     true, true
                                 );
                                 if !note.above {
-                                    note_transform.append_nonuniform_scaling_mut(&Vector::new(1.0, -1.0));
+                                    note_transform.append_nonuniform_scaling_mut(&Vector2::new(1.0, -1.0));
                                 }
                                 line_tr * note_transform
                             },
@@ -1008,7 +1008,7 @@ impl Judge {
             let line = &chart.lines[line_id];
             let note = &line.notes[id as usize];
             if !note.above {
-                note_transform.append_nonuniform_scaling_mut(&Vector::new(1.0, -1.0));
+                note_transform.append_nonuniform_scaling_mut(&Vector2::new(1.0, -1.0));
             }
             match note.kind {
                 NoteKind::Click => {

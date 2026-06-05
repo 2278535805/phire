@@ -25,7 +25,7 @@ pub use input::{InlineInputBox};
 pub use glyph_brush::ab_glyph::FontArc;
 
 use crate::{
-    core::{Matrix, Point, Vector},
+    core::{Matrix3, Point2, Vector2},
     ext::{get_viewport, nalgebra_to_glm, round_to_step, semi_black, semi_white, source_of_image, RectExt, SafeTexture, ScaleType},
     judge::Judge,
     scene::{request_input_full, return_input, take_input},
@@ -82,29 +82,29 @@ impl From<u8> for Gravity {
     }
 }
 
-struct ShadedConstructor<T: Shading>(Matrix, pub T);
+struct ShadedConstructor<T: Shading>(Matrix3, pub T);
 impl<T: Shading> FillVertexConstructor<Vertex> for ShadedConstructor<T> {
     fn new_vertex(&mut self, vertex: FillVertex) -> Vertex {
         let pos = vertex.position();
-        self.1.new_vertex(&self.0, &Point::new(pos.x, pos.y))
+        self.1.new_vertex(&self.0, &Point2::new(pos.x, pos.y))
     }
 }
 impl<T: Shading> StrokeVertexConstructor<Vertex> for ShadedConstructor<T> {
     fn new_vertex(&mut self, vertex: StrokeVertex) -> Vertex {
         let pos = vertex.position();
-        self.1.new_vertex(&self.0, &Point::new(pos.x, pos.y))
+        self.1.new_vertex(&self.0, &Point2::new(pos.x, pos.y))
     }
 }
 
 pub struct VertexBuilder<T: Shading> {
-    matrix: Matrix,
+    matrix: Matrix3,
     vertices: Vec<Vertex>,
     indices: Vec<u16>,
     shading: T,
 }
 
 impl<T: Shading> VertexBuilder<T> {
-    fn new(matrix: Matrix, shading: T) -> Self {
+    fn new(matrix: Matrix3, shading: T) -> Self {
         Self {
             matrix,
             vertices: Vec::new(),
@@ -114,7 +114,7 @@ impl<T: Shading> VertexBuilder<T> {
     }
 
     pub fn add(&mut self, x: f32, y: f32) {
-        self.vertices.push(self.shading.new_vertex(&self.matrix, &Point::new(x, y)))
+        self.vertices.push(self.shading.new_vertex(&self.matrix, &Point2::new(x, y)))
     }
 
     pub fn triangle(&mut self, x: u16, y: u16, z: u16) {
@@ -552,7 +552,7 @@ pub struct Ui<'a> {
 
     pub text_painter: &'a mut TextPainter,
 
-    model_stack: Vec<Matrix>,
+    model_stack: Vec<Matrix3>,
     scissor: Option<(i32, i32, i32, i32)>,
     touches: Option<Vec<Touch>>,
 
@@ -577,7 +577,7 @@ impl<'a> Ui<'a> {
 
             text_painter,
 
-            model_stack: vec![Matrix::identity()],
+            model_stack: vec![Matrix3::identity()],
             scissor: None,
             touches: None,
 
@@ -624,7 +624,7 @@ impl<'a> Ui<'a> {
     }
 
     fn set_tolerance(&mut self) {
-        let tol = 0.15 / (self.model_stack.last().unwrap().transform_vector(&Vector::new(1., 0.)).norm() * screen_width() / 2.);
+        let tol = 0.15 / (self.model_stack.last().unwrap().transform_vector(&Vector2::new(1., 0.)).norm() * screen_width() / 2.);
         self.fill_options.tolerance = tol;
         self.stroke_options.tolerance = tol;
     }
@@ -678,7 +678,7 @@ impl<'a> Ui<'a> {
         gl.geometry(&std::mem::take(&mut self.vertex_buffers.vertices), &std::mem::take(&mut self.vertex_buffers.indices));
     }
 
-    pub fn get_matrix(&self) -> Matrix {
+    pub fn get_matrix(&self) -> Matrix3 {
         *self.model_stack.last().unwrap()
     }
 
@@ -699,12 +699,12 @@ impl<'a> Ui<'a> {
     }
 
     pub fn vec_to_global(&self, vec: (f32, f32)) -> (f32, f32) {
-        let r = self.model_stack.last().unwrap().transform_vector(&Vector::new(vec.0, vec.1));
+        let r = self.model_stack.last().unwrap().transform_vector(&Vector2::new(vec.0, vec.1));
         (r.x, r.y)
     }
 
     pub fn to_global(&self, pt: (f32, f32)) -> (f32, f32) {
-        let r = self.model_stack.last().unwrap().transform_point(&Point::new(pt.0, pt.1));
+        let r = self.model_stack.last().unwrap().transform_point(&Point2::new(pt.0, pt.1));
         (r.x, r.y)
     }
 
@@ -721,7 +721,7 @@ impl<'a> Ui<'a> {
             .unwrap()
             .try_inverse()
             .unwrap()
-            .transform_vector(&Vector::new(vec.0, vec.1));
+            .transform_vector(&Vector2::new(vec.0, vec.1));
         (r.x, r.y)
     }
 
@@ -732,20 +732,20 @@ impl<'a> Ui<'a> {
             .unwrap()
             .try_inverse()
             .unwrap()
-            .transform_point(&Point::new(pt.0, pt.1));
+            .transform_point(&Point2::new(pt.0, pt.1));
         (r.x, r.y)
     }
 
     pub fn dx(&mut self, x: f32) {
-        self.model_stack.last_mut().unwrap().append_translation_mut(&Vector::new(x, 0.));
+        self.model_stack.last_mut().unwrap().append_translation_mut(&Vector2::new(x, 0.));
     }
 
     pub fn dy(&mut self, y: f32) {
-        self.model_stack.last_mut().unwrap().append_translation_mut(&Vector::new(0., y));
+        self.model_stack.last_mut().unwrap().append_translation_mut(&Vector2::new(0., y));
     }
 
     #[inline]
-    pub fn with<R>(&mut self, model: Matrix, f: impl FnOnce(&mut Self) -> R) -> R {
+    pub fn with<R>(&mut self, model: Matrix3, f: impl FnOnce(&mut Self) -> R) -> R {
         let model = self.model_stack.last().unwrap() * model;
         self.model_stack.push(model);
         let res = f(self);
@@ -764,7 +764,7 @@ impl<'a> Ui<'a> {
 
     #[inline]
     pub fn abs_scope<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
-        self.model_stack.push(Matrix::identity());
+        self.model_stack.push(Matrix3::identity());
         let res = f(self);
         self.model_stack.pop();
         res

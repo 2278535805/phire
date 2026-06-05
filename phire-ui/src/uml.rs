@@ -15,7 +15,7 @@ use macroquad::prelude::*;
 use nalgebra::Vector2;
 use parse::Expr;
 use phire::{
-    core::Matrix,
+    core::Matrix3,
     ext::{semi_black, semi_white, RectExt, SafeTexture, ScaleType},
     scene::NextScene,
     task::Task,
@@ -480,7 +480,7 @@ impl Element for Rotation {
         let cx = self.config.cx.eval(uml)?.float()?;
         let cy = self.config.cy.eval(uml)?.float()?;
         let ct = Vector2::new(cx, cy);
-        let mat = Matrix::new_translation(&ct) * Matrix::new_rotation(angle);
+        let mat = Matrix3::new_translation(&ct) * Matrix3::new_rotation(angle);
         let mat = mat.prepend_translation(&-ct);
         uml.push(ui, StackLayer::Mat(mat));
         Ok(Var::default())
@@ -511,7 +511,7 @@ impl Element for Translation {
     fn render(&self, ui: &mut Ui, uml: &Uml) -> Result<Var> {
         let dx = self.config.dx.eval(uml)?.float()?;
         let dy = self.config.dy.eval(uml)?.float()?;
-        uml.push(ui, StackLayer::Mat(Matrix::new_translation(&Vector2::new(dx, dy))));
+        uml.push(ui, StackLayer::Mat(Matrix3::new_translation(&Vector2::new(dx, dy))));
         Ok(Var::default())
     }
 }
@@ -608,7 +608,7 @@ impl Element for Mat {
         let x31 = self.config.x31.eval(uml)?.float()?;
         let x32 = self.config.x32.eval(uml)?.float()?;
         let x33 = self.config.x33.eval(uml)?.float()?;
-        let mat = Matrix::from_column_slice(&[x00, x10, x20, x30, x01, x11, x21, x31, x02, x12, x22, x32, x03, x13, x23, x33]);
+        let mat = Matrix3::from_column_slice(&[x00, x10, x20, x30, x01, x11, x21, x31, x02, x12, x22, x32, x03, x13, x23, x33]);
         uml.push(ui, StackLayer::Mat(mat));
         Ok(Var::default())
     }
@@ -655,7 +655,7 @@ impl Var {
 }
 
 enum StackLayer {
-    Mat(Matrix),
+    Mat(Matrix3),
     Alpha(f32),
 }
 pub struct Uml {

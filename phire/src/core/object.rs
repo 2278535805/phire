@@ -1,4 +1,6 @@
-use super::{AnimFloat, AnimVector, Matrix, Resource, Vector};
+use crate::core::Vector3;
+
+use super::{AnimFloat, AnimVector, Matrix3, Resource, Vector2};
 use macroquad::prelude::*;
 use nalgebra::{Matrix4, Rotation2};
 
@@ -62,17 +64,17 @@ impl Object {
             && self.scale_z.as_ref().map_or(true, |z| z.dead())
     }
 
-    pub fn now(&self, res: &Resource) -> Matrix {
+    pub fn now(&self, res: &Resource) -> Matrix3 {
         self.now_rotation().append_translation(&self.now_translation(res))
     }
 
     #[inline]
-    pub fn now_rotation(&self) -> Matrix {
+    pub fn now_rotation(&self) -> Matrix3 {
         Rotation2::new(self.rotation.now().to_radians()).to_homogeneous()
     }
 
     #[inline]
-    pub fn now_translation(&self, res: &Resource) -> Vector {
+    pub fn now_translation(&self, res: &Resource) -> Vector2 {
         let mut tr = self.translation.now();
         tr.y /= res.aspect_ratio;
         tr
@@ -84,72 +86,46 @@ impl Object {
     }
 
     #[inline]
-    pub fn now_scale(&self) -> Matrix {
-        Matrix::identity().append_nonuniform_scaling(&self.scale.now_with_def(1.0, 1.0))
+    pub fn now_scale(&self) -> Matrix3 {
+        Matrix3::identity().append_nonuniform_scaling(&self.scale.now_with_def(1.0, 1.0))
     }
 
-    pub fn now_scale_wrt_point(&self, scale_point: Vector) -> Matrix {
+    #[inline]
+    pub fn now_scale_3d(&self) -> Matrix4<f32> {
         let scale = self.scale.now_with_def(1.0, 1.0);
-        Matrix::new_translation(&-scale_point).append_nonuniform_scaling(&scale).append_translation(&scale_point)
+        let sz = self.scale_z.as_ref().map_or(1.0, |z| z.now_opt().unwrap_or(1.0));
+        Matrix4::new_nonuniform_scaling(&Vector3::new(scale.x, scale.y, sz))
     }
 
-    pub fn new_rotation_wrt_point(rot: Rotation2<f32>, pt: Vector) -> Matrix {
-        let translation_back = Matrix::new_translation(&pt);
-        let translation_to = Matrix::new_translation(&-pt);
+    pub fn now_scale_wrt_point(&self, scale_point: Vector2) -> Matrix3 {
+        let scale = self.scale.now_with_def(1.0, 1.0);
+        Matrix3::new_translation(&-scale_point).append_nonuniform_scaling(&scale).append_translation(&scale_point)
+    }
+
+    pub fn new_rotation_wrt_point(rot: Rotation2<f32>, pt: Vector2) -> Matrix3 {
+        let translation_back = Matrix3::new_translation(&pt);
+        let translation_to = Matrix3::new_translation(&-pt);
         translation_back * rot.to_homogeneous() * translation_to
     }
 
-    pub fn now_transform_3d(&self, res: &Resource) -> Option<Matrix4<f32>> {
-        if !self.has_3d() {
-            return None;
-        }
-
-        let tr = self.translation.now();
-        let tr_z = self.translation_z.as_ref().map_or(0.0, |z| z.now());
-        let sx = self.scale.0.now_opt().unwrap_or(1.0);
-        let sy = self.scale.1.now_opt().unwrap_or(1.0);
-        let sz = self.scale_z.as_ref().map_or(1.0, |z| z.now_opt().unwrap_or(1.0));
-
+    pub fn now_rotation_3d(&self) -> Matrix4<f32> {
         let (rx, ry, rz) = if let Some((ref rx, ref ry, ref rz)) = self.rotation_3d {
             (rx.now().to_radians(), ry.now().to_radians(), rz.now().to_radians())
         } else {
             (0.0, 0.0, self.rotation.now().to_radians())
         };
 
-        let cos_rx = rx.cos(); let sin_rx = rx.sin();
-        let cos_ry = ry.cos(); let sin_ry = ry.sin();
-        let cos_rz = rz.cos(); let sin_rz = rz.sin();
+        nalgebra::Rotation3::from_euler_angles(rx, ry, rz).to_homogeneous()
+    }
 
-        let rot_x = Matrix4::new(
-            1.0, 0.0, 0.0, 0.0,
-            0.0, cos_rx, sin_rx, 0.0,
-            0.0, -sin_rx, cos_rx, 0.0,
-            0.0, 0.0, 0.0, 1.0,
-        );
-        let rot_y = Matrix4::new(
-            cos_ry, 0.0, -sin_ry, 0.0,
-            0.0, 1.0, 0.0, 0.0,
-            sin_ry, 0.0, cos_ry, 0.0,
-            0.0, 0.0, 0.0, 1.0,
-        );
-        let rot_z = Matrix4::new(
-            cos_rz, sin_rz, 0.0, 0.0,
-            -sin_rz, cos_rz, 0.0, 0.0,
-            0.0, 0.0, 1.0, 0.0,
-            0.0, 0.0, 0.0, 1.0,
-        );
-
-        let scale = Matrix4::new(
-            sx, 0.0, 0.0, 0.0,
-            0.0, sy, 0.0, 0.0,
-            0.0, 0.0, sz, 0.0,
-            0.0, 0.0, 0.0, 1.0,
-        );
+    pub fn now_transform_3d(&self, res: &Resource) -> Matrix4<f32> {
+        let tr = self.translation.now();
+        let tr_z = self.translation_z.as_ref().map_or(0.0, |z| z.now());
 
         let ar = res.aspect_ratio;
         let translation = Matrix4::new_translation(&nalgebra::Vector3::new(tr.x, tr.y / ar, tr_z));
 
-        Some(translation * rot_z * rot_y * rot_x * scale)
+        translation * self.now_rotation_3d() * self.now_scale_3d()
     }
 }
 

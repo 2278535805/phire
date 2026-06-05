@@ -1,8 +1,8 @@
 use super::{
-    chart::ChartSettings, BpmList, CtrlObject, JudgeLine, Matrix, Object, Point, Resource, Vector
+    chart::ChartSettings, BpmList, CtrlObject, JudgeLine, Matrix3, Matrix4, Object, Point2, Resource
 };
 use crate::{
-    core::{Anim, HEIGHT_RATIO}, ext::{parse_alpha}, judge::JudgeStatus, parse::RPE_HEIGHT, ui::Ui
+    core::{Anim, HEIGHT_RATIO, Point3, Vector3}, ext::parse_alpha, judge::JudgeStatus, parse::RPE_HEIGHT, ui::Ui
 };
 
 
@@ -69,7 +69,7 @@ fn draw_tex(res: &Resource, texture: Texture2D, order: i8, x: f32, y: f32, color
     if h < 0. {
         return;
     }
-    let mut p = [Point::new(x, y), Point::new(x + w, y), Point::new(x + w, y + h), Point::new(x, y + h)];
+    let mut p = [Point3::new(x, y, 0.0), Point3::new(x + w, y, 0.0), Point3::new(x + w, y + h, 0.0), Point3::new(x, y + h, 0.0)];
     if clip {
         if y + h <= 0. {
             return;
@@ -86,8 +86,8 @@ fn draw_tex(res: &Resource, texture: Texture2D, order: i8, x: f32, y: f32, color
     params.flip_y ^= true;
     draw_tex_pts(res, texture, order, p, color, params);
 }
-fn draw_tex_pts(res: &Resource, texture: Texture2D, order: i8, p: [Point; 4], color: Color, params: DrawTextureParams) {
-    let mut p = p.map(|it| res.world_to_screen(it));
+fn draw_tex_pts(res: &Resource, texture: Texture2D, order: i8, p: [Point3; 4], color: Color, params: DrawTextureParams) {
+    let mut p = p.map(|it| res.world_to_screen_3d(it));
     if p[0].x.min(p[1].x.min(p[2].x.min(p[3].x))) > 1. / res.config.chart_ratio
         || p[0].x.max(p[1].x.max(p[2].x.max(p[3].x))) < -1. / res.config.chart_ratio
         || p[0].y.min(p[1].y.min(p[2].y.min(p[3].y))) > 1. / res.config.chart_ratio
@@ -108,10 +108,10 @@ fn draw_tex_pts(res: &Resource, texture: Texture2D, order: i8, p: [Point; 4], co
 
     #[rustfmt::skip]
     let vertices = [
-        Vertex::new(p[0].x, p[0].y, 0., sx     , sy     , color),
-        Vertex::new(p[1].x, p[1].y, 0., sx + sw, sy     , color),
-        Vertex::new(p[2].x, p[2].y, 0., sx + sw, sy + sh, color),
-        Vertex::new(p[3].x, p[3].y, 0., sx     , sy + sh, color),
+        Vertex::new(p[0].x, p[0].y, p[0].z, sx     , sy     , color),
+        Vertex::new(p[1].x, p[1].y, p[1].z, sx + sw, sy     , color),
+        Vertex::new(p[2].x, p[2].y, p[2].z, sx + sw, sy + sh, color),
+        Vertex::new(p[3].x, p[3].y, p[3].z, sx     , sy + sh, color),
     ];
     res.note_buffer
         .borrow_mut()
@@ -151,7 +151,7 @@ impl Note {
         line.object.rotation.now() + if self.above { 0. } else { 180. }
     }
 
-    pub fn update(&mut self, res: &mut Resource, parent_rot: f32, parent_tr: &Matrix, ctrl_obj: &mut CtrlObject, line_height: f64, bpm_list: &mut BpmList, index: usize) {
+    pub fn update(&mut self, res: &mut Resource, parent_rot: f32, parent_tr: &Matrix3, ctrl_obj: &mut CtrlObject, line_height: f64, bpm_list: &mut BpmList, index: usize) {
         if self.time < res.config.play_start_time || res.disable_hit_fx {
             return;
         }
@@ -196,7 +196,7 @@ impl Note {
         ctrl_obj.set_height((self.height - line_height + self.object.translation.1.now() as f64 / self.speed) * RPE_HEIGHT as f64 / 2.);
     }
 
-    pub fn now_transform(&self, res: &Resource, ctrl_obj: &CtrlObject, base: f32, incline_sin: f32, can_scale_x: bool, can_scale_y: bool) -> Matrix {
+    pub fn now_transform(&self, res: &Resource, ctrl_obj: &CtrlObject, base: f32, incline_sin: f32, can_scale_x: bool, can_scale_y: bool) -> Matrix3 {
         let incline_val = 1. - incline_sin * (base * res.aspect_ratio + self.object.translation.1.now()) * RPE_HEIGHT / 2. / 360.;
         let mut tr = self.object.now_translation(res);
         tr.x *= incline_val * ctrl_obj.pos.now_opt().unwrap_or(1.);
@@ -211,6 +211,30 @@ impl Note {
         };
         scale.y *= ctrl_obj.size.now_opt().unwrap_or(1.0);
         self.object.now_rotation().append_nonuniform_scaling(&scale).append_translation(&tr)
+    }
+
+    pub fn now_transform_3d(&self, res: &Resource, ctrl_obj: &CtrlObject, base: f32, incline_sin: f32, can_scale_x: bool, can_scale_y: bool) -> Matrix4 {
+        let incline_val = 1. - incline_sin * (base * res.aspect_ratio + self.object.translation.1.now()) * RPE_HEIGHT / 2. / 360.;
+        let mut tr = self.object.now_translation(res);
+        tr.x *= incline_val * ctrl_obj.pos.now_opt().unwrap_or(1.);
+        tr.y += base;
+        let tr_z = self.object.translation_z.as_ref().map_or(0.0, |z| z.now());
+
+        let mut scale = self.object.scale.now_with_def(1.0, 1.0);
+        if !can_scale_x {
+            scale.x = 1.0;
+        };
+        scale.x *= ctrl_obj.size.now_opt().unwrap_or(1.0);
+        if !res.info.note_uniform_scale || !can_scale_y {
+            scale.y = 1.0;
+        };
+        scale.y *= ctrl_obj.size.now_opt().unwrap_or(1.0);
+        let sz = self.object.scale_z.as_ref().map_or(1.0, |z| z.now_opt().unwrap_or(1.0));
+
+        let scale_3d = Vector3::new(scale.x, scale.y, sz);
+        let translation = Vector3::new(tr.x, tr.y, tr_z);
+
+        self.object.now_rotation_3d().append_nonuniform_scaling(&scale_3d).append_translation(&translation)
     }
 
     pub fn render(&self, ui: &mut Ui, res: &mut Resource, config: &mut RenderConfig, bpm_list: &mut BpmList, line_set_debug_alpha: bool, line_id: usize, height_above: f64, height_below: f64) {
@@ -322,9 +346,9 @@ impl Note {
             if !config.draw_below {
                 color.a *= ((self.time - res.time).min(0.) / FADEOUT_TIME + 1.) as f32;
             }
-            res.with_model(self.now_transform(res, ctrl_obj, base as f32, config.incline_sin, true, true), |res| {
+            res.with_model_3d(self.now_transform_3d(res, ctrl_obj, base as f32, config.incline_sin, true, true), |res| {
                 if res.config.aggressive_note {
-                    let pt = res.world_to_screen(Point::default());
+                    let pt = res.world_to_screen(Point2::default());
                     if pt.x.abs() > 1.15 * res.config.chart_ratio || pt.y.abs() * res.config.chart_ratio * res.aspect_ratio > 1.01 {
                         return;
                     }
@@ -346,7 +370,7 @@ impl Note {
             }
             NoteKind::Hold { end_time, end_height, end_speed } => {
                 if self.fake && res.time >= end_time { return };
-                res.with_model(self.now_transform(res, ctrl_obj, 0., 0., true, false), |res| {
+                res.with_model_3d(self.now_transform_3d(res, ctrl_obj, 0., 0., true, false), |res| {
                     if matches!(self.judge, JudgeStatus::Judged) {
                         // miss
                         color.a *= 0.5;
@@ -493,9 +517,9 @@ impl Note {
                         };
                         format!(" v: {}{}", self.speed, end_spd)
                     };
-                    res.with_model(self.now_transform(res, ctrl_obj, bottom as f32, config.incline_sin, false, false), |res: &mut Resource| {
-                        res.with_model(Matrix::new_nonuniform_scaling(&Vector::new(1.0, if self.above { -1.0 } else { 1.0 })), |res: &mut Resource| {
-                            res.apply_model(|res| {
+                    res.with_model_3d(self.now_transform_3d(res, ctrl_obj, bottom as f32, config.incline_sin, false, false), |res: &mut Resource| {
+                        res.with_model_3d(Matrix4::new_nonuniform_scaling(&Vector3::new(1.0, if self.above { -1.0 } else { 1.0 }, 1.0)), |res: &mut Resource| {
+                            res.apply_model_3d(|res| {
                                 ui.text(format!("[{}] t:{:.2}({:.2}) h:{:.2}({:.2})[{:.2}]\n{}{}{}", line_id, self.time, end_time, self.height, end_height, base, speed, above, fake))
                                     .pos(0., if self.above { res.config.chart_debug_note * 0.2 } else { -res.config.chart_debug_note * 0.2 })
                                     .anchor(0.0, 0.)
@@ -518,9 +542,9 @@ impl Note {
                     } else {
                         format!(" v: {}", self.speed)
                     };
-                    res.with_model(self.now_transform(res, ctrl_obj, base as f32, config.incline_sin, false, false), |res: &mut Resource| {
-                        res.with_model(Matrix::new_nonuniform_scaling(&Vector::new(1.0, if self.above { -1.0 } else { 1.0 })), |res: &mut Resource| {
-                            res.apply_model(|res| {
+                    res.with_model_3d(self.now_transform_3d(res, ctrl_obj, base as f32, config.incline_sin, false, false), |res: &mut Resource| {
+                        res.with_model_3d(Matrix4::new_nonuniform_scaling(&Vector3::new(1.0, if self.above { -1.0 } else { 1.0 }, 1.0)), |res: &mut Resource| {
+                            res.apply_model_3d(|res| {
                                 ui.text(format!("[{}] t:{:.2} h:{:.2}[{:.2}]\n{}{}{}", line_id, self.time, self.height, base, speed, above, fake))
                                     .pos(0., res.config.chart_debug_note * 0.15)
                                     .anchor(0.0, 0.)
@@ -540,7 +564,7 @@ impl Note {
 pub struct BadNote {
     pub time: f64,
     pub kind: NoteKind,
-    pub matrix: Matrix,
+    pub matrix: Matrix3,
 }
 
 impl BadNote {
