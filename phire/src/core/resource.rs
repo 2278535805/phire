@@ -468,7 +468,7 @@ pub struct Resource {
     pub alpha: f32,
     pub judge_line_color: Color,
 
-    pub camera: Camera2D,
+    pub camera: Camera3D,
 
     pub background: SafeTexture,
     pub illustration: SafeTexture,
@@ -572,11 +572,20 @@ impl Resource {
         let res_pack = ResourcePack::from_path(config.res_pack_path.as_ref())
             .await
             .context("Failed to load resource pack")?;
-        let vec2_ratio = vec2(1.,config.aspect_ratio.unwrap_or(info.aspect_ratio));
-        let camera = Camera2D {
-            target: vec2(0., 0.),
-            zoom: vec2_ratio,
-            ..Default::default()
+        let ar = config.aspect_ratio.unwrap_or(info.aspect_ratio);
+        let fovy = 45.0_f32.to_radians();
+        let distance = 1.0 / (ar * (fovy / 2.0).tan());
+        let camera = Camera3D {
+            position: vec3(0., 0., distance),
+            target: vec3(0., 0., 0.),
+            up: vec3(0., 1., 0.),
+            fovy,
+            aspect: Some(ar),
+            projection: Projection::Perspective,
+            render_target: None,
+            viewport: None,
+            z_near: 0.01,
+            z_far: 10000.0,
         };
 
         let mut audio = create_audio_manger(&config)?;
@@ -749,7 +758,8 @@ impl Resource {
             self.camera.viewport = Some(viewport(aspect_ratio, vp));
         } else {
             self.aspect_ratio = aspect_ratio.min(vp.2 as f32 / vp.3 as f32);
-            self.camera.zoom.y = self.aspect_ratio;
+            self.camera.position.z = 1.0 / (self.aspect_ratio * (self.camera.fovy / 2.0).tan());
+            self.camera.aspect = Some(self.aspect_ratio);
             self.camera.viewport = Some(viewport(self.aspect_ratio, vp));
         };
         true

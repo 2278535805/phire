@@ -1441,8 +1441,18 @@ impl Scene for GameScene {
         } else {
             0.
         };
-        set_camera( &Camera2D {
-            zoom: chart_zoom,
+        let chart_fovy = 45.0_f32.to_radians();
+        let chart_fov_tan = (chart_fovy / 2.0).tan();
+        let chart_cam_aspect = if res.config.chart_ratio < 1. { asp2_window } else { asp2_chart };
+        let chart_cam_distance = 1.0 / (asp2_chart * ratio * chart_fov_tan);
+        let chart_cam_up = vec3(-angle.sin(), angle.cos(), 0.0);
+        set_camera( &Camera3D {
+            position: vec3(0., 0., chart_cam_distance),
+            target: vec3(0., 0., 0.),
+            up: chart_cam_up,
+            fovy: chart_fovy,
+            aspect: Some(chart_cam_aspect),
+            projection: Projection::Perspective,
             viewport: chart_viewport.map(|(x, y, w, h)| {
                 if res.info.fold_animation && matches!(self.state, State::Starting) {
                     let scale_x = (1. - (1. - time / Self::BEFORE_TIME).clamp(0., 1.).powi(3)).powf(2.0) as f32;
@@ -1459,9 +1469,9 @@ impl Scene for GameScene {
                     (x, y, w, h)
                 }
             }),
-            rotation: angle.to_degrees(),
             render_target: chart_onto.clone(),
-            ..Default::default()
+            z_near: 0.01,
+            z_far: 10000.0,
         });
         self.gl.quad_gl.render_pass(chart_onto.as_ref().map(|it| it.render_pass.raw_miniquad_id()));
         self.chart.render(ui, res);
