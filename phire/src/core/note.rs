@@ -64,7 +64,7 @@ pub struct RenderConfig<'a> {
     pub incline_sin: f32,
 }
 
-fn draw_tex(res: &Resource, texture: Texture2D, order: i8, x: f32, y: f32, color: Color, mut params: DrawTextureParams, clip: bool) {
+fn draw_tex(res: &Resource, texture: &Texture2D, order: i8, x: f32, y: f32, color: Color, mut params: DrawTextureParams, clip: bool) {
     let Vec2 { x: w, y: h } = params.dest_size.unwrap();
     if h < 0. {
         return;
@@ -86,7 +86,7 @@ fn draw_tex(res: &Resource, texture: Texture2D, order: i8, x: f32, y: f32, color
     params.flip_y ^= true;
     draw_tex_pts(res, texture, order, p, color, params);
 }
-fn draw_tex_pts(res: &Resource, texture: Texture2D, order: i8, p: [Point3; 4], color: Color, params: DrawTextureParams) {
+fn draw_tex_pts(res: &Resource, texture: &Texture2D, order: i8, p: [Point3; 4], color: Color, params: DrawTextureParams) {
     let mut p = p.map(|it| res.world_to_screen_3d(it));
     if p[0].x.min(p[1].x.min(p[2].x.min(p[3].x))) > 1. / res.config.chart_ratio
         || p[0].x.max(p[1].x.max(p[2].x.max(p[3].x))) < -1. / res.config.chart_ratio
@@ -129,7 +129,7 @@ fn draw_tex_pts(res: &Resource, texture: Texture2D, order: i8, p: [Point3; 4], c
         );
 }
 
-fn draw_center(res: &Resource, tex: Texture2D, order: i8, scale: f32, color: Color) {
+fn draw_center(res: &Resource, tex: &Texture2D, order: i8, scale: f32, color: Color) {
     let hf = vec2(scale, tex.height() * scale / tex.width());
     draw_tex(
         res,
@@ -360,7 +360,7 @@ impl Note {
                         return;
                     }
                 }
-                draw_center(res, tex, order, scale, color);
+                draw_center(res, &tex, order, scale, color);
             });
         };
         match self.kind {
@@ -419,11 +419,11 @@ impl Note {
                     // body
                     draw_tex(
                         res,
-                        Texture2D::clone(if res.res_pack.info.hold_repeat {
+                        if res.res_pack.info.hold_repeat {
                             style.hold_body.as_ref().unwrap()
                         } else {
                             tex
-                        }),
+                        },
                         order,
                         -scale,
                         body_y,
@@ -452,7 +452,7 @@ impl Note {
                         let head_y = if flip_y { bottom as f32 + hf.y * 2. } else { bottom as f32 };
                         draw_tex(
                             res,
-                            Texture2D::clone(tex),
+                            tex,
                             order,
                             -scale,
                             head_y - if res.res_pack.info.hold_compact { hf.y } else { hf.y * 2. },
@@ -475,7 +475,7 @@ impl Note {
                     let tail_y = if flip_y { top as f32 - hf.y * 2. } else { top as f32 };
                     draw_tex(
                         res,
-                        Texture2D::clone(tex),
+                        tex,
                         order,
                         -scale,
                         tail_y - if res.res_pack.info.hold_compact { hf.y } else { 0. },
@@ -577,9 +577,9 @@ impl BadNote {
             draw_center(
                 res,
                 match &self.kind {
-                    NoteKind::Click => Texture2D::clone(&style.click),
-                    NoteKind::Drag => Texture2D::clone(&style.drag),
-                    NoteKind::Flick => Texture2D::clone(&style.flick),
+                    NoteKind::Click => &style.click,
+                    NoteKind::Drag => &style.drag,
+                    NoteKind::Flick => &style.flick,
                     _ => unreachable!(),
                 },
                 self.kind.order(),
