@@ -110,7 +110,7 @@ impl JudgeLineCache {
                     match it.kind {
                         NoteKind::Hold { end_height, .. } => { it.height.min(end_height) },
                         _ => { it.height },
-                    } + it.object.translation.1.now() as f64 * it.speed
+                    } + it.object.translation.1.now() as f64 * it.speed + it.object.translation.2.now() as f64
                 ).not_nan(),
             )
         });
