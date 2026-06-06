@@ -693,7 +693,7 @@ impl Resource {
         if !self.config.particle {
             return;
         }
-        let pt = self.world_to_screen(Point2::default());
+        let pt = self.world_to_screen_3d(Point3::default());
 
         if self.config.aggressive_particle {
             if pt.x.abs() > 1.2 * self.config.chart_ratio || pt.y.abs() * self.config.chart_ratio * self.aspect_ratio > 1.2 {
@@ -772,7 +772,7 @@ impl Resource {
     }
 
     pub fn screen_to_world(&self, pt: Point2) -> Point2 {
-        self.model_stack.last().unwrap().try_inverse().unwrap().transform_point(&pt)
+        self.model_stack.last().unwrap().try_inverse().unwrap_or_else(|| Matrix3::new_scaling(0.)).transform_point(&pt)
     }
 
     pub fn world_to_screen_3d(&self, pt: Point3) -> Point3 {
@@ -780,7 +780,7 @@ impl Resource {
     }
 
     pub fn screen_to_world_3d(&self, pt: Point3) -> Point3 {
-        self.model_stack_3d.last().unwrap().try_inverse().unwrap().transform_point(&pt)
+        self.model_stack_3d.last().unwrap().try_inverse().unwrap_or_else(|| Matrix4::new_scaling(0.)).transform_point(&pt)
     }
 
     #[inline]

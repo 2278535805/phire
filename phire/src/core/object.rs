@@ -54,6 +54,10 @@ impl Object {
         self.now_rotation().append_translation(&self.now_translation(res))
     }
 
+    pub fn now_3d(&self, res: &Resource) -> Matrix4<f32> {
+        self.now_rotation_3d().append_translation(&self.now_translation_3d(res))
+    }
+
     #[inline]
     pub fn now_rotation(&self) -> Matrix3 {
         Rotation2::new(self.rotation_3d.2.now().to_radians()).to_homogeneous()
@@ -64,6 +68,12 @@ impl Object {
         let mut tr = self.translation.now();
         tr.y /= res.aspect_ratio;
         tr
+    }
+
+    pub fn now_translation_3d(&self, res: &Resource) -> Vector3 {
+        let mut tr = self.translation.now();
+        tr.y /= res.aspect_ratio;
+        Vector3::new(tr.x, tr.y, self.translation_z.now())
     }
 
     #[inline]

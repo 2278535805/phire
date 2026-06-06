@@ -1,6 +1,6 @@
 use crate::{
     config::Config,
-    core::{BadNote, Chart, NOTE_WIDTH_RATIO_BASE, Note, NoteKind, Point2, Point3, Resource, Vector2},
+    core::{BadNote, Chart, NOTE_WIDTH_RATIO_BASE, Note, NoteKind, Point2, Point3, Resource, Vector2, Vector3},
     ext::{NotNanExt, get_viewport},
 };
 use macroquad::prelude::{
@@ -860,11 +860,11 @@ impl Judge {
             note.object.set_time(t);
             let line = &chart.lines[line_id];
             let note = &line.notes[id as usize];
-            let mut note_transform = note.object.now(res);
+            let mut note_transform = note.object.now_3d(res);
             if !note.above {
-                note_transform.append_nonuniform_scaling_mut(&Vector2::new(1.0, -1.0));
+                note_transform.append_nonuniform_scaling_mut(&Vector3::new(1.0, -1.0, 1.0));
             }
-            let line_tr = line.now_transform(res, &chart.lines);
+            let line_tr = line.now_transform_3d(res, &chart.lines);
             self.commit(
                 t,
                 judgement,
@@ -888,7 +888,7 @@ impl Judge {
                     } else {
                         res.res_pack.info.fx_perfect()
                     };
-                    res.with_model(line_tr * note_transform, |res| res.emit_at_origin(note.rotation(line), color));
+                    res.with_model_3d(line_tr * note_transform, |res| res.emit_at_origin(note.rotation(line), color));
                     true
                 }
                 Judgement::Good => {
@@ -897,7 +897,7 @@ impl Judge {
                     } else {
                         res.res_pack.info.fx_good()
                     };
-                    res.with_model(line_tr * note_transform, |res| res.emit_at_origin(note.rotation(line), color));
+                    res.with_model_3d(line_tr * note_transform, |res| res.emit_at_origin(note.rotation(line), color));
                     true
                 }
                 Judgement::Bad => {
@@ -907,7 +907,7 @@ impl Judge {
                             kind: note.kind.clone(),
                             matrix: {
                                 let incline_sin = line.incline.now_opt().map(|it| it.to_radians().sin()).unwrap_or_default();
-                                let mut note_transform = note.now_transform(
+                                let mut note_transform = note.now_transform_3d(
                                     res,
                                     &line.ctrl_obj.borrow_mut(),
                                     (note.height - line.height.now()) as f32 / res.aspect_ratio * note.speed as f32,
@@ -915,7 +915,7 @@ impl Judge {
                                     true, true
                                 );
                                 if !note.above {
-                                    note_transform.append_nonuniform_scaling_mut(&Vector2::new(1.0, -1.0));
+                                    note_transform.append_nonuniform_scaling_mut(&Vector3::new(1.0, -1.0, 1.0));
                                 }
                                 line_tr * note_transform
                             },
@@ -1003,12 +1003,12 @@ impl Judge {
                 let nt = if matches!(note.kind, NoteKind::Hold { .. }) { t } else { note.time };
                 line.object.set_time(nt);
                 note.object.set_time(nt);
-                note.object.now(res)
+                note.object.now_3d(res)
             };
             let line = &chart.lines[line_id];
             let note = &line.notes[id as usize];
             if !note.above {
-                note_transform.append_nonuniform_scaling_mut(&Vector2::new(1.0, -1.0));
+                note_transform.append_nonuniform_scaling_mut(&Vector3::new(1.0, -1.0, 1.0));
             }
             match note.kind {
                 NoteKind::Click => {
@@ -1019,7 +1019,7 @@ impl Judge {
                     };
                     self.commit(t, judge_type, line_id as _, id, 0.);
                     if note.time >= res.config.play_start_time && !res.disable_hit_fx {
-                        res.with_model(line.now_transform(res, &chart.lines) * note_transform, |res| {
+                        res.with_model_3d(line.now_transform_3d(res, &chart.lines) * note_transform, |res| {
                             res.emit_at_origin(note.rotation(line), color)
                         });
                         if !res.config.all_bad {
@@ -1038,7 +1038,7 @@ impl Judge {
                     };
                     self.commit(t, Judgement::Perfect, line_id as _, id, 0.);
                     if note.time >= res.config.play_start_time && !res.disable_hit_fx {
-                        res.with_model(line.now_transform(res, &chart.lines) * note_transform, |res| {
+                        res.with_model_3d(line.now_transform_3d(res, &chart.lines) * note_transform, |res| {
                             res.emit_at_origin(note.rotation(line), color)
                         });
                         note.hitsound.play(res)

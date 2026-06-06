@@ -37,7 +37,7 @@ pub struct Chart {
 
     order: Vec<usize>,
     attach_ui: [Option<usize>; 7],
-    trs: Vec<Matrix3>,
+    trs: Vec<Matrix4>,
 }
 
 impl Chart {
@@ -122,7 +122,7 @@ impl Chart {
             line.object.set_time(res.time);
         }
         self.trs.clear();
-        self.trs.extend(self.lines.iter().map(|it| it.now_transform(res, &self.lines)));
+        self.trs.extend(self.lines.iter().map(|it| it.now_transform_3d(res, &self.lines)));
         let mut guard = self.bpm_list.borrow_mut();
         for (index, (line, tr)) in self.lines.iter_mut().zip(self.trs.drain(..)).enumerate() {
             line.update(res, tr, &mut guard, index);

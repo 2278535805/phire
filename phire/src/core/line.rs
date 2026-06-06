@@ -1,7 +1,7 @@
 use super::{chart::ChartSettings, object::CtrlObject, Anim, AnimFloat, BpmList, Matrix3, Matrix4, Note, Object, Point2, RenderConfig, Resource, Vector2};
 use crate::{
     config::Mods,
-    core::{NoteKind, Vector3, anim::AnimFloatF64},
+    core::{NoteKind, Point3, Vector3, anim::AnimFloatF64},
     ext::{NotNanExt, SafeTexture, get_viewport, parse_alpha},
     judge::{JudgeStatus, LIMIT_BAD},
     ui::Ui,
@@ -176,7 +176,7 @@ unsafe impl Sync for JudgeLine {}
 unsafe impl Send for JudgeLine {}
 
 impl JudgeLine {
-    pub fn update(&mut self, res: &mut Resource, tr: Matrix3, bpm_list: &mut BpmList, index: usize) {
+    pub fn update(&mut self, res: &mut Resource, tr: Matrix4, bpm_list: &mut BpmList, index: usize) {
         // self.object.set_time(res.time); // this is done by chart, chart has to calculate transform for us
         let rot = self.object.rotation_3d.2.now();
         self.height.set_time(res.time);
@@ -351,7 +351,8 @@ impl JudgeLine {
 
     fn render_content(&self, ui: &mut Ui, res: &mut Resource, bpm_list: &mut BpmList, settings: &ChartSettings, id: usize, alpha: f32, color: Option<Color>) {
         res.with_model_3d(self.object.now_scale_3d(), |res| {
-            res.apply_model_3d(|res| match &self.kind {
+            res.apply_model_3d(|res|
+                match &self.kind {
                 JudgeLineKind::Normal => {
                     if res.config.render_line {
                         let mut color = color.unwrap_or(res.judge_line_color);
@@ -423,7 +424,7 @@ impl JudgeLine {
                         if color.a == 0.0 {
                             return;
                         }
-                        res.apply_model_of(&Matrix3::identity().append_nonuniform_scaling(&Vector2::new(1., -1.)), |res| {
+                        res.apply_model_of_3d(&Matrix4::identity().append_nonuniform_scaling(&Vector3::new(1., -1., 1.0)), |res| {
                             let now = anim.now();
                             let mut painter = now.font_id.and_then(|id| res.fonts.get(id)).map(|cell| cell.borrow_mut());
                             ui.text(&now.text).pos(0., 0.).anchor(self.anchor[0], -self.anchor[1] + 1.).size(1.).color(color).multiline().draw_with_font(painter.as_deref_mut());
@@ -544,10 +545,10 @@ impl JudgeLine {
             (vw, vw / res.aspect_ratio)
         };
         let p = [
-            res.screen_to_world(Point2::new(-vw, -vh)),
-            res.screen_to_world(Point2::new(-vw, vh)),
-            res.screen_to_world(Point2::new(vw, -vh)),
-            res.screen_to_world(Point2::new(vw, vh)),
+            res.screen_to_world_3d(Point3::new(-vw, -vh, 0.)),
+            res.screen_to_world_3d(Point3::new(-vw, vh, 0.)),
+            res.screen_to_world_3d(Point3::new(vw, -vh, 0.)),
+            res.screen_to_world_3d(Point3::new(vw, vh, 0.)),
         ];
         let height_above = p[0].y.max(p[1].y.max(p[2].y.max(p[3].y))) as f64;
         let height_below = p[0].y.min(p[1].y.min(p[2].y.min(p[3].y))) as f64;

@@ -129,7 +129,7 @@ fn draw_tex_pts(res: &Resource, texture: &Texture2D, order: i8, p: [Point3; 4], 
         );
 }
 
-fn draw_center(res: &Resource, tex: &Texture2D, order: i8, scale: f32, color: Color) {
+pub fn draw_center(res: &Resource, tex: &Texture2D, order: i8, scale: f32, color: Color) {
     let hf = vec2(scale, tex.height() * scale / tex.width());
     draw_tex(
         res,
@@ -151,7 +151,7 @@ impl Note {
         line.object.rotation_3d.2.now() + if self.above { 0. } else { 180. }
     }
 
-    pub fn update(&mut self, res: &mut Resource, parent_rot: f32, parent_tr: &Matrix3, ctrl_obj: &mut CtrlObject, line_height: f64, bpm_list: &mut BpmList, index: usize) {
+    pub fn update(&mut self, res: &mut Resource, parent_rot: f32, parent_tr: &Matrix4, ctrl_obj: &mut CtrlObject, line_height: f64, bpm_list: &mut BpmList, index: usize) {
         if self.time < res.config.play_start_time || res.disable_hit_fx {
             return;
         }
@@ -180,7 +180,7 @@ impl Note {
         if let Some(color) = color {
             self.init_ctrl_obj(ctrl_obj, line_height);
             let rotation = if self.above { 0. } else { 180. };
-            res.with_model(parent_tr * self.now_transform(res, ctrl_obj, 0., 0., false, false), |res| {
+            res.with_model_3d(parent_tr * self.now_transform_3d(res, ctrl_obj, 0., 0., false, false), |res| {
                 res.emit_at_origin(parent_rot + rotation, color)
             });
         }
@@ -215,10 +215,9 @@ impl Note {
 
     pub fn now_transform_3d(&self, res: &Resource, ctrl_obj: &CtrlObject, base: f32, incline_sin: f32, can_scale_x: bool, can_scale_y: bool) -> Matrix4 {
         let incline_val = 1. - incline_sin * (base * res.aspect_ratio + self.object.translation.1.now()) * RPE_HEIGHT / 2. / 360.;
-        let mut tr = self.object.now_translation(res);
+        let mut tr = self.object.now_translation_3d(res);
         tr.x *= incline_val * ctrl_obj.pos.now_opt().unwrap_or(1.);
         tr.y += base;
-        let tr_z = self.object.translation_z.now();
 
         let mut scale = self.object.scale.now_with_def(1.0, 1.0);
         if !can_scale_x {
@@ -232,9 +231,8 @@ impl Note {
         let sz = self.object.scale_z.now_opt().unwrap_or(1.0);
 
         let scale_3d = Vector3::new(scale.x, scale.y, sz);
-        let translation = Vector3::new(tr.x, tr.y, tr_z);
 
-        self.object.now_rotation_3d().append_nonuniform_scaling(&scale_3d).append_translation(&translation)
+        self.object.now_rotation_3d().append_nonuniform_scaling(&scale_3d).append_translation(&tr)
     }
 
     pub fn render(&self, ui: &mut Ui, res: &mut Resource, config: &mut RenderConfig, bpm_list: &mut BpmList, line_set_debug_alpha: bool, line_id: usize, height_above: f64, height_below: f64) {
@@ -348,7 +346,7 @@ impl Note {
             }
             res.with_model_3d(self.now_transform_3d(res, ctrl_obj, base as f32, config.incline_sin, true, true), |res| {
                 if res.config.aggressive_note {
-                    let pt = res.world_to_screen(Point2::default());
+                    let pt = res.world_to_screen_3d(Point3::default());
                     if pt.x.abs() > 1.15 * res.config.chart_ratio || pt.y.abs() * res.config.chart_ratio * res.aspect_ratio > 1.01 {
                         return;
                     }
@@ -564,7 +562,7 @@ impl Note {
 pub struct BadNote {
     pub time: f64,
     pub kind: NoteKind,
-    pub matrix: Matrix3,
+    pub matrix: Matrix4,
 }
 
 impl BadNote {
@@ -572,7 +570,7 @@ impl BadNote {
         if res.time > self.time + BAD_TIME {
             return false;
         }
-        res.with_model(self.matrix, |res| {
+        res.with_model_3d(self.matrix, |res| {
             let style = &res.res_pack.note_style;
             draw_center(
                 res,
