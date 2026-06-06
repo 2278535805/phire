@@ -364,7 +364,43 @@ impl Note {
         match self.kind {
             NoteKind::Click => {
                 if self.fake && res.time >= self.time { return };
-                draw(res, Texture2D::clone(&style.click));
+                let has_mesh = if res.config.render_double_hint && self.multiple_hint {
+                    res.res_pack.note_style_mh.tap_mesh.is_some()
+                } else {
+                    res.res_pack.note_style.tap_mesh.is_some()
+                };
+                if has_mesh {
+                    let mut color = color;
+                    if !config.draw_below {
+                        color.a *= ((self.time - res.time).min(0.) / FADEOUT_TIME + 1.) as f32;
+                    }
+                    let note_transform = self.now_transform_3d(res, ctrl_obj, base as f32, config.incline_sin, true, true);
+                    res.with_model_3d(note_transform, |res| {
+                        if res.config.aggressive_note {
+                            let pt = res.world_to_screen_3d(Point3::default());
+                            if pt.x.abs() > 1.15 * res.config.chart_ratio || pt.y.abs() * res.config.chart_ratio * res.aspect_ratio > 1.01 {
+                                return;
+                            }
+                            let roughly_pos = ((pt.x * 200.0).round() as i32, (pt.y * 200.0).round() as i32);
+                            let count = res.note_pos_map.entry(roughly_pos).or_insert(0);
+                            if *count < 2 {
+                                *count += 1;
+                            } else {
+                                return;
+                            }
+                        }
+                        let style = if res.config.render_double_hint && self.multiple_hint {
+                            &res.res_pack.note_style_mh
+                        } else {
+                            &res.res_pack.note_style
+                        };
+                        if let Some(mesh) = &style.tap_mesh {
+                            res.draw_note_mesh(mesh, order, scale, color, &style.tap_tex);
+                        }
+                    });
+                } else {
+                    draw(res, Texture2D::clone(&res.res_pack.note_style.click));
+                }
             }
             NoteKind::Hold { end_time, end_height, end_speed } => {
                 if self.fake && res.time >= end_time { return };
@@ -570,20 +606,25 @@ impl BadNote {
         if res.time > self.time + BAD_TIME {
             return false;
         }
+        let bad_color = Color::new(0.423529, 0.262745, 0.262745, ((self.time - res.time).max(-1.) / BAD_TIME + 1.) as f32);
         res.with_model_3d(self.matrix, |res| {
             let style = &res.res_pack.note_style;
-            draw_center(
-                res,
-                match &self.kind {
-                    NoteKind::Click => &style.click,
-                    NoteKind::Drag => &style.drag,
-                    NoteKind::Flick => &style.flick,
-                    _ => unreachable!(),
-                },
-                self.kind.order(),
-                res.note_width,
-                Color::new(0.423529, 0.262745, 0.262745, ((self.time - res.time).max(-1.) / BAD_TIME + 1.) as f32),
-            );
+            if let (NoteKind::Click, Some(mesh)) = (&self.kind, &style.tap_mesh) {
+                res.draw_note_mesh(mesh, self.kind.order(), res.note_width, bad_color, &style.click);
+            } else {
+                draw_center(
+                    res,
+                    match &self.kind {
+                        NoteKind::Click => &style.click,
+                        NoteKind::Drag => &style.drag,
+                        NoteKind::Flick => &style.flick,
+                        _ => unreachable!(),
+                    },
+                    self.kind.order(),
+                    res.note_width,
+                    bad_color,
+                );
+            }
         });
         true
     }

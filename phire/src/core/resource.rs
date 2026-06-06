@@ -20,6 +20,11 @@ use rand_pcg::{
 };
 use rustc_hash::FxHashMap;
 
+pub struct NoteMesh {
+    pub vertices: Vec<Vertex>,
+    pub indices: Vec<u16>,
+}
+
 pub const MAX_SIZE: usize = 256; // needs tweaking
 pub static DPI_VALUE: AtomicU32 = AtomicU32::new(250);
 pub const BUFFER_SIZE: usize = 1024;
@@ -156,6 +161,8 @@ pub struct NoteStyle {
     pub drag: SafeTexture,
     pub hold_body: Option<SafeTexture>,
     pub hold_atlas: (u32, u32),
+    pub tap_mesh: Option<NoteMesh>,
+    pub tap_tex: SafeTexture,
 }
 
 impl NoteStyle {
@@ -230,6 +237,8 @@ impl ResourcePack {
             drag: load_tex!("drag.png"),
             hold_body: None,
             hold_atlas: info.hold_atlas,
+            tap_mesh: None,
+            tap_tex: load_tex!("tap.png"),
         };
         note_style.verify()?;
         let mut note_style_mh = NoteStyle {
@@ -239,8 +248,89 @@ impl ResourcePack {
             drag: load_tex!("drag_mh.png"),
             hold_body: None,
             hold_atlas: info.hold_atlas_mh,
+            tap_mesh: None,
+            tap_tex: load_tex!("tap.png"),
         };
         note_style_mh.verify()?;
+        if let Ok(obj_data) = fs.load_file("tap.obj").await {
+            if let Ok(obj) = obj::ObjData::load_buf(&obj_data[..]) {
+                let positions = &obj.position;
+                let textures = &obj.texture;
+                let mut min_x = f32::MAX;
+                let mut max_x = f32::MIN;
+                let mut min_y = f32::MAX;
+                let mut max_y = f32::MIN;
+                let mut min_z = f32::MAX;
+                let mut max_z = f32::MIN;
+                for p in positions {
+                    if p[0] < min_x { min_x = p[0]; }
+                    if p[0] > max_x { max_x = p[0]; }
+                    if p[1] < min_y { min_y = p[1]; }
+                    if p[1] > max_y { max_y = p[1]; }
+                    if p[2] < min_z { min_z = p[2]; }
+                    if p[2] > max_z { max_z = p[2]; }
+                }
+                let center = [
+                    (min_x + max_x) / 2.0,
+                    (min_y + max_y) / 2.0,
+                    (min_z + max_z) / 2.0,
+                ];
+                let extent = (max_x - min_x).max(max_y - min_y).max(max_z - min_z);
+                let scale = if extent > 0.0 { 2.0 / extent } else { 1.0 };
+                let mut mesh_vertices = Vec::new();
+                for p in positions {
+                    mesh_vertices.push(Vertex::new(
+                        (p[0] - center[0]) * scale,
+                        (p[1] - center[1]) * scale,
+                        (p[2] - center[2]) * scale,
+                        0.0,
+                        0.0,
+                        WHITE,
+                    ));
+                }
+                let mut indices = Vec::new();
+                for object in &obj.objects {
+                    for group in &object.groups {
+                        for poly in &group.polys {
+                            if poly.0.len() >= 3 {
+                                let first = poly.0[0];
+                                for i in 1..poly.0.len() - 1 {
+                                    let a = poly.0[i];
+                                    let b = poly.0[i + 1];
+                                    if let Some(ti) = first.1 {
+                                        if ti < textures.len() {
+                                            mesh_vertices[first.0].uv.x = textures[ti][0];
+                                            mesh_vertices[first.0].uv.y = 1.0 - textures[ti][1];
+                                        }
+                                    }
+                                    if let Some(ti) = a.1 {
+                                        if ti < textures.len() {
+                                            mesh_vertices[a.0].uv.x = textures[ti][0];
+                                            mesh_vertices[a.0].uv.y = 1.0 - textures[ti][1];
+                                        }
+                                    }
+                                    if let Some(ti) = b.1 {
+                                        if ti < textures.len() {
+                                            mesh_vertices[b.0].uv.x = textures[ti][0];
+                                            mesh_vertices[b.0].uv.y = 1.0 - textures[ti][1];
+                                        }
+                                    }
+                                    indices.push(first.0 as u16);
+                                    indices.push(a.0 as u16);
+                                    indices.push(b.0 as u16);
+                                }
+                            }
+                        }
+                    }
+                }
+                let mesh = NoteMesh { vertices: mesh_vertices, indices };
+                note_style.tap_mesh = Some(NoteMesh {
+                    vertices: mesh.vertices.clone(),
+                    indices: mesh.indices.clone(),
+                });
+                note_style_mh.tap_mesh = Some(mesh);
+            }
+        }
         if info.hold_repeat {
             fn get_body(style: &mut NoteStyle) {
                 let pixels = style.hold.get_texture_data();
@@ -821,5 +911,29 @@ impl Resource {
         unsafe { get_internal_gl() }.quad_gl.push_model_matrix(nalgebra4_to_glm(mat));
         f(self);
         unsafe { get_internal_gl() }.quad_gl.pop_model_matrix();
+    }
+
+    pub fn draw_note_mesh(&self, mesh: &NoteMesh, _order: i8, scale: f32, color: Color, texture: &Texture2D) {
+        self.note_buffer.borrow_mut().draw_all();
+        let tex_id = {
+            let gl = unsafe { get_internal_gl() };
+            match unsafe { gl.quad_context.texture_raw_id(texture.raw_miniquad_id()) } {
+                miniquad::RawId::OpenGl(id) => id,
+            }
+        };
+        let mut vertices = Vec::with_capacity(mesh.vertices.len());
+        for v in &mesh.vertices {
+            let pt = Point3::new(v.position.x * scale, v.position.y * scale, v.position.z * scale);
+            let s = self.world_to_screen_3d(pt);
+            vertices.push(Vertex::new(s.x, s.y, s.z, v.uv.x, v.uv.y, color));
+        }
+        let mut gl = unsafe { get_internal_gl() };
+        gl.flush();
+        let gl = gl.quad_gl;
+        gl.draw_mode(DrawMode::Triangles);
+        gl.texture(Some(&Texture2D::from_miniquad_texture(
+            TextureId::from_raw_id(macroquad::miniquad::RawId::OpenGl(tex_id)),
+        )));
+        gl.geometry(&vertices, &mesh.indices);
     }
 }
