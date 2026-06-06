@@ -255,15 +255,17 @@ fn parse_judge_line(mut pec: PECJudgeLine, id: usize, max_time: f64) -> Result<J
     Ok(JudgeLine {
         object: Object {
             alpha: parse_events(pec.alpha_events, id, "alpha")?,
-            translation: AnimVector2(parse_events(pec.move_events.0, id, "move X")?, parse_events(pec.move_events.1, id, "move Y")?),
-            scale: AnimVector2(AnimFloat::fixed(3.91 / 6.), AnimFloat::default()),
-            translation_z: AnimFloat::default(),
-            rotation_3d: AnimVector3(
+            translation: AnimVector3(
+                parse_events(pec.move_events.0, id, "move X")?,
+                parse_events(pec.move_events.1, id, "move Y")?,
+                AnimFloat::default()
+            ),
+            scale: AnimVector3(AnimFloat::fixed(3.91 / 6.), AnimFloat::default(), AnimFloat::default()),
+            rotation: AnimVector3(
                 AnimFloat::default(),
                 AnimFloat::default(),
                 parse_events(pec.rotate_events, id, "rotate")?
             ),
-            scale_z: AnimFloat::default(),
         },
         color: Anim::default(),
         ctrl_obj: RefCell::default(),
@@ -379,7 +381,11 @@ pub fn parse_pec(source: &str, extra: ChartExtra) -> Result<Chart> {
                     };
                     line.notes.push(Note {
                         object: Object {
-                            translation: AnimVector2(AnimFloat::fixed(position_x), AnimFloat::default()),
+                            translation: AnimVector3(
+                                AnimFloat::fixed(position_x),
+                                AnimFloat::default(),
+                                AnimFloat::default()
+                            ),
                             ..Default::default()
                         },
                         kind,

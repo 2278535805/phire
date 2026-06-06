@@ -216,7 +216,11 @@ fn parse_notes(r: f64, mut pgr: Vec<PgrNote>, _speed: &mut AnimFloatF64, height:
             let hitsound = HitSound::default_from_kind(&kind);
             Ok(Note {
                 object: Object {
-                    translation: AnimVector2(AnimFloat::fixed(pgr.position_x * (2. * 9. / 160.)), AnimFloat::default()),
+                    translation: AnimVector3(
+                        AnimFloat::fixed(pgr.position_x * (2. * 9. / 160.)),
+                        AnimFloat::default(),
+                        AnimFloat::default()
+                    ),
                     ..Default::default()
                 },
                 kind,
@@ -253,21 +257,20 @@ fn parse_judge_line(pgr: PgrJudgeLine, max_time: f64, format_version: u32) -> Re
     Ok(JudgeLine {
         object: Object {
             alpha: parse_float_events(r, pgr.alpha_events).with_context(|| ptl!("alpha-events-parse-failed"))?,
-            scale: AnimVector2(AnimFloat::fixed(5.75 / 6.0), AnimFloat::default()),
+            scale: AnimVector3(AnimFloat::fixed(5.75 / 6.0), AnimFloat::default(), AnimFloat::default()),
             translation: {
-                match format_version {
+                let translation = match format_version {
                     1 => parse_move_events_fv1(r, pgr.move_events).with_context(|| ptl!("move-events-parse-failed"))?,
                     3 => parse_move_events(r, pgr.move_events).with_context(|| ptl!("move-events-parse-failed"))?,
                     _ => ptl!(bail "unknown-format-version"),
-                }
+                };
+                AnimVector3(translation.0, translation.1, AnimFloat::default())
             },
-            translation_z: AnimFloat::default(),
-            rotation_3d: AnimVector3(
+            rotation: AnimVector3(
                 AnimFloat::default(),
                 AnimFloat::default(),
                 parse_float_events(r, pgr.rotate_events).with_context(|| ptl!("rotate-events-parse-failed"))?
             ),
-            scale_z: AnimFloat::default(),
         },
         color: Anim::default(),
         ctrl_obj: RefCell::default(),

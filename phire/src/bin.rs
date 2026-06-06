@@ -358,11 +358,9 @@ impl BinaryData for Object {
     fn read_binary<R: Read>(r: &mut BinaryReader<R>) -> Result<Self> {
         Ok(Self {
             alpha: r.read()?,
-            scale: AnimVector2(r.read()?, r.read()?),
-            translation: AnimVector2(r.read()?, r.read()?),
-            translation_z: r.read()?,
-            rotation_3d: AnimVector3(r.read()?, r.read()?, r.read()?),
-            scale_z: r.read()?,
+            scale: AnimVector3(r.read()?, r.read()?, r.read()?),
+            translation: AnimVector3(r.read()?, r.read()?, r.read()?),
+            rotation: AnimVector3(r.read()?, r.read()?, r.read()?),
         })
     }
 
@@ -370,13 +368,13 @@ impl BinaryData for Object {
         w.write(&self.alpha)?;
         w.write(&self.scale.0)?;
         w.write(&self.scale.1)?;
+        w.write(&self.scale.2)?;
         w.write(&self.translation.0)?;
         w.write(&self.translation.1)?;
-        w.write(&self.translation_z)?;
-        w.write(&self.rotation_3d.0)?;
-        w.write(&self.rotation_3d.1)?;
-        w.write(&self.rotation_3d.2)?;
-        w.write(&self.scale_z)?;
+        w.write(&self.translation.2)?;
+        w.write(&self.rotation.0)?;
+        w.write(&self.rotation.1)?;
+        w.write(&self.rotation.2)?;
         Ok(())
     }
 }

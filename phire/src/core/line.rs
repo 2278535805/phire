@@ -9,7 +9,7 @@ use crate::{
 use macroquad::prelude::*;
 use macroquad::miniquad::{TextureParams, TextureWrap};
 use macroquad::miniquad::RenderPass as MiniquadRenderPass;
-use nalgebra::Rotation2;
+use nalgebra::{Rotation2, Rotation3};
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 
@@ -178,7 +178,7 @@ unsafe impl Send for JudgeLine {}
 impl JudgeLine {
     pub fn update(&mut self, res: &mut Resource, tr: Matrix4, bpm_list: &mut BpmList, index: usize) {
         // self.object.set_time(res.time); // this is done by chart, chart has to calculate transform for us
-        let rot = self.object.rotation_3d.2.now();
+        let rot = self.object.rotation.2.now();
         self.height.set_time(res.time);
         let line_height = self.height.now();
         let mut ctrl_obj = self.ctrl_obj.borrow_mut();
@@ -282,7 +282,8 @@ impl JudgeLine {
         if let Some(parent) = self.parent {
             let parent = &lines[parent];
             let parent_translation = parent.fetch_pos(res, lines);
-            return parent_translation + Rotation2::new(parent.fetch_rot(lines).to_radians()) * self.object.now_translation(res);
+            let rotated = parent.object.now_rotation() * self.object.now_translation(res);
+            return parent_translation + rotated;
         }
         self.object.now_translation(res)
     }
@@ -290,20 +291,15 @@ impl JudgeLine {
     pub fn fetch_pos_3d(&self, res: &Resource, lines: &[JudgeLine]) -> Vector3 {
         if let Some(parent) = self.parent {
             let parent = &lines[parent];
-            let parent_pos = parent.fetch_pos_3d(res, lines);
-            let local_tr = self.object.now_translation(res);
-            let local_tr_z = self.object.translation_z.now();
-            let local = Vector3::new(local_tr.x, local_tr.y, local_tr_z);
-            let rotated = parent.object.now_rotation_3d().transform_vector(&local);
-            return parent_pos + rotated;
+            let parent_translation = parent.fetch_pos_3d(res, lines);
+            let rotated = parent.object.now_rotation_3d() * self.object.now_translation_3d(res);
+            return parent_translation + rotated;
         }
-        let tr = self.object.now_translation(res);
-        let tr_z = self.object.translation_z.now();
-        Vector3::new(tr.x, tr.y, tr_z)
+        self.object.now_translation_3d(res)
     }
 
     pub fn fetch_rot(&self, lines: &[JudgeLine]) -> f32 {
-        let mut rot = self.object.rotation_3d.2.now();
+        let mut rot = self.object.rotation.2.now();
         if self.rotate_with_parent {
             if let Some(parent) = self.parent {
                 rot += lines[parent].fetch_rot(lines);
@@ -312,13 +308,14 @@ impl JudgeLine {
         rot
     }
 
-    pub fn fetch_rot_3d(&self, lines: &[JudgeLine]) -> Matrix4 {
+    pub fn fetch_rot_3d(&self, lines: &[JudgeLine]) -> Rotation3<f32> {
+        let mut rot = self.object.now_rotation_3d();
         if self.rotate_with_parent {
             if let Some(parent) = self.parent {
-                return lines[parent].fetch_rot_3d(lines) * self.object.now_rotation_3d();
+                rot *= lines[parent].fetch_rot_3d(lines);
             }
         }
-        self.object.now_rotation_3d()
+        rot
     }
 
     pub fn now_transform(&self, res: &Resource, lines: &[JudgeLine]) -> Matrix3 {
@@ -329,7 +326,7 @@ impl JudgeLine {
 
     pub fn now_transform_3d(&self, res: &Resource, lines: &[JudgeLine]) -> Matrix4 {
         let pos = self.fetch_pos_3d(res, lines);
-        self.fetch_rot_3d(lines).append_translation(&pos)
+        self.fetch_rot_3d(lines).to_homogeneous().append_translation(&pos)
     }
 
     pub fn render(&self, ui: &mut Ui, res: &mut Resource, lines: &[JudgeLine], bpm_list: &mut BpmList, settings: &ChartSettings, id: usize) {

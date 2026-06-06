@@ -3,7 +3,7 @@ crate::tl_file!("parser" ptl);
 use super::{process_lines, RPE_TWEEN_MAP};
 use crate::{
     core::{
-        Anim, AnimFloat, AnimFloatF64, AnimVector2, AnimVector3, BezierTween, BpmList, Chart, ChartExtra, ChartSettings, ClampedTween, CtrlObject, EPS, GeneralIntegralTween, GifFrames, HEIGHT_RATIO, HitSoundMap, IntegralClampedTween, IntegralStaticTween, JudgeLine, JudgeLineCache, JudgeLineKind, Keyframe, Note, NoteKind, Object, SpeedIntegralTween, StaticTween, TextData, Triple, TweenFunction, Tweenable, UIElement, Vector2
+        Anim, AnimFloat, AnimFloatF64, AnimVector2, AnimVector3, BezierTween, BpmList, Chart, ChartExtra, ChartSettings, ClampedTween, CtrlObject, EPS, GeneralIntegralTween, GifFrames, HEIGHT_RATIO, HitSoundMap, IntegralClampedTween, IntegralStaticTween, JudgeLine, JudgeLineCache, JudgeLineKind, Keyframe, Note, NoteKind, Object, SpeedIntegralTween, StaticTween, TextData, Triple, TweenFunction, Tweenable, UIElement, Vector2, Vector3
     },
     ext::{NotNanExt, SafeTexture},
     fs::FileSystem,
@@ -230,11 +230,11 @@ pub struct RPEExtendedEvents {
     text_events: Option<Vec<RPETextEvent>>,
     scale_x_events: Option<Vec<RPEEvent>>,
     scale_y_events: Option<Vec<RPEEvent>>,
+    scale_z_events: Option<Vec<RPEEvent>>,
     incline_events: Option<Vec<RPEEvent>>,
     paint_events: Option<Vec<RPEEvent>>,
     gif_events: Option<Vec<RPEEvent>>,
     camera: Option<RPECamera>,
-    scale_z_events: Option<Vec<RPEEvent>>,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -248,6 +248,8 @@ pub struct RPENote {
     end_time: Triple,
     position_x: f32,
     y_offset: f32,
+    #[serde(default)]
+    z_offset: f32,
     alpha: u16,               // some alpha has 256...
     hitsound: Option<String>, // TODO implement this feature
     size: f32,
@@ -514,6 +516,7 @@ async fn parse_notes(
         height.set_time(time);
         let note_height = height.now();
         let y_offset = note.y_offset * 2. / RPE_HEIGHT * note.speed as f32;
+        let z_offset = note.z_offset * 2. / RPE_HEIGHT;
         let kind = match note.kind {
             1 => NoteKind::Click,
             2 => {
@@ -561,11 +564,11 @@ async fn parse_notes(
                     let alpha = note.alpha.min(255) as f32 / 255.;
                     AnimFloat::new(vec![Keyframe::new(0.0, 0.0, 0), Keyframe::new(time - note.visible_time, alpha, 0)])
                 },
-                translation: AnimVector2(AnimFloat::fixed(note.position_x / (RPE_WIDTH / 2.)), AnimFloat::fixed(y_offset)),
+                translation: AnimVector3(AnimFloat::fixed(note.position_x / (RPE_WIDTH / 2.)), AnimFloat::fixed(y_offset), AnimFloat::fixed(z_offset)),
                 scale: if note.size == 1.0 {
-                    AnimVector2::default()
+                    AnimVector3::default()
                 } else {
-                    AnimVector2(AnimFloat::fixed(note.size), AnimFloat::fixed(note.size))
+                    AnimVector3(AnimFloat::fixed(note.size), AnimFloat::fixed(note.size), AnimFloat::fixed(note.size))
                 },
                 ..Default::default()
             },
@@ -668,39 +671,20 @@ async fn parse_judge_line(
     let mut height = parse_speed_events(r, &event_layers, bezier_map, max_time)?;
     let mut notes = parse_notes(r, rpe.notes.unwrap_or_default(), fs, &mut height, hitsounds).await?;
     let cache = JudgeLineCache::new(&mut notes);
-    let translation_z = {
-        let anis: Vec<_> = event_layers
-            .iter()
-            .filter_map(|it| it.move_z_events.as_ref().map(|es| parse_events(r, es, None, bezier_map)))
-            .collect::<Result<_>>()
-            .with_context(|| ptl!("type-events-parse-failed", "type" => "translation Z"))?;
-        let res = AnimFloat::chain(anis);
-        if res.is_default() {
-            AnimFloat::fixed(0.0)
-        } else {
-            res
-        }
-    };
 
-    let rotation_3d = AnimVector3(
+    let rotation = AnimVector3(
         events_with_factor(r, &event_layers, |it| &it.rotate_x_events, -1., "rotate_x", bezier_map)?,
         events_with_factor(r, &event_layers, |it| &it.rotate_y_events, -1., "rotate_y", bezier_map)?,
         events_with_factor(r, &event_layers, |it| &it.rotate_events, -1., "rotate", bezier_map)?,
     );
 
-    let scale_z = rpe.extended
-        .as_ref()
-        .and_then(|e| e.scale_z_events.as_ref())
-        .map(|events| parse_events(r, events, None, bezier_map))
-        .transpose()?
-        .unwrap_or_default();
-
     Ok(JudgeLine {
         object: Object {
             alpha: events_with_factor(r, &event_layers, |it| &it.alpha_events, 1. / 255., "alpha", bezier_map)?,
-            translation: AnimVector2(
+            translation: AnimVector3(
                 events_with_factor(r, &event_layers, |it| &it.move_x_events, 2. / RPE_WIDTH, "move X", bezier_map)?,
                 events_with_factor(r, &event_layers, |it| &it.move_y_events, 2. / RPE_HEIGHT, "move Y", bezier_map)?,
+                events_with_factor(r, &event_layers, |it| &it.move_z_events, 2. / RPE_HEIGHT, "move Z", bezier_map)?,
             ),
             scale: {
                 fn parse(r: &mut BpmList, opt: &Option<Vec<RPEEvent>>, factor: f32, bezier_map: &BezierMap) -> Result<AnimFloat> {
@@ -722,22 +706,16 @@ async fn parse_judge_line(
                 rpe.extended
                     .as_ref()
                     .map(|e| -> Result<_> {
-                        Ok(AnimVector2(
-                            parse(
-                                r,
-                                &e.scale_x_events,
-                                factor,
-                                bezier_map,
-                            )?,
+                        Ok(AnimVector3(
+                            parse(r, &e.scale_x_events, factor, bezier_map)?,
                             parse(r, &e.scale_y_events, factor, bezier_map)?,
+                            parse(r, &e.scale_z_events, factor, bezier_map)?,
                         ))
                     })
                     .transpose()?
-                    .unwrap_or(AnimVector2::fixed(Vector2::new(factor, factor)))
+                    .unwrap_or(AnimVector3::fixed(Vector3::new(factor, factor, factor)))
             },
-            translation_z,
-            rotation_3d,
-            scale_z,
+            rotation,
         },
         color: if let Some(events) = rpe.extended.as_ref().and_then(|e| e.color_events.as_ref()) {
             parse_events(r, events, Some(WHITE), bezier_map).with_context(|| ptl!("color-events-parse-failed"))?

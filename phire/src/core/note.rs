@@ -2,7 +2,7 @@ use super::{
     chart::ChartSettings, BpmList, CtrlObject, JudgeLine, Matrix3, Matrix4, Object, Point2, Resource
 };
 use crate::{
-    core::{Anim, HEIGHT_RATIO, Point3, Vector3}, ext::parse_alpha, judge::JudgeStatus, parse::RPE_HEIGHT, ui::Ui
+    core::{Anim, HEIGHT_RATIO, Point3, Vector2, Vector3}, ext::parse_alpha, judge::JudgeStatus, parse::RPE_HEIGHT, ui::Ui
 };
 
 
@@ -148,7 +148,7 @@ pub fn draw_center(res: &Resource, tex: &Texture2D, order: i8, scale: f32, color
 
 impl Note {
     pub fn rotation(&self, line: &JudgeLine) -> f32 {
-        line.object.rotation_3d.2.now() + if self.above { 0. } else { 180. }
+        line.object.rotation.2.now() + if self.above { 0. } else { 180. }
     }
 
     pub fn update(&mut self, res: &mut Resource, parent_rot: f32, parent_tr: &Matrix4, ctrl_obj: &mut CtrlObject, line_height: f64, bpm_list: &mut BpmList, index: usize) {
@@ -201,7 +201,8 @@ impl Note {
         let mut tr = self.object.now_translation(res);
         tr.x *= incline_val * ctrl_obj.pos.now_opt().unwrap_or(1.);
         tr.y += base;
-        let mut scale = self.object.scale.now_with_def(1.0, 1.0);
+        let scale = self.object.scale.now_with_def(1.0, 1.0, 1.0);
+        let mut scale = Vector2::new(scale.x, scale.y);
         if !can_scale_x {
             scale.x = 1.0;
         };
@@ -210,7 +211,7 @@ impl Note {
             scale.y = 1.0;
         };
         scale.y *= ctrl_obj.size.now_opt().unwrap_or(1.0);
-        self.object.now_rotation().append_nonuniform_scaling(&scale).append_translation(&tr)
+        self.object.now_rotation().to_homogeneous().append_nonuniform_scaling(&scale).append_translation(&tr)
     }
 
     pub fn now_transform_3d(&self, res: &Resource, ctrl_obj: &CtrlObject, base: f32, incline_sin: f32, can_scale_x: bool, can_scale_y: bool) -> Matrix4 {
@@ -219,7 +220,7 @@ impl Note {
         tr.x *= incline_val * ctrl_obj.pos.now_opt().unwrap_or(1.);
         tr.y += base;
 
-        let mut scale = self.object.scale.now_with_def(1.0, 1.0);
+        let mut scale = self.object.scale.now_with_def(1.0, 1.0, 1.0);
         if !can_scale_x {
             scale.x = 1.0;
         };
@@ -228,11 +229,8 @@ impl Note {
             scale.y = 1.0;
         };
         scale.y *= ctrl_obj.size.now_opt().unwrap_or(1.0);
-        let sz = self.object.scale_z.now_opt().unwrap_or(1.0);
 
-        let scale_3d = Vector3::new(scale.x, scale.y, sz);
-
-        self.object.now_rotation_3d().append_nonuniform_scaling(&scale_3d).append_translation(&tr)
+        self.object.now_rotation_3d().to_homogeneous().append_nonuniform_scaling(&scale).append_translation(&tr)
     }
 
     pub fn render(&self, ui: &mut Ui, res: &mut Resource, config: &mut RenderConfig, bpm_list: &mut BpmList, line_set_debug_alpha: bool, line_id: usize, height_above: f64, height_below: f64) {
