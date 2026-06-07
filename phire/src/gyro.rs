@@ -1,5 +1,5 @@
 use std::{f32, sync::Mutex, time::Duration};
-use nalgebra::{Unit, UnitQuaternion, Vector3};
+use nalgebra::{Quaternion, Unit, UnitQuaternion, Vector3};
 use lazy_static::lazy_static;
 
 const GRAVITY_FLAT_THRESHOLD_LOW: f32 = 0.75;
@@ -15,6 +15,7 @@ pub struct Gyro {
     gravity: UnitQuaternion<f32>,
     gyroscope: UnitQuaternion<f32>,
     pub gyro_data: Option<GyroData>,
+    enable_3d: bool,
     flatness: f32, // 0.0 = 抬起 信任重力, 1.0 = 平放 信任陀螺仪
 }
 
@@ -44,26 +45,31 @@ impl Gyro {
             gravity: UnitQuaternion::identity(),
             gyroscope: UnitQuaternion::identity(),
             gyro_data: None,
+            enable_3d: true,
             flatness: 0.0,
         }
     }
 
     pub(crate) fn reset_gyroscope(&mut self) {
-        let pitch = {
-            // X轴在世界坐标系中的方向
-            let world_x = self.gravity.transform_vector(&Vector3::new(1.0, 0.0, 0.0));
-            // 绕Y轴的yaw
-            world_x.z.atan2(world_x.x)
-        };
+        if self.enable_3d {
+            self.gyroscope = UnitQuaternion::identity();
+        } else{
+            let pitch = {
+                // X轴在世界坐标系中的方向
+                let world_x = self.gravity.transform_vector(&Vector3::new(1.0, 0.0, 0.0));
+                // 绕Y轴的yaw
+                world_x.z.atan2(world_x.x)
+            };
 
-        let yaw = if self.flatness <= 0.0 {
-            let world_y = self.gravity.transform_vector(&Vector3::new(0.0, 1.0, 0.0));
-            world_y.y.atan2(world_y.x)
-        } else {
-            0.0
-        };
+            let yaw = if self.flatness <= 0.0 {
+                let world_y = self.gravity.transform_vector(&Vector3::new(0.0, 1.0, 0.0));
+                world_y.y.atan2(world_y.x)
+            } else {
+                0.0
+            };
 
-        self.gyroscope = UnitQuaternion::from_euler_angles(0.0, pitch, yaw);
+            self.gyroscope = UnitQuaternion::from_euler_angles(0.0, pitch, yaw);
+        }
     }
 
     pub fn update_gyroscope(&mut self, gyro_data: GyroData) {
@@ -93,7 +99,7 @@ impl Gyro {
         let g_dev = gravity_data / norm; // 归一化 指向重力方向
 
         self.flatness = smooth_step(g_dev.z.abs(), GRAVITY_FLAT_THRESHOLD_LOW, GRAVITY_FLAT_THRESHOLD_HIGH);
-        if self.flatness <= 0.0 {
+        if !self.enable_3d && self.flatness <= 0.0 {
             self.reset_gyroscope();
         }
 
@@ -123,6 +129,11 @@ impl Gyro {
         let gravity_angle = self.get_gravity_angle();
         let gyro_angle = self.get_gyroscope_angle();
         lerp_angle(gravity_angle, gyro_angle, self.flatness)
+    }
+
+    pub fn get_gyroscope_quat(&self) -> UnitQuaternion<f32> {
+        let q = self.gyroscope;
+        UnitQuaternion::new_unchecked(Quaternion::new(q.w, q.j, -q.i, -q.k))
     }
 
     pub fn get_current_acceleration(&self) -> f32 {

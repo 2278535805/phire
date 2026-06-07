@@ -12,7 +12,7 @@ use super::{
 use crate::{
     bin::BinaryReader,
     config::{Config, Mods},
-    core::{BUFFER_SIZE, BadNote, Chart, ChartExtra, Effect, Point2, Resource, UIElement},
+    core::{BUFFER_SIZE, BadNote, Chart, ChartExtra, Effect, Point2, Resource, UIElement, Vector3},
     ext::{RectExt, SafeTexture, draw_text_aligned, draw_text_aligned_opt_width, ease_in_out_quartic, get_latency, parse_time, push_frame_time, screen_aspect, semi_white, validate_combo},
     fs::FileSystem,
     gyro::GYRO,
@@ -32,6 +32,7 @@ use std::{
     ops::{DerefMut, Range},
     sync::Arc,
 };
+use nalgebra::UnitQuaternion;
 use tracing::{debug, warn};
 
 const PAUSE_CLICK_INTERVAL: f32 = 0.7;
@@ -1201,16 +1202,17 @@ impl Scene for GameScene {
             (time - self.offset()).max(0.)
         };
         self.res.time = time;
+        let rot = if self.res.config.rotation_mode {
+            GYRO.lock().unwrap().get_gyroscope_quat()
+        } else {
+            UnitQuaternion::identity()
+        };
         if !tm.paused() && (self.res.config.autoplay() || self.pause_rewind.time.is_none()) && self.mode != GameMode::View {
             self.gl.quad_gl.viewport(self.res.camera.viewport);
 
-            let angle = if self.res.config.rotation_mode {
-                GYRO.lock().unwrap().get_angle()
-            } else {
-                0.
-            };
-
-            self.judge.update(&mut self.res, &mut self.chart, &mut self.bad_notes, -angle);
+            self.res.with_model_3d(rot.to_homogeneous(), |res| {
+                self.judge.update(res, &mut self.chart, &mut self.bad_notes);
+            });
             #[cfg(feature = "play")]
             if self.res.config.health_mode.is_some() && matches!(self.state, State::Playing) && matches!(self.mode, GameMode::Normal | GameMode::NoRetry | GameMode::View) {
                 self.res.health.update(time as f32);
@@ -1230,7 +1232,9 @@ impl Scene for GameScene {
         } else {
             WHITE
         };
-        self.chart.update(&mut self.res);
+        self.res.with_model_3d(rot.to_homogeneous(), |res| {
+            self.chart.update(res);
+        });
         let res = &mut self.res;
         if res.config.interactive && is_key_pressed(KeyCode::Space) {
             if tm.paused() {
@@ -1436,20 +1440,23 @@ impl Scene for GameScene {
             draw_rectangle(-1., -h, 2., h * 2., Color::new(0., 0., 0., res.alpha * res.info.background_dim));
         }
 
-        let angle = if res.config.rotation_mode {
-            GYRO.lock().unwrap().get_angle()
+        let rot = if res.config.rotation_mode {
+            GYRO.lock().unwrap().get_gyroscope_quat()
         } else {
-            0.
+            UnitQuaternion::identity()
         };
         let chart_fovy = 45.0_f32.to_radians();
         let chart_fov_tan = (chart_fovy / 2.0).tan();
         let chart_cam_aspect = if res.config.chart_ratio < 1. { asp2_window } else { asp2_chart };
         let chart_cam_distance = 1.0 / (asp2_chart * ratio * chart_fov_tan);
-        let chart_cam_up = vec3(-angle.sin(), angle.cos(), 0.0);
+        let base_pos = Vector3::new(0.0, 0.0, chart_cam_distance);
+        // let cam_pos = rot.transform_vector(&base_pos);
+        let base_up = Vector3::new(0.0, 1.0, 0.0);
+        // let cam_up = rot.transform_vector(&base_up);
         set_camera( &Camera3D {
             position: vec3(0., 0., chart_cam_distance),
             target: vec3(0., 0., 0.),
-            up: chart_cam_up,
+            up: vec3(0.0, 1.0, 0.0),
             fovy: chart_fovy,
             aspect: Some(chart_cam_aspect),
             projection: Projection::Perspective,
@@ -1474,7 +1481,9 @@ impl Scene for GameScene {
             z_far: 10000.0,
         });
         self.gl.quad_gl.render_pass(chart_onto.as_ref().map(|it| it.render_pass.raw_miniquad_id()));
-        self.chart.render(ui, res);
+        res.with_model_3d(rot.to_homogeneous(), |res| {
+            self.chart.render(ui, res);
+        });
 
         self.gl.quad_gl.render_pass(
             res.chart_target
@@ -1483,7 +1492,9 @@ impl Scene for GameScene {
                 .or_else(|| Some(res.camera.render_pass()?.raw_miniquad_id())),
         );
 
-        self.bad_notes.retain(|dummy| dummy.render(res));
+        res.with_model_3d(rot.to_homogeneous(), |res| {
+            self.bad_notes.retain(|dummy| dummy.render(res));
+        });
         let t = tm.real_time();
         let dt = (t - std::mem::replace(&mut self.last_update_time, t)) as f32;
         if res.config.particle {

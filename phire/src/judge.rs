@@ -1,6 +1,6 @@
 use crate::{
     config::Config,
-    core::{BadNote, Chart, NOTE_WIDTH_RATIO_BASE, Note, NoteKind, Point2, Point3, Resource, Vector2, Vector3},
+    core::{BadNote, Chart, Matrix4, NOTE_WIDTH_RATIO_BASE, Note, NoteKind, Point2, Point3, Resource, Vector2, Vector3},
     ext::{NotNanExt, get_viewport},
 };
 use macroquad::prelude::{
@@ -366,17 +366,7 @@ impl Judge {
         });
     }
 
-    fn rotate_vec2(vec: Vec2, angle_rad: f32) -> Vec2 {
-        let cos_theta = angle_rad.cos();
-        let sin_theta = angle_rad.sin();
-
-        Vec2::new(
-            vec.x * cos_theta - vec.y * sin_theta,
-            vec.x * sin_theta + vec.y * cos_theta,
-        )
-    }
-
-    fn touch_transform(flip_x: bool, scale: f32, angle: f32, low_resolution_mode: bool) -> impl Fn(&mut Touch) {
+    fn touch_to_ndc(flip_x: bool, scale: f32, low_resolution_mode: bool) -> impl Fn(&mut Touch) {
         let vp = get_viewport();
         move |touch| {
             let p = if low_resolution_mode {
@@ -391,7 +381,6 @@ impl Judge {
             if flip_x {
                 touch.position.x *= -1.;
             }
-            touch.position = Self::rotate_vec2(touch.position, angle);
             touch.position /= scale;
         }
     }
@@ -399,7 +388,7 @@ impl Judge {
     pub fn get_touches(scale: f32, low_resolution_mode: bool) -> Vec<Touch> {
         TOUCHES.with(|it| {
             let guard = it.borrow();
-            let tr = Self::touch_transform(false, scale, 0., low_resolution_mode);
+            let tr = Self::touch_to_ndc(false, scale, low_resolution_mode);
             guard
                 .touches
                 .iter()
@@ -412,7 +401,7 @@ impl Judge {
         })
     }
 
-    pub fn update(&mut self, res: &mut Resource, chart: &mut Chart, bad_notes: &mut Vec<BadNote>, angle: f32) {
+    pub fn update(&mut self, res: &mut Resource, chart: &mut Chart, bad_notes: &mut Vec<BadNote>) {
         res.played_hitsounds_count.clear();
         if res.config.autoplay() {
             self.auto_play_update(res, chart);
@@ -458,11 +447,14 @@ impl Judge {
                     time: f64::NEG_INFINITY,
                 });
             }
-            let tr = Self::touch_transform(res.config.flip_x(), res.config.chart_ratio, angle, res.config.low_resolution_mode);
+            let tr = Self::touch_to_ndc(res.config.flip_x(), res.config.chart_ratio, res.config.low_resolution_mode);
             touches
                 .into_iter()
                 .map(|mut it| {
                     tr(&mut it);
+                    let p = it.position;
+                    let world = res.screen_to_world_3d(Point3::new(p.x, -p.y, 0.));
+                    it.position = vec2(world.x, world.y);
                     (it.id, it)
                 })
                 .collect()
@@ -533,7 +525,7 @@ impl Judge {
                     .iter()
                     .map(|touch| {
                         let p = touch.position;
-                        let p = inv.transform_point(&Point3::new(p.x, -p.y, 0.));
+                        let p = inv.transform_point(&Point3::new(p.x, p.y, 0.));
                         fn ok(f: f32) -> bool {
                             matches!(f.classify(), FpCategory::Zero | FpCategory::Subnormal | FpCategory::Normal)
                         }
