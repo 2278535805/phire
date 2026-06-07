@@ -1492,8 +1492,8 @@ impl Scene for GameScene {
 
         if !res.no_effect {
             set_camera(&Camera2D {
-                zoom: vec2(1., -asp2_chart),
-                // render_target: chart_onto.clone(),
+                zoom: vec2(1., asp2_chart),
+                render_target: chart_onto.clone(),
                 viewport: Some(ui_viewport),
                 ..Default::default()
             });
@@ -1514,8 +1514,8 @@ impl Scene for GameScene {
 
         if !self.res.no_effect && !self.effects.is_empty() {
             set_camera(&Camera2D {
-                zoom: vec2(1., -asp2_window),
-                // render_target: chart_onto.clone(),
+                zoom: vec2(1., asp2_window),
+                render_target: chart_onto.clone(),
                 viewport: Some(ui_viewport),
                 ..Default::default()
             });

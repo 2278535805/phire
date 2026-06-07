@@ -1970,7 +1970,7 @@ dependencies = [
 [[package]]
 name = "macroquad"
 version = "0.4.15"
-source = "git+https://github.com/2278535805/macroquad#5c46fdd330b0cd8c68c99981b30193b5f7c384ab"
+source = "git+https://github.com/2278535805/macroquad#8586a4876e65c4d8b151ef48da598d009ef49f5c"
 dependencies = [
  "fontdue",
  "glam 0.27.0",
@@ -1983,7 +1983,7 @@ dependencies = [
 [[package]]
 name = "macroquad_macro"
 version = "0.1.8"
-source = "git+https://github.com/2278535805/macroquad#5c46fdd330b0cd8c68c99981b30193b5f7c384ab"
+source = "git+https://github.com/2278535805/macroquad#8586a4876e65c4d8b151ef48da598d009ef49f5c"
 
 [[package]]
 name = "malloc_buf"
