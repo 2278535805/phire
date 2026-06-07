@@ -1202,17 +1202,10 @@ impl Scene for GameScene {
             (time - self.offset()).max(0.)
         };
         self.res.time = time;
-        let rot = if self.res.config.rotation_mode {
-            GYRO.lock().unwrap().get_gyroscope_quat()
-        } else {
-            UnitQuaternion::identity()
-        };
         if !tm.paused() && (self.res.config.autoplay() || self.pause_rewind.time.is_none()) && self.mode != GameMode::View {
             self.gl.quad_gl.viewport(self.res.camera.viewport);
 
-            self.res.with_model_3d(rot.to_homogeneous(), |res| {
-                self.judge.update(res, &mut self.chart, &mut self.bad_notes);
-            });
+            self.judge.update(&mut self.res, &mut self.chart, &mut self.bad_notes);
             #[cfg(feature = "play")]
             if self.res.config.health_mode.is_some() && matches!(self.state, State::Playing) && matches!(self.mode, GameMode::Normal | GameMode::NoRetry | GameMode::View) {
                 self.res.health.update(time as f32);
@@ -1231,6 +1224,11 @@ impl Scene for GameScene {
             }
         } else {
             WHITE
+        };
+        let rot = if self.res.config.rotation_mode {
+            GYRO.lock().unwrap().get_gyroscope_quat(false)
+        } else {
+            UnitQuaternion::identity()
         };
         self.res.with_model_3d(rot.to_homogeneous(), |res| {
             self.chart.update(res);
@@ -1441,7 +1439,7 @@ impl Scene for GameScene {
         }
 
         let rot = if res.config.rotation_mode {
-            GYRO.lock().unwrap().get_gyroscope_quat()
+            GYRO.lock().unwrap().get_gyroscope_quat(false)
         } else {
             UnitQuaternion::identity()
         };
@@ -1455,11 +1453,9 @@ impl Scene for GameScene {
         // let cam_up = rot.transform_vector(&base_up);
         set_camera( &Camera3D {
             position: vec3(0., 0., chart_cam_distance),
-            target: vec3(0., 0., 0.),
             up: vec3(0.0, 1.0, 0.0),
             fovy: chart_fovy,
             aspect: Some(chart_cam_aspect),
-            projection: Projection::Perspective,
             viewport: chart_viewport.map(|(x, y, w, h)| {
                 if res.info.fold_animation && matches!(self.state, State::Starting) {
                     let scale_x = (1. - (1. - time / Self::BEFORE_TIME).clamp(0., 1.).powi(3)).powf(2.0) as f32;
@@ -1477,8 +1473,7 @@ impl Scene for GameScene {
                 }
             }),
             render_target: chart_onto.clone(),
-            z_near: 0.01,
-            z_far: 10000.0,
+            ..Default::default()
         });
         self.gl.quad_gl.render_pass(chart_onto.as_ref().map(|it| it.render_pass.raw_miniquad_id()));
         res.with_model_3d(rot.to_homogeneous(), |res| {

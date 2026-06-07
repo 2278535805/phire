@@ -1,7 +1,7 @@
 use crate::{
     config::Config,
     core::{BadNote, Chart, Matrix4, NOTE_WIDTH_RATIO_BASE, Note, NoteKind, Point2, Point3, Resource, Vector2, Vector3},
-    ext::{NotNanExt, get_viewport},
+    ext::{NotNanExt, get_viewport}, gyro::GYRO,
 };
 use macroquad::prelude::{
     utils::{register_input_subscriber, repeat_all_miniquad_input},
@@ -366,7 +366,7 @@ impl Judge {
         });
     }
 
-    fn touch_to_ndc(flip_x: bool, scale: f32, low_resolution_mode: bool) -> impl Fn(&mut Touch) {
+    fn touch_to_ndc(scale: f32, low_resolution_mode: bool) -> impl Fn(&mut Touch) {
         let vp = get_viewport();
         move |touch| {
             let p = if low_resolution_mode {
@@ -378,9 +378,6 @@ impl Judge {
                 (p.x - vp.0 as f32) / vp.2 as f32 * 2. - 1.,
                 ((p.y - (vp.3 as f32 - (vp.1 + vp.3) as f32)) / vp.3 as f32 * 2. - 1.) / (vp.2 as f32 / vp.3 as f32),
             );
-            if flip_x {
-                touch.position.x *= -1.;
-            }
             touch.position /= scale;
         }
     }
@@ -388,7 +385,7 @@ impl Judge {
     pub fn get_touches(scale: f32, low_resolution_mode: bool) -> Vec<Touch> {
         TOUCHES.with(|it| {
             let guard = it.borrow();
-            let tr = Self::touch_to_ndc(false, scale, low_resolution_mode);
+            let tr = Self::touch_to_ndc(scale, low_resolution_mode);
             guard
                 .touches
                 .iter()
@@ -402,9 +399,21 @@ impl Judge {
     }
 
     pub fn update(&mut self, res: &mut Resource, chart: &mut Chart, bad_notes: &mut Vec<BadNote>) {
+        let rot_touch = if res.config.rotation_mode {
+            GYRO.lock().unwrap().get_gyroscope_quat(true).to_homogeneous()
+        } else {
+            Matrix4::identity()
+        }.append_nonuniform_scaling(&Vector3::new(if res.config.flip_x() { -1. } else { 1. }, -1., 1.));
+        let rot = if res.config.rotation_mode {
+            GYRO.lock().unwrap().get_gyroscope_quat(false).to_homogeneous()
+        } else {
+            Matrix4::identity()
+        };
         res.played_hitsounds_count.clear();
         if res.config.autoplay() {
-            self.auto_play_update(res, chart);
+            res.with_model_3d(rot, |res| {
+                self.auto_play_update(res, chart);
+            });
             return;
         }
         let x_diff_max: f64 = if res.config.full_scrrn_judge() {
@@ -447,14 +456,11 @@ impl Judge {
                     time: f64::NEG_INFINITY,
                 });
             }
-            let tr = Self::touch_to_ndc(res.config.flip_x(), res.config.chart_ratio, res.config.low_resolution_mode);
+            let tr = Self::touch_to_ndc(res.config.chart_ratio, res.config.low_resolution_mode);
             touches
                 .into_iter()
                 .map(|mut it| {
                     tr(&mut it);
-                    let p = it.position;
-                    let world = res.screen_to_world_3d(Point3::new(p.x, -p.y, 0.));
-                    it.position = vec2(world.x, world.y);
                     (it.id, it)
                 })
                 .collect()
@@ -519,416 +525,422 @@ impl Judge {
         let mut pos = Vec::<Vec<Option<Point3>>>::with_capacity(chart.lines.len());
         for id in 0..chart.lines.len() {
             chart.lines[id].object.set_time(t);
-            let inv = chart.lines[id].now_transform_3d(res, &chart.lines).try_inverse().unwrap();
-            pos.push(
-                touches
-                    .iter()
-                    .map(|touch| {
-                        let p = touch.position;
-                        let p = inv.transform_point(&Point3::new(p.x, p.y, 0.));
-                        fn ok(f: f32) -> bool {
-                            matches!(f.classify(), FpCategory::Zero | FpCategory::Subnormal | FpCategory::Normal)
-                        }
-                        if ok(p.x) && ok(p.y) {
-                            Some(p)
-                        } else {
-                            None
-                        }
-                    })
-                    .collect(),
-            );
+            res.with_model_3d(rot_touch * chart.lines[id].now_transform_3d(res, &chart.lines), |res| {
+                pos.push(
+                    touches
+                        .iter()
+                        .map(|touch| {
+                            let p = touch.position;
+                            let p = res.screen_to_world_3d(Point3::new(p.x, p.y, 0.));
+                            fn ok(f: f32) -> bool {
+                                matches!(f.classify(), FpCategory::Zero | FpCategory::Subnormal | FpCategory::Normal)
+                            }
+                            if ok(p.x) && ok(p.y) {
+                                Some(p)
+                            } else {
+                                None
+                            }
+                        })
+                        .collect(),
+                );
+            });
         }
-        let time_of = |touch: &Touch| {
-            if touch.time.is_infinite() {
-                t
-            } else {
-                touch.time
-            }
-        };
-        let mut judgements = Vec::new();
-        // clicks & flicks
-        for (id, touch) in touches.iter().enumerate() {
-            let click = touch.phase == TouchPhase::Started;
-            let flick =
-                matches!(touch.phase, TouchPhase::Moved | TouchPhase::Stationary) && self.trackers.get_mut(&touch.id).is_some_and(|it| it.flicked);
-            if !(click || flick) {
-                continue;
-            }
-            let t = time_of(touch);
-            let mut closest = (None, x_diff_max, LIMIT_BAD, LIMIT_BAD + (x_diff_max / NOTE_WIDTH_RATIO_BASE - 1.).max(0.) * DIST_FACTOR, 0.);
-            for (line_id, ((line, pos), (idx, st))) in chart.lines.iter_mut().zip(pos.iter()).zip(self.notes.iter_mut()).enumerate() {
-                let Some(pos) = pos[id] else { continue; };
-                for id in &idx[*st..] {
-                    let note = &mut line.notes[*id as usize];
-                    if !matches!(note.judge, JudgeStatus::NotJudged | JudgeStatus::PreJudge) {
-                        continue;
-                    }
-                    if !click && matches!(note.kind, NoteKind::Click | NoteKind::Hold { .. }) {
-                        continue;
-                    }
-                    let dt = (note.time - t) / spd;
-                    if dt.abs() >= closest.3.abs() {
-                        break;
-                    }
-                    // let dt = if dt < 0. { (dt + EARLY_OFFSET).min(0.).abs() } else { dt };
-                    let x = &mut note.object.translation.0;
-                    x.set_time(t);
-                    let posx = pos.x;
-                    let dist = (x.now() - posx).abs() as f64;
-                    if dist > (x_diff_max - NOTE_WIDTH_RATIO_BASE) + NOTE_WIDTH_RATIO_BASE * note.judge_scale {
-                        continue;
-                    }
-                    if dt.abs() >
-                        if matches!(note.kind, NoteKind::Click) {
-                            LIMIT_BAD // LIMIT_BAD - LIMIT_PERFECT * (dist - 0.9).max(0.)
-                        } else {
-                            LIMIT_GOOD
-                        }
-                    {
-                        continue;
-                    }
-                    let dist_key = if res.config.full_scrrn_judge() {
-                        (dist / NOTE_WIDTH_RATIO_BASE - 1.).max(0.) * 0.01
-                    } else {
-                        (dist / NOTE_WIDTH_RATIO_BASE - 1.).max(0.) * DIST_FACTOR
-                    };
-                    let key = if matches!(note.kind, NoteKind::Flick | NoteKind::Drag) { // Low Priority
-                        dt.abs() + LIMIT_BAD
-                    } else if dt < -LIMIT_GOOD { // Prevent Late Bad
-                        dt.abs()
-                    } else if dt < 0.0 {
-                        (dt + LATE_OFFSET).min(0.0).abs() // Protect Late Good
-                    } else {
-                        dt.abs()
-                    };
-                    let key = key + dist_key;
-                    if key < closest.3 {
-                        closest = (Some((line_id, *id)), dist, dt, key, posx);
-                    }
+        let mut process = |res: &mut Resource, chart: &mut Chart, bad_notes: &mut Vec<BadNote>| {
+            let time_of = |touch: &Touch| {
+                if touch.time.is_infinite() {
+                    t
+                } else {
+                    touch.time
                 }
-            }
-            if let (Some((line_id, id)), _, dt, _, posx) = closest {
-                let can_protect_note = |note: &mut Note| {
-                    let x = &mut note.object.translation.0;
-                    x.set_time(t);
-                    let judge_time = t - note.time;
-                    matches!(note.kind, NoteKind::Drag | NoteKind::Flick)
-                        && (-LIMIT_GOOD..=LIMIT_BAD).contains(&judge_time)
-                        && (x.now() - posx).abs() as f64 <= (x_diff_max - NOTE_WIDTH_RATIO_BASE) + NOTE_WIDTH_RATIO_BASE * note.judge_scale // note_dist <= x_diff_max
-                        && !note.protected
-                        && !note.fake
-                };
-                let lines = &mut chart.lines;
-                if matches!(lines[line_id].notes[id as usize].kind, NoteKind::Drag) {
-                    // debug!("reject by drag");
+            };
+            let mut judgements = Vec::new();
+            // clicks & flicks
+            for (id, touch) in touches.iter().enumerate() {
+                let click = touch.phase == TouchPhase::Started;
+                let flick =
+                    matches!(touch.phase, TouchPhase::Moved | TouchPhase::Stationary) && self.trackers.get_mut(&touch.id).is_some_and(|it| it.flicked);
+                if !(click || flick) {
                     continue;
                 }
-                if click {
-                    if dt > LIMIT_PERFECT {
-                        let mut any = false;
-                        lines.iter_mut()
-                            .flat_map(|line| line.notes.iter_mut())
-                            .for_each(|note| {
-                                if can_protect_note(note) {
-                                    note.protected = true;
-                                    any = true;
-                                }
-                            });
-                        if any {
+                let t = time_of(touch);
+                let mut closest = (None, x_diff_max, LIMIT_BAD, LIMIT_BAD + (x_diff_max / NOTE_WIDTH_RATIO_BASE - 1.).max(0.) * DIST_FACTOR, 0.);
+                for (line_id, ((line, pos), (idx, st))) in chart.lines.iter_mut().zip(pos.iter()).zip(self.notes.iter_mut()).enumerate() {
+                    let Some(pos) = pos[id] else { continue; };
+                    for id in &idx[*st..] {
+                        let note = &mut line.notes[*id as usize];
+                        if !matches!(note.judge, JudgeStatus::NotJudged | JudgeStatus::PreJudge) {
                             continue;
                         }
+                        if !click && matches!(note.kind, NoteKind::Click | NoteKind::Hold { .. }) {
+                            continue;
+                        }
+                        let dt = (note.time - t) / spd;
+                        if dt.abs() >= closest.3.abs() {
+                            break;
+                        }
+                        // let dt = if dt < 0. { (dt + EARLY_OFFSET).min(0.).abs() } else { dt };
+                        let x = &mut note.object.translation.0;
+                        x.set_time(t);
+                        let posx = pos.x;
+                        let dist = (x.now() - posx).abs() as f64;
+                        if dist > (x_diff_max - NOTE_WIDTH_RATIO_BASE) + NOTE_WIDTH_RATIO_BASE * note.judge_scale {
+                            continue;
+                        }
+                        if dt.abs() >
+                            if matches!(note.kind, NoteKind::Click) {
+                                LIMIT_BAD // LIMIT_BAD - LIMIT_PERFECT * (dist - 0.9).max(0.)
+                            } else {
+                                LIMIT_GOOD
+                            }
+                        {
+                            continue;
+                        }
+                        let dist_key = if res.config.full_scrrn_judge() {
+                            (dist / NOTE_WIDTH_RATIO_BASE - 1.).max(0.) * 0.01
+                        } else {
+                            (dist / NOTE_WIDTH_RATIO_BASE - 1.).max(0.) * DIST_FACTOR
+                        };
+                        let key = if matches!(note.kind, NoteKind::Flick | NoteKind::Drag) { // Low Priority
+                            dt.abs() + LIMIT_BAD
+                        } else if dt < -LIMIT_GOOD { // Prevent Late Bad
+                            dt.abs()
+                        } else if dt < 0.0 {
+                            (dt + LATE_OFFSET).min(0.0).abs() // Protect Late Good
+                        } else {
+                            dt.abs()
+                        };
+                        let key = key + dist_key;
+                        if key < closest.3 {
+                            closest = (Some((line_id, *id)), dist, dt, key, posx);
+                        }
                     }
-                    // click & hold
-                    let note = &mut lines[line_id].notes[id as usize];
-                    let dt = dt.abs();
-                    if matches!(note.kind, NoteKind::Flick) {
-                        // debug!("reject by flick");
-                        continue; // to next loop
+                }
+                if let (Some((line_id, id)), _, dt, _, posx) = closest {
+                    let can_protect_note = |note: &mut Note| {
+                        let x = &mut note.object.translation.0;
+                        x.set_time(t);
+                        let judge_time = t - note.time;
+                        matches!(note.kind, NoteKind::Drag | NoteKind::Flick)
+                            && (-LIMIT_GOOD..=LIMIT_BAD).contains(&judge_time)
+                            && (x.now() - posx).abs() as f64 <= (x_diff_max - NOTE_WIDTH_RATIO_BASE) + NOTE_WIDTH_RATIO_BASE * note.judge_scale // note_dist <= x_diff_max
+                            && !note.protected
+                            && !note.fake
+                    };
+                    let lines = &mut chart.lines;
+                    if matches!(lines[line_id].notes[id as usize].kind, NoteKind::Drag) {
+                        // debug!("reject by drag");
+                        continue;
                     }
-                    if dt <= LIMIT_GOOD || matches!(note.kind, NoteKind::Hold { .. }) {
+                    if click {
+                        if dt > LIMIT_PERFECT {
+                            let mut any = false;
+                            lines.iter_mut()
+                                .flat_map(|line| line.notes.iter_mut())
+                                .for_each(|note| {
+                                    if can_protect_note(note) {
+                                        note.protected = true;
+                                        any = true;
+                                    }
+                                });
+                            if any {
+                                continue;
+                            }
+                        }
+                        // click & hold
+                        let note = &mut lines[line_id].notes[id as usize];
+                        let dt = dt.abs();
+                        if matches!(note.kind, NoteKind::Flick) {
+                            // debug!("reject by flick");
+                            continue; // to next loop
+                        }
+                        if dt <= LIMIT_GOOD || matches!(note.kind, NoteKind::Hold { .. }) {
+                            match note.kind {
+                                NoteKind::Click => {
+                                    note.judge = JudgeStatus::Judged;
+                                    judgements.push((if dt <= LIMIT_PERFECT { Judgement::Perfect } else { Judgement::Good }, line_id, id, Some(t)));
+                                    #[cfg(feature = "play")]
+                                    if res.config.health_mode.is_some() {
+                                        res.health.on_judge(Judgement::Perfect);
+                                    }
+                                }
+                                NoteKind::Hold { .. } => {
+                                    play_sfx(&mut res.sfx_click, &res.config);
+                                    self.judgements.borrow_mut().push((t, line_id as _, id, Err(dt <= LIMIT_PERFECT)));
+                                    note.judge = JudgeStatus::Hold(dt <= LIMIT_PERFECT, t, t, false, f64::INFINITY);
+                                }
+                                _ => unreachable!(),
+                            };
+                        } else {
+                            // prevent extra judgements
+                            if matches!(note.judge, JudgeStatus::NotJudged) {
+                                // keep the note after bad judgement
+                                note.judge = JudgeStatus::PreJudge;
+                                judgements.push((Judgement::Bad, line_id, id, None));
+                                #[cfg(feature = "play")]
+                                if res.config.health_mode.is_some() {
+                                    res.health.on_judge(Judgement::Bad);
+                                }
+                            }
+                        }
+                    } else {
+                        // flick
+                        lines[line_id].notes[id as usize].judge = JudgeStatus::PreJudge;
+                        if let Some(tracker) = self.trackers.get_mut(&touch.id) {
+                            tracker.flicked = false;
+                        }
+                    }
+                }
+            }
+            for _ in 0..keys_down {
+                // find the earliest not judged click / hold note
+                if let Some((line_id, id)) = chart
+                    .lines
+                    .iter()
+                    .zip(self.notes.iter())
+                    .enumerate()
+                    .filter_map(|(line_id, (line, (idx, st)))| {
+                        idx[*st..]
+                            .iter()
+                            .cloned()
+                            .find(|id| {
+                                let note = &line.notes[*id as usize];
+                                matches!(note.judge, JudgeStatus::NotJudged) && matches!(note.kind, NoteKind::Click | NoteKind::Hold { .. })
+                            })
+                            .map(|id| (line_id, id))
+                    })
+                    .min_by_key(|(line_id, id)| chart.lines[*line_id].notes[*id as usize].time.not_nan())
+                {
+                    let note = &mut chart.lines[line_id].notes[id as usize];
+                    let dt = (t - note.time).abs() / spd;
+                    if dt <= if matches!(note.kind, NoteKind::Click) { LIMIT_BAD } else { LIMIT_GOOD } {
                         match note.kind {
                             NoteKind::Click => {
                                 note.judge = JudgeStatus::Judged;
-                                judgements.push((if dt <= LIMIT_PERFECT { Judgement::Perfect } else { Judgement::Good }, line_id, id, Some(t)));
+                                let judge = if dt <= LIMIT_PERFECT {
+                                        Judgement::Perfect
+                                    } else if dt <= LIMIT_GOOD {
+                                        Judgement::Good
+                                    } else {
+                                        Judgement::Bad
+                                    };
+                                judgements.push((judge, line_id, id, None));
                                 #[cfg(feature = "play")]
                                 if res.config.health_mode.is_some() {
-                                    res.health.on_judge(Judgement::Perfect);
+                                    res.health.on_judge(judge);
                                 }
                             }
                             NoteKind::Hold { .. } => {
-                                play_sfx(&mut res.sfx_click, &res.config);
+                                note.hitsound.play(res);
                                 self.judgements.borrow_mut().push((t, line_id as _, id, Err(dt <= LIMIT_PERFECT)));
-                                note.judge = JudgeStatus::Hold(dt <= LIMIT_PERFECT, t, t, false, f64::INFINITY);
+                                note.judge = JudgeStatus::Hold(dt <= LIMIT_PERFECT, t, (t - note.time) / spd, false, f64::INFINITY);
                             }
                             _ => unreachable!(),
                         };
-                    } else {
-                        // prevent extra judgements
-                        if matches!(note.judge, JudgeStatus::NotJudged) {
-                            // keep the note after bad judgement
-                            note.judge = JudgeStatus::PreJudge;
-                            judgements.push((Judgement::Bad, line_id, id, None));
-                            #[cfg(feature = "play")]
-                            if res.config.health_mode.is_some() {
-                                res.health.on_judge(Judgement::Bad);
-                            }
-                        }
                     }
                 } else {
-                    // flick
-                    lines[line_id].notes[id as usize].judge = JudgeStatus::PreJudge;
-                    if let Some(tracker) = self.trackers.get_mut(&touch.id) {
-                        tracker.flicked = false;
-                    }
+                    break;
                 }
             }
-        }
-        for _ in 0..keys_down {
-            // find the earliest not judged click / hold note
-            if let Some((line_id, id)) = chart
-                .lines
-                .iter()
-                .zip(self.notes.iter())
-                .enumerate()
-                .filter_map(|(line_id, (line, (idx, st)))| {
-                    idx[*st..]
-                        .iter()
-                        .cloned()
-                        .find(|id| {
-                            let note = &line.notes[*id as usize];
-                            matches!(note.judge, JudgeStatus::NotJudged) && matches!(note.kind, NoteKind::Click | NoteKind::Hold { .. })
-                        })
-                        .map(|id| (line_id, id))
-                })
-                .min_by_key(|(line_id, id)| chart.lines[*line_id].notes[*id as usize].time.not_nan())
-            {
-                let note = &mut chart.lines[line_id].notes[id as usize];
-                let dt = (t - note.time).abs() / spd;
-                if dt <= if matches!(note.kind, NoteKind::Click) { LIMIT_BAD } else { LIMIT_GOOD } {
-                    match note.kind {
-                        NoteKind::Click => {
-                            note.judge = JudgeStatus::Judged;
-                            let judge = if dt <= LIMIT_PERFECT {
-                                    Judgement::Perfect
-                                } else if dt <= LIMIT_GOOD {
-                                    Judgement::Good
-                                } else {
-                                    Judgement::Bad
-                                };
-                            judgements.push((judge, line_id, id, None));
-                            #[cfg(feature = "play")]
-                            if res.config.health_mode.is_some() {
-                                res.health.on_judge(judge);
+            for (line_id, ((line, pos), (idx, st))) in chart.lines.iter_mut().zip(pos.iter()).zip(self.notes.iter()).enumerate() {
+                line.object.set_time(t);
+                for id in &idx[*st..] {
+                    let note = &mut line.notes[*id as usize];
+                    let x_diff_max = (x_diff_max - NOTE_WIDTH_RATIO_BASE) + NOTE_WIDTH_RATIO_BASE * note.judge_scale;
+                    if let NoteKind::Hold { end_time, .. } = &note.kind {
+                        if let JudgeStatus::Hold(.., ref mut pre_judge, ref mut up_time) = note.judge {
+                            if (*end_time - t) / spd <= LIMIT_BAD {
+                                *pre_judge = true;
+                                continue;
                             }
-                        }
-                        NoteKind::Hold { .. } => {
-                            note.hitsound.play(res);
-                            self.judgements.borrow_mut().push((t, line_id as _, id, Err(dt <= LIMIT_PERFECT)));
-                            note.judge = JudgeStatus::Hold(dt <= LIMIT_PERFECT, t, (t - note.time) / spd, false, f64::INFINITY);
-                        }
-                        _ => unreachable!(),
-                    };
-                }
-            } else {
-                break;
-            }
-        }
-        for (line_id, ((line, pos), (idx, st))) in chart.lines.iter_mut().zip(pos.iter()).zip(self.notes.iter()).enumerate() {
-            line.object.set_time(t);
-            for id in &idx[*st..] {
-                let note = &mut line.notes[*id as usize];
-                let x_diff_max = (x_diff_max - NOTE_WIDTH_RATIO_BASE) + NOTE_WIDTH_RATIO_BASE * note.judge_scale;
-                if let NoteKind::Hold { end_time, .. } = &note.kind {
-                    if let JudgeStatus::Hold(.., ref mut pre_judge, ref mut up_time) = note.judge {
-                        if (*end_time - t) / spd <= LIMIT_BAD {
-                            *pre_judge = true;
+                            let x = &mut note.object.translation.0;
+                            x.set_time(t);
+                            let x = x.now();
+                            if self.key_down_count == 0 && !pos.iter().any(|it| it.is_some_and(|it| (it.x - x).abs() <= x_diff_max as f32)) {
+                                if t > *up_time + UP_TOLERANCE {
+                                    note.judge = JudgeStatus::Judged;
+                                    judgements.push((Judgement::Miss, line_id, *id, None));
+                                    #[cfg(feature = "play")]
+                                    if res.config.health_mode.is_some() {
+                                        res.health.on_judge(Judgement::Miss);
+                                    }
+                                } else if up_time.is_infinite() {
+                                    *up_time = t;
+                                }
+                            } else {
+                                *up_time = f64::INFINITY;
+                            }
                             continue;
                         }
-                        let x = &mut note.object.translation.0;
-                        x.set_time(t);
-                        let x = x.now();
-                        if self.key_down_count == 0 && !pos.iter().any(|it| it.is_some_and(|it| (it.x - x).abs() <= x_diff_max as f32)) {
-                            if t > *up_time + UP_TOLERANCE {
-                                note.judge = JudgeStatus::Judged;
-                                judgements.push((Judgement::Miss, line_id, *id, None));
-                                #[cfg(feature = "play")]
-                                if res.config.health_mode.is_some() {
-                                    res.health.on_judge(Judgement::Miss);
-                                }
-                            } else if up_time.is_infinite() {
-                                *up_time = t;
-                            }
-                        } else {
-                            *up_time = f64::INFINITY;
+                    }
+                    if !matches!(note.judge, JudgeStatus::NotJudged) {
+                        continue;
+                    }
+                    // process miss
+                    let dt = (t - note.time) / spd;
+                    if dt > LIMIT_BAD {
+                        note.judge = JudgeStatus::Judged;
+                        judgements.push((Judgement::Miss, line_id, *id, None));
+                        #[cfg(feature = "play")]
+                        if res.config.health_mode.is_some() {
+                            res.health.on_judge(Judgement::Miss);
                         }
                         continue;
                     }
-                }
-                if !matches!(note.judge, JudgeStatus::NotJudged) {
-                    continue;
-                }
-                // process miss
-                let dt = (t - note.time) / spd;
-                if dt > LIMIT_BAD {
-                    note.judge = JudgeStatus::Judged;
-                    judgements.push((Judgement::Miss, line_id, *id, None));
-                    #[cfg(feature = "play")]
-                    if res.config.health_mode.is_some() {
-                        res.health.on_judge(Judgement::Miss);
-                    }
-                    continue;
-                }
-                if -dt > LIMIT_BAD {
-                    break;
-                }
-                if !matches!(note.kind, NoteKind::Drag) && (self.key_down_count == 0 || !matches!(note.kind, NoteKind::Flick)) {
-                    continue;
-                }
-                let dt = dt.abs();
-                let x = &mut note.object.translation.0;
-                x.set_time(t);
-                let x = x.now();
-                if self.key_down_count != 0
-                    || pos.iter().any(|it| {
-                        it.is_some_and(|it| {
-                            let dx = (it.x - x).abs() as f64;
-                            dx <= x_diff_max && dt <= (LIMIT_BAD - LIMIT_PERFECT * (dx - 0.9).max(0.))
-                        })
-                    })
-                {
-                    note.judge = JudgeStatus::PreJudge;
-                }
-            }
-        }
-        // process pre-judge
-        for (line_id, (line, (idx, st))) in chart.lines.iter_mut().zip(self.notes.iter()).enumerate() {
-            line.object.set_time(t);
-            for id in &idx[*st..] {
-                let note = &mut line.notes[*id as usize];
-                if let JudgeStatus::Hold(perfect, .., diff, true, _) = note.judge {
-                    if let NoteKind::Hold { end_time, .. } = &note.kind {
-                        if *end_time <= t {
-                            note.judge = JudgeStatus::Judged;
-                            let judge = if perfect { Judgement::Perfect } else { Judgement::Good };
-                            judgements.push((judge, line_id, *id, Some(diff)));
-                            #[cfg(feature = "play")]
-                            if res.config.health_mode.is_some() {
-                                res.health.on_judge(judge);
-                            }
-                            continue;
-                        }
-                    }
-                }
-                // TODO adjust
-                let ghost_t = t + LIMIT_GOOD;
-                if matches!(note.kind, NoteKind::Click) {
-                    if ghost_t < note.time {
+                    if -dt > LIMIT_BAD {
                         break;
                     }
-                } else if t < note.time {
-                    continue;
+                    if !matches!(note.kind, NoteKind::Drag) && (self.key_down_count == 0 || !matches!(note.kind, NoteKind::Flick)) {
+                        continue;
+                    }
+                    let dt = dt.abs();
+                    let x = &mut note.object.translation.0;
+                    x.set_time(t);
+                    let x = x.now();
+                    if self.key_down_count != 0
+                        || pos.iter().any(|it| {
+                            it.is_some_and(|it| {
+                                let dx = (it.x - x).abs() as f64;
+                                dx <= x_diff_max && dt <= (LIMIT_BAD - LIMIT_PERFECT * (dx - 0.9).max(0.))
+                            })
+                        })
+                    {
+                        note.judge = JudgeStatus::PreJudge;
+                    }
                 }
-                if matches!(note.judge, JudgeStatus::PreJudge) {
-                    let diff = if let JudgeStatus::Hold(.., diff, _, _) = note.judge {
-                        Some(diff)
-                    } else {
-                        None
-                    };
-                    note.judge = JudgeStatus::Judged;
-                    if !matches!(note.kind, NoteKind::Click) {
-                        judgements.push((Judgement::Perfect, line_id, *id, diff));
-                        #[cfg(feature = "play")]
-                        if res.config.health_mode.is_some() {
-                            res.health.on_judge(Judgement::Perfect);
+            }
+            // process pre-judge
+            for (line_id, (line, (idx, st))) in chart.lines.iter_mut().zip(self.notes.iter()).enumerate() {
+                line.object.set_time(t);
+                for id in &idx[*st..] {
+                    let note = &mut line.notes[*id as usize];
+                    if let JudgeStatus::Hold(perfect, .., diff, true, _) = note.judge {
+                        if let NoteKind::Hold { end_time, .. } = &note.kind {
+                            if *end_time <= t {
+                                note.judge = JudgeStatus::Judged;
+                                let judge = if perfect { Judgement::Perfect } else { Judgement::Good };
+                                judgements.push((judge, line_id, *id, Some(diff)));
+                                #[cfg(feature = "play")]
+                                if res.config.health_mode.is_some() {
+                                    res.health.on_judge(judge);
+                                }
+                                continue;
+                            }
+                        }
+                    }
+                    // TODO adjust
+                    let ghost_t = t + LIMIT_GOOD;
+                    if matches!(note.kind, NoteKind::Click) {
+                        if ghost_t < note.time {
+                            break;
+                        }
+                    } else if t < note.time {
+                        continue;
+                    }
+                    if matches!(note.judge, JudgeStatus::PreJudge) {
+                        let diff = if let JudgeStatus::Hold(.., diff, _, _) = note.judge {
+                            Some(diff)
+                        } else {
+                            None
+                        };
+                        note.judge = JudgeStatus::Judged;
+                        if !matches!(note.kind, NoteKind::Click) {
+                            judgements.push((Judgement::Perfect, line_id, *id, diff));
+                            #[cfg(feature = "play")]
+                            if res.config.health_mode.is_some() {
+                                res.health.on_judge(Judgement::Perfect);
+                            }
                         }
                     }
                 }
             }
-        }
-        for (judgement, line_id, id, diff) in judgements {
-            let line = &mut chart.lines[line_id];
-            let note = &mut line.notes[id as usize];
-            line.object.set_time(t);
-            note.object.set_time(t);
-            let line = &chart.lines[line_id];
-            let note = &line.notes[id as usize];
-            let mut note_transform = note.object.now_3d(res);
-            if !note.above {
-                note_transform.append_nonuniform_scaling_mut(&Vector3::new(1.0, -1.0, 1.0));
-            }
-            let line_tr = line.now_transform_3d(res, &chart.lines);
-            self.commit(
-                t,
-                judgement,
-                line_id as _,
-                id,
-                if matches!(judgement, Judgement::Miss) {
-                    0.25
-                } else if matches!(note.kind, NoteKind::Drag | NoteKind::Flick) {
-                    0.
-                } else {
-                    (diff.unwrap_or(t) - note.time) / spd
-                },
-            );
-            if matches!(note.kind, NoteKind::Hold { .. }) {
-                continue;
-            }
-            if match judgement {
-                Judgement::Perfect => {
-                    let color = if let Some(color) = note.hit_fx_color.now_opt() {
-                        color
-                    } else {
-                        res.res_pack.info.fx_perfect()
-                    };
-                    res.with_model_3d(line_tr * note_transform, |res| res.emit_at_origin(note.rotation(line), color));
-                    true
+            for (judgement, line_id, id, diff) in judgements {
+                let line = &mut chart.lines[line_id];
+                let note = &mut line.notes[id as usize];
+                line.object.set_time(t);
+                note.object.set_time(t);
+                let line = &chart.lines[line_id];
+                let note = &line.notes[id as usize];
+                let mut note_transform = note.object.now_3d(res);
+                if !note.above {
+                    note_transform.append_nonuniform_scaling_mut(&Vector3::new(1.0, -1.0, 1.0));
                 }
-                Judgement::Good => {
-                    let color = if let Some(color) = note.hit_fx_color.now_opt() {
-                        color
+                let line_tr = line.now_transform_3d(res, &chart.lines);
+                self.commit(
+                    t,
+                    judgement,
+                    line_id as _,
+                    id,
+                    if matches!(judgement, Judgement::Miss) {
+                        0.25
+                    } else if matches!(note.kind, NoteKind::Drag | NoteKind::Flick) {
+                        0.
                     } else {
-                        res.res_pack.info.fx_good()
-                    };
-                    res.with_model_3d(line_tr * note_transform, |res| res.emit_at_origin(note.rotation(line), color));
-                    true
+                        (diff.unwrap_or(t) - note.time) / spd
+                    },
+                );
+                if matches!(note.kind, NoteKind::Hold { .. }) {
+                    continue;
                 }
-                Judgement::Bad => {
-                    if !matches!(note.kind, NoteKind::Hold { .. }) {
-                        bad_notes.push(BadNote {
-                            time: t,
-                            kind: note.kind.clone(),
-                            matrix: {
-                                let incline_sin = line.incline.now_opt().map(|it| it.to_radians().sin()).unwrap_or_default();
-                                let mut note_transform = note.now_transform_3d(
-                                    res,
-                                    &line.ctrl_obj.borrow_mut(),
-                                    (note.height - line.height.now()) as f32 / res.aspect_ratio * note.speed as f32,
-                                    incline_sin,
-                                    true, true
-                                );
-                                if !note.above {
-                                    note_transform.append_nonuniform_scaling_mut(&Vector3::new(1.0, -1.0, 1.0));
-                                }
-                                line_tr * note_transform
-                            },
-                        });
+                if match judgement {
+                    Judgement::Perfect => {
+                        let color = if let Some(color) = note.hit_fx_color.now_opt() {
+                            color
+                        } else {
+                            res.res_pack.info.fx_perfect()
+                        };
+                        res.with_model_3d(line_tr * note_transform, |res| res.emit_at_origin(note.rotation(line), color));
+                        true
                     }
-                    false
+                    Judgement::Good => {
+                        let color = if let Some(color) = note.hit_fx_color.now_opt() {
+                            color
+                        } else {
+                            res.res_pack.info.fx_good()
+                        };
+                        res.with_model_3d(line_tr * note_transform, |res| res.emit_at_origin(note.rotation(line), color));
+                        true
+                    }
+                    Judgement::Bad => {
+                        if !matches!(note.kind, NoteKind::Hold { .. }) {
+                            bad_notes.push(BadNote {
+                                time: t,
+                                kind: note.kind.clone(),
+                                matrix: {
+                                    let incline_sin = line.incline.now_opt().map(|it| it.to_radians().sin()).unwrap_or_default();
+                                    let mut note_transform = note.now_transform_3d(
+                                        res,
+                                        &line.ctrl_obj.borrow_mut(),
+                                        (note.height - line.height.now()) as f32 / res.aspect_ratio * note.speed as f32,
+                                        incline_sin,
+                                        true, true
+                                    );
+                                    if !note.above {
+                                        note_transform.append_nonuniform_scaling_mut(&Vector3::new(1.0, -1.0, 1.0));
+                                    }
+                                    line_tr * note_transform
+                                },
+                            });
+                        }
+                        false
+                    }
+                    _ => false,
+                } {
+                    note.hitsound.play(res);
                 }
-                _ => false,
-            } {
-                note.hitsound.play(res);
             }
-        }
-        for (line, (idx, st)) in chart.lines.iter().zip(self.notes.iter_mut()) {
-            while idx
-                .get(*st)
-                .is_some_and(|id| matches!(line.notes[*id as usize].judge, JudgeStatus::Judged))
-            {
-                *st += 1;
+            for (line, (idx, st)) in chart.lines.iter().zip(self.notes.iter_mut()) {
+                while idx
+                    .get(*st)
+                    .is_some_and(|id| matches!(line.notes[*id as usize].judge, JudgeStatus::Judged))
+                {
+                    *st += 1;
+                }
             }
-        }
-        self.last_time = t / spd;
+            self.last_time = t / spd;
+        };
+        res.with_model_3d(rot, |res| {
+            process(res, chart, bad_notes);
+        });
     }
 
     fn auto_play_update(&mut self, res: &mut Resource, chart: &mut Chart) {
@@ -969,7 +981,7 @@ impl Judge {
                         note.hitsound.play(res);
                     }
                     self.judgements.borrow_mut().push((t, line_id as _, *id, Err(true)));
-                    // AutoPlay 无需输出打击时间差
+                    // AutoPlay 无需输出打击时间�?
                     // JudgeStatus::Hold(true, t, (t - note.time) / spd, false, f32::INFINITY)
                     JudgeStatus::Hold(true, t, judge_time, true, f64::INFINITY)
                 } else {

@@ -308,7 +308,7 @@ impl JudgeLine {
         rot
     }
 
-    pub fn fetch_rot_3d(&self, lines: &[JudgeLine]) -> Rotation3<f32> {
+    pub fn fetch_rot_3d(&self, lines: &Vec<JudgeLine>) -> Rotation3<f32> {
         let mut rot = self.object.now_rotation_3d();
         if self.rotate_with_parent {
             if let Some(parent) = self.parent {
@@ -324,12 +324,12 @@ impl JudgeLine {
             .append_translation(&self.fetch_pos(res, lines))
     }
 
-    pub fn now_transform_3d(&self, res: &Resource, lines: &[JudgeLine]) -> Matrix4 {
+    pub fn now_transform_3d(&self, res: &Resource, lines: &Vec<JudgeLine>) -> Matrix4 {
         let pos = self.fetch_pos_3d(res, lines);
         self.fetch_rot_3d(lines).to_homogeneous().append_translation(&pos)
     }
 
-    pub fn render(&self, ui: &mut Ui, res: &mut Resource, lines: &[JudgeLine], bpm_list: &mut BpmList, settings: &ChartSettings, id: usize) {
+    pub fn render(&self, ui: &mut Ui, res: &mut Resource, lines: &Vec<JudgeLine>, bpm_list: &mut BpmList, settings: &ChartSettings, id: usize) {
         let alpha = self.object.now_alpha();
         let color = self.color.now_opt();
         if let Some(ref cam) = self.camera {

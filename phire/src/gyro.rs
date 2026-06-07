@@ -131,9 +131,13 @@ impl Gyro {
         lerp_angle(gravity_angle, gyro_angle, self.flatness)
     }
 
-    pub fn get_gyroscope_quat(&self) -> UnitQuaternion<f32> {
+    pub fn get_gyroscope_quat(&self, flip_x: bool) -> UnitQuaternion<f32> {
         let q = self.gyroscope;
-        UnitQuaternion::new_unchecked(Quaternion::new(q.w, q.j, -q.i, -q.k))
+        let w = q.w;
+        let i = if flip_x { -q.j } else { q.j };
+        let j= -q.i;
+        let k = -q.k;
+        UnitQuaternion::new_unchecked(Quaternion::new(w, i, j, k))
     }
 
     pub fn get_current_acceleration(&self) -> f32 {
