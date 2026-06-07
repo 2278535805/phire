@@ -337,7 +337,7 @@ impl JudgeLine {
             set_camera(cam);
         }
 
-        res.with_model_3d(self.now_transform_3d(res, lines) * self.object.now_scale_3d(), |res| {
+        res.with_model_3d(self.now_transform_3d(res, lines), |res| {
             self.render_content(ui, res, bpm_list, settings, id, alpha, color);
         });
 
