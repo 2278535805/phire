@@ -87,15 +87,16 @@ fn draw_tex(res: &Resource, texture: &Texture2D, order: i8, x: f32, y: f32, colo
     draw_tex_pts(res, texture, order, p, color, params);
 }
 fn draw_tex_pts(res: &Resource, texture: &Texture2D, order: i8, p: [Point3; 4], color: Color, params: DrawTextureParams) {
-    let mut p = p.map(|it| res.world_to_screen_3d(it));
-    if p[0].x.min(p[1].x.min(p[2].x.min(p[3].x))) > 1. / res.config.chart_ratio
-        || p[0].x.max(p[1].x.max(p[2].x.max(p[3].x))) < -1. / res.config.chart_ratio
-        || p[0].y.min(p[1].y.min(p[2].y.min(p[3].y))) > 1. / res.config.chart_ratio
-        || p[0].y.max(p[1].y.max(p[2].y.max(p[3].y))) < -1. / res.config.chart_ratio
+    let pos = p.map(|it| res.world_to_screen_3d_with_camera(it));
+    if pos[0].x.min(pos[1].x.min(pos[2].x.min(pos[3].x))) > 1. / res.config.chart_ratio
+        || pos[0].x.max(pos[1].x.max(pos[2].x.max(pos[3].x))) < -1. / res.config.chart_ratio
+        || pos[0].y.min(pos[1].y.min(pos[2].y.min(pos[3].y))) > 1. / res.config.chart_ratio
+        || pos[0].y.max(pos[1].y.max(pos[2].y.max(pos[3].y))) < -1. / res.config.chart_ratio
     {
         return;
     }
     let Rect { x: sx, y: sy, w: sw, h: sh } = params.source.unwrap_or(Rect { x: 0., y: 0., w: 1., h: 1. });
+    let mut p = p.map(|it| res.world_to_screen_3d(it));
 
     if params.flip_x {
         p.swap(0, 1);
