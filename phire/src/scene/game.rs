@@ -15,7 +15,7 @@ use crate::{
     core::{BUFFER_SIZE, BadNote, Chart, ChartExtra, Effect, Point2, Resource, UIElement, Vector3},
     ext::{RectExt, SafeTexture, draw_text_aligned, draw_text_aligned_opt_width, ease_in_out_quartic, get_latency, parse_time, push_frame_time, screen_aspect, semi_white, validate_combo},
     fs::FileSystem,
-    gyro::GYRO,
+    gyro::{GYRO, GyroData},
     info::{ChartFormat, ChartInfo},
     judge::Judge,
     parse::{RPE_WIDTH, parse_extra, parse_pec, parse_phigros, parse_rpe},
@@ -30,7 +30,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     io::Cursor,
     ops::{DerefMut, Range},
-    sync::Arc,
+    sync::Arc, time::Duration,
 };
 use nalgebra::UnitQuaternion;
 use tracing::{debug, warn};
@@ -498,9 +498,9 @@ impl GameScene {
             && !tm.paused()
             && self.pause_rewind.time.is_none()
             && matches!(self.state, State::Playing)
-            && Judge::get_touches(res.config.chart_ratio, res.config.low_resolution_mode).iter().any(|touch| {
+            && Judge::get_touches(res.config.low_resolution_mode).iter().any(|touch| {
                 touch.phase == TouchPhase::Started && {
-                    let p = touch.position;
+                    let p = touch.position / res.config.chart_ratio;
                     let p = Point2::new(p.x * screen_aspect, p.y * screen_aspect);
                     (pause_center - p).norm() < 0.05
                 }
@@ -730,7 +730,7 @@ impl GameScene {
             );
             if res.config.interactive {
                 let mut clicked = None;
-                for touch in Judge::get_touches(1.0, res.config.low_resolution_mode) {
+                for touch in Judge::get_touches(res.config.low_resolution_mode) {
                     if touch.phase != TouchPhase::Started {
                         continue;
                     }
@@ -814,7 +814,7 @@ impl GameScene {
                 ui.fill_circle(st, -eh, rad, Color::new(0.66, 0.78, 0.98, 1.));
                 if self.exercise_press.is_none() {
                     let r = ui.rect_to_global(Rect::new(st, -eh, 0., 0.).feather(rad));
-                    self.exercise_press = Judge::get_touches(1.0, self.res.config.low_resolution_mode)
+                    self.exercise_press = Judge::get_touches(self.res.config.low_resolution_mode)
                         .iter()
                         .find(|it| it.phase == TouchPhase::Started && r.contains(it.position))
                         .map(|it| (-1, it.id));
@@ -823,7 +823,7 @@ impl GameScene {
                 ui.fill_circle(en, eh, rad, Color::new(1., 0.34, 0.54, 1.));
                 if self.exercise_press.is_none() {
                     let r = ui.rect_to_global(Rect::new(en, eh, 0., 0.).feather(rad));
-                    self.exercise_press = Judge::get_touches(1.0, self.res.config.low_resolution_mode)
+                    self.exercise_press = Judge::get_touches(self.res.config.low_resolution_mode)
                         .iter()
                         .find(|it| it.phase == TouchPhase::Started && r.contains(it.position))
                         .map(|it| (1, it.id));
@@ -832,7 +832,7 @@ impl GameScene {
                 ui.fill_circle(cur, 0., rad, Color::new(0.95, 0.95, 0.95, 1.));
                 if self.exercise_press.is_none() {
                     let r = ui.rect_to_global(Rect::new(cur, 0., 0., 0.).feather(rad));
-                    self.exercise_press = Judge::get_touches(1.0, self.res.config.low_resolution_mode)
+                    self.exercise_press = Judge::get_touches(self.res.config.low_resolution_mode)
                         .iter()
                         .find(|it| it.phase == TouchPhase::Started && r.contains(it.position))
                         .map(|it| (0, it.id));
@@ -842,7 +842,7 @@ impl GameScene {
                     self.exercise_press = None;
                 }
                 if let Some((ctrl, id)) = &self.exercise_press {
-                    if let Some(touch) = Judge::get_touches(1.0, self.res.config.low_resolution_mode).iter().rfind(|it| it.id == *id) {
+                    if let Some(touch) = Judge::get_touches(self.res.config.low_resolution_mode).iter().rfind(|it| it.id == *id) {
                         let x = touch.position.x;
                         let p = (x + hw) / (hw * 2.) * (self.res.track_length - sp) as f32 + sp as f32;
                         let p = if track_length - sp as f32 <= 3. || *ctrl == 0 {
@@ -1447,10 +1447,9 @@ impl Scene for GameScene {
         let chart_fov_tan = (chart_fovy / 2.0).tan();
         let chart_cam_aspect = if res.config.chart_ratio < 1. { asp2_window } else { asp2_chart };
         let chart_cam_distance = 1.0 / (asp2_chart * ratio * chart_fov_tan);
-        let base_pos = Vector3::new(0.0, 0.0, chart_cam_distance);
-        // let cam_pos = rot.transform_vector(&base_pos);
-        let base_up = Vector3::new(0.0, 1.0, 0.0);
-        // let cam_up = rot.transform_vector(&base_up);
+        res.camera.position = vec3(0., 0., chart_cam_distance);
+        res.camera.fovy = chart_fovy;
+        res.camera.aspect = Some(chart_cam_aspect);
         set_camera( &Camera3D {
             position: vec3(0., 0., chart_cam_distance),
             up: vec3(0.0, 1.0, 0.0),
@@ -1553,7 +1552,7 @@ impl Scene for GameScene {
                 self.tweak_offset(ui, Self::interactive(&self.res, &self.state), tm);
             }
             if self.res.config.touch_debug {
-                for touch in Judge::get_touches(1.0, self.res.config.low_resolution_mode) {
+                for touch in Judge::get_touches(self.res.config.low_resolution_mode) {
                     ui.fill_circle(touch.position.x, touch.position.y, 0.04, Color { a: 0.4, ..RED });
                 }
             }

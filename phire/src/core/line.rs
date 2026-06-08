@@ -6,12 +6,12 @@ use crate::{
     judge::{JudgeStatus, LIMIT_BAD},
     ui::Ui,
 };
-use macroquad::prelude::*;
+use macroquad::{input::KeyCode::H, prelude::*};
 use macroquad::miniquad::{TextureParams, TextureWrap};
 use macroquad::miniquad::RenderPass as MiniquadRenderPass;
 use nalgebra::{Rotation2, Rotation3};
 use serde::{Deserialize, Serialize};
-use std::cell::RefCell;
+use std::{cell::RefCell, cmp::max};
 
 #[derive(Clone, Copy, Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
@@ -536,19 +536,16 @@ impl JudgeLine {
             }
         }
         let vw = 1.01 / res.config.chart_ratio;
-        let (vw, vh) = if res.config.rotation_mode {
-            (vw, vw.max(vw / res.aspect_ratio))
-        } else {
-            (vw, vw / res.aspect_ratio)
-        };
+        let (vw, vh) = (vw, vw / res.aspect_ratio);
         let p = [
-            res.screen_to_world_3d(Point3::new(-vw, -vh, 0.)),
-            res.screen_to_world_3d(Point3::new(-vw, vh, 0.)),
-            res.screen_to_world_3d(Point3::new(vw, -vh, 0.)),
-            res.screen_to_world_3d(Point3::new(vw, vh, 0.)),
+            res.screen_to_world_3d_with_camera(Point3::new(-vw, -vh, 0.)),
+            res.screen_to_world_3d_with_camera(Point3::new(-vw, vh, 0.)),
+            res.screen_to_world_3d_with_camera(Point3::new(vw, -vh, 0.)),
+            res.screen_to_world_3d_with_camera(Point3::new(vw, vh, 0.)),
         ];
-        let height_above = p[0].y.max(p[1].y.max(p[2].y.max(p[3].y))) as f64;
-        let height_below = p[0].y.min(p[1].y.min(p[2].y.min(p[3].y))) as f64;
+        let invalid = p.iter().any(|pt| !pt.x.is_finite() || !pt.y.is_finite());
+        let height_above = if invalid { 10.0 } else { p[0].y.max(p[1].y.max(p[2].y.max(p[3].y))).min(10.0) as f64 };
+        let height_below = if invalid { -10.0 } else { p[0].y.min(p[1].y.min(p[2].y.min(p[3].y))).min(10.0) as f64 };
         let agg = res.config.aggressive_chart;
         let mut height = self.height.clone();
         let aspect_ratio = res.aspect_ratio as f64;

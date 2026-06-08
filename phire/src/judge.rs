@@ -366,7 +366,7 @@ impl Judge {
         });
     }
 
-    fn touch_to_ndc(scale: f32, low_resolution_mode: bool) -> impl Fn(&mut Touch) {
+    fn touch_to_ndc( low_resolution_mode: bool) -> impl Fn(&mut Touch) {
         let vp = get_viewport();
         move |touch| {
             let p = if low_resolution_mode {
@@ -378,14 +378,13 @@ impl Judge {
                 (p.x - vp.0 as f32) / vp.2 as f32 * 2. - 1.,
                 ((p.y - (vp.3 as f32 - (vp.1 + vp.3) as f32)) / vp.3 as f32 * 2. - 1.) / (vp.2 as f32 / vp.3 as f32),
             );
-            touch.position /= scale;
         }
     }
 
-    pub fn get_touches(scale: f32, low_resolution_mode: bool) -> Vec<Touch> {
+    pub fn get_touches(low_resolution_mode: bool) -> Vec<Touch> {
         TOUCHES.with(|it| {
             let guard = it.borrow();
-            let tr = Self::touch_to_ndc(scale, low_resolution_mode);
+            let tr = Self::touch_to_ndc(low_resolution_mode);
             guard
                 .touches
                 .iter()
@@ -456,7 +455,7 @@ impl Judge {
                     time: f64::NEG_INFINITY,
                 });
             }
-            let tr = Self::touch_to_ndc(res.config.chart_ratio, res.config.low_resolution_mode);
+            let tr = Self::touch_to_ndc(res.config.low_resolution_mode);
             touches
                 .into_iter()
                 .map(|mut it| {
@@ -531,7 +530,7 @@ impl Judge {
                         .iter()
                         .map(|touch| {
                             let p = touch.position;
-                            let p = res.screen_to_world_3d(Point3::new(p.x, p.y, 0.));
+                            let p = res.screen_to_world_3d_with_camera(Point3::new(p.x, p.y, 0.));
                             fn ok(f: f32) -> bool {
                                 matches!(f.classify(), FpCategory::Zero | FpCategory::Subnormal | FpCategory::Normal)
                             }

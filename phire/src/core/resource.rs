@@ -1,7 +1,7 @@
 use super::{MSRenderTarget, Matrix3, Point2, NOTE_WIDTH_RATIO_BASE};
 use crate::{
     config::Config,
-    core::{Matrix4, Point3, tween::Tweenable},
+    core::{Matrix4, Point3, Vector3, tween::Tweenable},
     ext::{SafeTexture, create_audio_manger, nalgebra_to_glm, nalgebra4_to_glm},
     fs::FileSystem,
     health::Health,
@@ -693,10 +693,11 @@ impl Resource {
         if !self.config.particle {
             return;
         }
-        let pt = self.world_to_screen_3d(Point3::default());
+        let pt = self.world_to_screen_3d_with_camera(Point3::default());
+        let pt = Point2::new(pt.x / self.config.chart_ratio, pt.y / self.config.chart_ratio);
 
         if self.config.aggressive_particle {
-            if pt.x.abs() > 1.2 * self.config.chart_ratio || pt.y.abs() * self.config.chart_ratio * self.aspect_ratio > 1.2 {
+            if pt.x.abs() > 1.2 || pt.y.abs() > 1.2 {
                 return;
             }
             let roughly_pos = ((pt.x * 200.0).round() as i32, (pt.y * 200.0).round() as i32);
@@ -767,6 +768,21 @@ impl Resource {
         true
     }
 
+    pub fn camera_matrix(&self) -> Matrix4 {
+        let vp = Matrix4::from_column_slice(&self.camera.matrix().to_cols_array());
+        let (width, height) = if let Some(rt) = &self.camera.render_target {
+            (rt.texture.width(), rt.texture.height())
+        } else {
+            (screen_width(), screen_height())
+        };
+        let aspect = 1.0 / self.camera.aspect.unwrap_or(width / height);
+        if self.camera.render_target.is_none() {
+            Matrix4::new_nonuniform_scaling(&Vector3::new(1.0, -aspect, 1.0)) * vp
+        } else {
+            Matrix4::new_nonuniform_scaling(&Vector3::new(1.0, aspect, 1.0)) * vp
+        }
+    }
+
     pub fn world_to_screen(&self, pt: Point2) -> Point2 {
         self.model_stack.last().unwrap().transform_point(&pt)
     }
@@ -779,8 +795,41 @@ impl Resource {
         self.model_stack_3d.last().unwrap().transform_point(&pt)
     }
 
+    pub fn world_to_screen_3d_with_camera(&self, pt: Point3) -> Point3 {
+        let mvp = self.camera_matrix() * self.model_stack_3d.last().unwrap();
+        mvp.transform_point(&pt)
+    }
+
     pub fn screen_to_world_3d(&self, pt: Point3) -> Point3 {
-        self.model_stack_3d.last().unwrap().try_inverse().unwrap_or_else(|| Matrix4::new_scaling(0.)).transform_point(&pt)
+        let model = self.model_stack_3d.last().unwrap();
+        let inv = model.try_inverse().unwrap_or_else(|| Matrix4::new_scaling(0.));
+        let sz = {
+            let a = inv[(2, 2)];
+            if a.abs() < 1e-6 {
+                0.
+            } else {
+                -(inv[(2, 0)] * pt.x + inv[(2, 1)] * pt.y + inv[(2, 3)]) / a
+            }
+        };
+        inv.transform_point(&Point3::new(pt.x, pt.y, sz))
+    }
+
+    pub fn screen_to_world_3d_with_camera(&self, pt: Point3) -> Point3 {
+        let mvp = self.camera_matrix() * self.model_stack_3d.last().unwrap();
+        let inv = mvp.try_inverse().unwrap_or_else(|| Matrix4::new_scaling(0.));
+        let near = inv.transform_point(&Point3::new(pt.x, pt.y, -1.0));
+        let far = inv.transform_point(&Point3::new(pt.x, pt.y, 1.0));
+        let dir = far - near;
+        if dir.z.abs() < 1e-12 {
+            return Point3::new(f32::NAN, f32::NAN, f32::NAN);
+        }
+        let t = -near.z / dir.z;
+        let p = Point3::new(near.x + dir.x * t, near.y + dir.y * t, 0.0);
+        let clip_w = mvp[(3, 0)] * p.x + mvp[(3, 1)] * p.y + mvp[(3, 3)];
+        if clip_w <= 0.0 {
+            return Point3::new(f32::NAN, f32::NAN, f32::NAN);
+        }
+        p
     }
 
     #[inline]
