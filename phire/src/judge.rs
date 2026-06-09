@@ -146,7 +146,7 @@ impl FlickTracker {
                 self.stopped = true;
             }
             if self.stopped && !self.flicked {
-                self.flicked = delta.magnitude() / dt >= self.threshold * 2.;
+                self.flicked = delta.magnitude() / dt >= self.threshold * 1.5;
             }
             // if speed < self.threshold || self.stopped {
             // self.stopped = delta.magnitude() / dt < self.threshold * 5.;
@@ -584,16 +584,16 @@ impl Judge {
                         let (dir_x, dir_y) = line_dirs[line_id];
                         let tx = touch.position.x - note_ndc.x;
                         let ty = touch.position.y - note_ndc.y;
-                        let dist = ((tx * dir_x + ty * dir_y).abs()) as f64;
+                        let dist_x = ((tx * dir_x + ty * dir_y).abs()) as f64;
                         let dist_y = ((tx * dir_y - ty * dir_x).abs()) as f64;
                         let max_dist = base_max_dist + NOTE_WIDTH_RATIO_BASE * note.judge_scale;
-                        if dist > max_dist {
+                        if dist_x > max_dist {
                             continue;
                         }
                         let dist_key = if res.config.full_scrrn_judge() {
-                            (dist / NOTE_WIDTH_RATIO_BASE - 1.).max(0.) * 0.01 + dist_y * 0.01
+                            (dist_x / NOTE_WIDTH_RATIO_BASE - 1.).max(0.) * 0.01 + (dist_y / NOTE_WIDTH_RATIO_BASE * 0.5 - 1.) * 0.01
                         } else {
-                            (dist / NOTE_WIDTH_RATIO_BASE - 1.).max(0.) * DIST_FACTOR + dist_y * DIST_FACTOR
+                            (dist_x / NOTE_WIDTH_RATIO_BASE - 1.).max(0.) * DIST_FACTOR + (dist_y / NOTE_WIDTH_RATIO_BASE * 0.5 - 1.) * DIST_FACTOR
                         };
                         let key = if matches!(note.kind, NoteKind::Flick | NoteKind::Drag) {
                             dt.abs() + LIMIT_BAD
@@ -606,15 +606,11 @@ impl Judge {
                         };
                         let key = key + dist_key;
                         if key < closest.3 {
-                            closest = (Some((line_id, *note_id)), dist, dt, key, touch.position);
+                            closest = (Some((line_id, *note_id)), dist_x, dt, key, touch.position);
                         }
                     }
                 }
                 if let (Some((line_id, id)), _, dt, _, touch_ndc) = closest {
-                    let max_dist = {
-                        let note = &chart.lines[line_id].notes[id as usize];
-                        (x_diff_max - NOTE_WIDTH_RATIO_BASE) + NOTE_WIDTH_RATIO_BASE * note.judge_scale
-                    };
                     let lines = &mut chart.lines;
                     if matches!(lines[line_id].notes[id as usize].kind, NoteKind::Drag) {
                         continue;
@@ -636,6 +632,7 @@ impl Judge {
                                     let note_ndc = line_mvps[other_line_id].transform_point(&Point3::new(note_3d.x, note_3d.y, note_3d.z));
                                     let (dir_x, dir_y) = line_dirs[other_line_id];
                                     let dx = ((note_ndc.x - touch_ndc.x) * dir_x + (note_ndc.y - touch_ndc.y) * dir_y).abs() as f64;
+                                    let max_dist = (x_diff_max - NOTE_WIDTH_RATIO_BASE) + NOTE_WIDTH_RATIO_BASE * note.judge_scale;
                                     if dx <= max_dist {
                                         note.protected = true;
                                         any = true;
