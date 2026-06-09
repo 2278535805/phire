@@ -1,6 +1,6 @@
 use crate::{
     config::Config,
-    core::{BadNote, Chart, Matrix4, NOTE_WIDTH_RATIO_BASE, Note, NoteKind, Point2, Point3, Resource, Vector2, Vector3},
+    core::{BadNote, Chart, Matrix4, NOTE_WIDTH_RATIO_BASE, NoteKind, Point2, Point3, Resource, Vector2, Vector3},
     ext::{NotNanExt, get_viewport}, gyro::GYRO,
 };
 use macroquad::prelude::{
@@ -12,7 +12,7 @@ use once_cell::sync::Lazy;
 use rustc_hash::FxHashMap;
 use sasa::{PlaySfxParams, Sfx};
 use serde::Serialize;
-use std::{cell::RefCell, collections::HashMap, num::FpCategory};
+use std::{cell::RefCell, collections::HashMap};
 
 pub const FLICK_SPEED_THRESHOLD: f32 = 0.8;
 pub const LIMIT_PERFECT: f64 = 0.08;
@@ -520,30 +520,22 @@ impl Judge {
                 it
             })
             .collect();
-        // pos[line][touch]
-        let mut pos = Vec::<Vec<Option<Point3>>>::with_capacity(chart.lines.len());
-        for id in 0..chart.lines.len() {
-            chart.lines[id].object.set_time(t);
-            res.with_model_3d(rot_touch * chart.lines[id].now_transform_3d(res, &chart.lines), |res| {
-                pos.push(
-                    touches
-                        .iter()
-                        .map(|touch| {
-                            let p = touch.position;
-                            let p = res.screen_to_world_3d_with_camera(Point3::new(p.x, p.y, 0.));
-                            fn ok(f: f32) -> bool {
-                                matches!(f.classify(), FpCategory::Zero | FpCategory::Subnormal | FpCategory::Normal)
-                            }
-                            if ok(p.x) && ok(p.y) {
-                                Some(p)
-                            } else {
-                                None
-                            }
-                        })
-                        .collect(),
-                );
-            });
+        // pre-compute per-line MVP and screen-space X-axis direction
+        let camera_mat = res.camera_matrix();
+        for line in chart.lines.iter_mut() {
+            line.object.set_time(t);
         }
+        let line_mvps: Vec<Matrix4> = chart.lines.iter().map(|line| {
+            camera_mat * rot_touch * line.now_transform_3d(res, &chart.lines)
+        }).collect();
+        let line_dirs: Vec<(f32, f32)> = line_mvps.iter().map(|mvp| {
+            let o = mvp.transform_point(&Point3::origin());
+            let x = mvp.transform_point(&Point3::new(1.0, 0.0, 0.0));
+            let dx = x.x - o.x;
+            let dy = x.y - o.y;
+            let len = (dx * dx + dy * dy).sqrt();
+            if len > 1e-6 { (dx / len, dy / len) } else { (1.0, 0.0) }
+        }).collect();
         let mut process = |res: &mut Resource, chart: &mut Chart, bad_notes: &mut Vec<BadNote>| {
             let time_of = |touch: &Touch| {
                 if touch.time.is_infinite() {
@@ -554,7 +546,7 @@ impl Judge {
             };
             let mut judgements = Vec::new();
             // clicks & flicks
-            for (id, touch) in touches.iter().enumerate() {
+            for touch in touches.iter() {
                 let click = touch.phase == TouchPhase::Started;
                 let flick =
                     matches!(touch.phase, TouchPhase::Moved | TouchPhase::Stationary) && self.trackers.get_mut(&touch.id).is_some_and(|it| it.flicked);
@@ -562,11 +554,11 @@ impl Judge {
                     continue;
                 }
                 let t = time_of(touch);
-                let mut closest = (None, x_diff_max, LIMIT_BAD, LIMIT_BAD + (x_diff_max / NOTE_WIDTH_RATIO_BASE - 1.).max(0.) * DIST_FACTOR, 0.);
-                for (line_id, ((line, pos), (idx, st))) in chart.lines.iter_mut().zip(pos.iter()).zip(self.notes.iter_mut()).enumerate() {
-                    let Some(pos) = pos[id] else { continue; };
-                    for id in &idx[*st..] {
-                        let note = &mut line.notes[*id as usize];
+                let mut closest = (None, x_diff_max, LIMIT_BAD, f64::MAX, Vec2::ZERO);
+                let base_max_dist = x_diff_max - NOTE_WIDTH_RATIO_BASE;
+                for (line_id, (line, (idx, st))) in chart.lines.iter_mut().zip(self.notes.iter_mut()).enumerate() {
+                    for note_id in &idx[*st..] {
+                        let note = &mut line.notes[*note_id as usize];
                         if !matches!(note.judge, JudgeStatus::NotJudged | JudgeStatus::PreJudge) {
                             continue;
                         }
@@ -577,70 +569,79 @@ impl Judge {
                         if dt.abs() >= closest.3.abs() {
                             break;
                         }
-                        // let dt = if dt < 0. { (dt + EARLY_OFFSET).min(0.).abs() } else { dt };
-                        let x = &mut note.object.translation.0;
-                        x.set_time(t);
-                        let posx = pos.x;
-                        let dist = (x.now() - posx).abs() as f64;
-                        if dist > (x_diff_max - NOTE_WIDTH_RATIO_BASE) + NOTE_WIDTH_RATIO_BASE * note.judge_scale {
-                            continue;
-                        }
                         if dt.abs() >
                             if matches!(note.kind, NoteKind::Click) {
-                                LIMIT_BAD // LIMIT_BAD - LIMIT_PERFECT * (dist - 0.9).max(0.)
+                                LIMIT_BAD
                             } else {
                                 LIMIT_GOOD
                             }
                         {
                             continue;
                         }
+                        note.object.set_time(t);
+                        let note_3d = note.object.now_translation_3d(res);
+                        let note_ndc = line_mvps[line_id].transform_point(&Point3::new(note_3d.x, note_3d.y, note_3d.z));
+                        let (dir_x, dir_y) = line_dirs[line_id];
+                        let tx = touch.position.x - note_ndc.x;
+                        let ty = touch.position.y - note_ndc.y;
+                        let dist = ((tx * dir_x + ty * dir_y).abs()) as f64;
+                        let dist_y = ((tx * dir_y - ty * dir_x).abs()) as f64;
+                        let max_dist = base_max_dist + NOTE_WIDTH_RATIO_BASE * note.judge_scale;
+                        if dist > max_dist {
+                            continue;
+                        }
                         let dist_key = if res.config.full_scrrn_judge() {
-                            (dist / NOTE_WIDTH_RATIO_BASE - 1.).max(0.) * 0.01
+                            (dist / NOTE_WIDTH_RATIO_BASE - 1.).max(0.) * 0.01 + dist_y * 0.01
                         } else {
-                            (dist / NOTE_WIDTH_RATIO_BASE - 1.).max(0.) * DIST_FACTOR
+                            (dist / NOTE_WIDTH_RATIO_BASE - 1.).max(0.) * DIST_FACTOR + dist_y * DIST_FACTOR
                         };
-                        let key = if matches!(note.kind, NoteKind::Flick | NoteKind::Drag) { // Low Priority
+                        let key = if matches!(note.kind, NoteKind::Flick | NoteKind::Drag) {
                             dt.abs() + LIMIT_BAD
-                        } else if dt < -LIMIT_GOOD { // Prevent Late Bad
+                        } else if dt < -LIMIT_GOOD {
                             dt.abs()
                         } else if dt < 0.0 {
-                            (dt + LATE_OFFSET).min(0.0).abs() // Protect Late Good
+                            (dt + LATE_OFFSET).min(0.0).abs()
                         } else {
                             dt.abs()
                         };
                         let key = key + dist_key;
                         if key < closest.3 {
-                            closest = (Some((line_id, *id)), dist, dt, key, posx);
+                            closest = (Some((line_id, *note_id)), dist, dt, key, touch.position);
                         }
                     }
                 }
-                if let (Some((line_id, id)), _, dt, _, posx) = closest {
-                    let can_protect_note = |note: &mut Note| {
-                        let x = &mut note.object.translation.0;
-                        x.set_time(t);
-                        let judge_time = t - note.time;
-                        matches!(note.kind, NoteKind::Drag | NoteKind::Flick)
-                            && (-LIMIT_GOOD..=LIMIT_BAD).contains(&judge_time)
-                            && (x.now() - posx).abs() as f64 <= (x_diff_max - NOTE_WIDTH_RATIO_BASE) + NOTE_WIDTH_RATIO_BASE * note.judge_scale // note_dist <= x_diff_max
-                            && !note.protected
-                            && !note.fake
+                if let (Some((line_id, id)), _, dt, _, touch_ndc) = closest {
+                    let max_dist = {
+                        let note = &chart.lines[line_id].notes[id as usize];
+                        (x_diff_max - NOTE_WIDTH_RATIO_BASE) + NOTE_WIDTH_RATIO_BASE * note.judge_scale
                     };
                     let lines = &mut chart.lines;
                     if matches!(lines[line_id].notes[id as usize].kind, NoteKind::Drag) {
-                        // debug!("reject by drag");
                         continue;
                     }
                     if click {
                         if dt > LIMIT_PERFECT {
                             let mut any = false;
-                            lines.iter_mut()
-                                .flat_map(|line| line.notes.iter_mut())
-                                .for_each(|note| {
-                                    if can_protect_note(note) {
+                            for (other_line_id, other_line) in lines.iter_mut().enumerate() {
+                                for note in other_line.notes.iter_mut() {
+                                    if note.protected || note.fake || !matches!(note.kind, NoteKind::Drag | NoteKind::Flick) {
+                                        continue;
+                                    }
+                                    let judge_time = t - note.time;
+                                    if !(-LIMIT_GOOD..=LIMIT_BAD).contains(&judge_time) {
+                                        continue;
+                                    }
+                                    note.object.set_time(t);
+                                    let note_3d = note.object.now_translation_3d(res);
+                                    let note_ndc = line_mvps[other_line_id].transform_point(&Point3::new(note_3d.x, note_3d.y, note_3d.z));
+                                    let (dir_x, dir_y) = line_dirs[other_line_id];
+                                    let dx = ((note_ndc.x - touch_ndc.x) * dir_x + (note_ndc.y - touch_ndc.y) * dir_y).abs() as f64;
+                                    if dx <= max_dist {
                                         note.protected = true;
                                         any = true;
                                     }
-                                });
+                                }
+                            }
                             if any {
                                 continue;
                             }
@@ -740,24 +741,28 @@ impl Judge {
                     break;
                 }
             }
-            for (line_id, ((line, pos), (idx, st))) in chart.lines.iter_mut().zip(pos.iter()).zip(self.notes.iter()).enumerate() {
+            for (line_id, (line, (idx, st))) in chart.lines.iter_mut().zip(self.notes.iter()).enumerate() {
                 line.object.set_time(t);
-                for id in &idx[*st..] {
-                    let note = &mut line.notes[*id as usize];
-                    let x_diff_max = (x_diff_max - NOTE_WIDTH_RATIO_BASE) + NOTE_WIDTH_RATIO_BASE * note.judge_scale;
+                for note_id in &idx[*st..] {
+                    let note = &mut line.notes[*note_id as usize];
+                    let note_x_diff_max = (x_diff_max - NOTE_WIDTH_RATIO_BASE) + NOTE_WIDTH_RATIO_BASE * note.judge_scale;
                     if let NoteKind::Hold { end_time, .. } = &note.kind {
                         if let JudgeStatus::Hold(.., ref mut pre_judge, ref mut up_time) = note.judge {
                             if (*end_time - t) / spd <= LIMIT_BAD {
                                 *pre_judge = true;
                                 continue;
                             }
-                            let x = &mut note.object.translation.0;
-                            x.set_time(t);
-                            let x = x.now();
-                            if self.key_down_count == 0 && !pos.iter().any(|it| it.is_some_and(|it| (it.x - x).abs() <= x_diff_max as f32)) {
+                            note.object.set_time(t);
+                            let note_3d = note.object.now_translation_3d(res);
+                            let note_ndc = line_mvps[line_id].transform_point(&Point3::new(note_3d.x, note_3d.y, note_3d.z));
+                            let any_touch_near = touches.iter().any(|touch| {
+                                let (dir_x, dir_y) = line_dirs[line_id];
+                                ((note_ndc.x - touch.position.x) * dir_x + (note_ndc.y - touch.position.y) * dir_y).abs() as f64 <= note_x_diff_max
+                            });
+                            if self.key_down_count == 0 && !any_touch_near {
                                 if t > *up_time + UP_TOLERANCE {
                                     note.judge = JudgeStatus::Judged;
-                                    judgements.push((Judgement::Miss, line_id, *id, None));
+                                    judgements.push((Judgement::Miss, line_id, *note_id, None));
                                     #[cfg(feature = "play")]
                                     if res.config.health_mode.is_some() {
                                         res.health.on_judge(Judgement::Miss);
@@ -778,7 +783,7 @@ impl Judge {
                     let dt = (t - note.time) / spd;
                     if dt > LIMIT_BAD {
                         note.judge = JudgeStatus::Judged;
-                        judgements.push((Judgement::Miss, line_id, *id, None));
+                        judgements.push((Judgement::Miss, line_id, *note_id, None));
                         #[cfg(feature = "play")]
                         if res.config.health_mode.is_some() {
                             res.health.on_judge(Judgement::Miss);
@@ -792,16 +797,17 @@ impl Judge {
                         continue;
                     }
                     let dt = dt.abs();
-                    let x = &mut note.object.translation.0;
-                    x.set_time(t);
-                    let x = x.now();
                     if self.key_down_count != 0
-                        || pos.iter().any(|it| {
-                            it.is_some_and(|it| {
-                                let dx = (it.x - x).abs() as f64;
-                                dx <= x_diff_max && dt <= (LIMIT_BAD - LIMIT_PERFECT * (dx - 0.9).max(0.))
+                        || {
+                            note.object.set_time(t);
+                            let note_3d = note.object.now_translation_3d(res);
+                            let note_ndc = line_mvps[line_id].transform_point(&Point3::new(note_3d.x, note_3d.y, note_3d.z));
+                            touches.iter().any(|touch| {
+                                let (dir_x, dir_y) = line_dirs[line_id];
+                                let dist = ((note_ndc.x - touch.position.x) * dir_x + (note_ndc.y - touch.position.y) * dir_y).abs() as f64;
+                                dist <= note_x_diff_max && dt <= (LIMIT_BAD - LIMIT_PERFECT * (dist - 0.9).max(0.))
                             })
-                        })
+                        }
                     {
                         note.judge = JudgeStatus::PreJudge;
                     }
