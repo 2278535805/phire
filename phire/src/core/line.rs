@@ -166,6 +166,7 @@ pub struct JudgeLine {
     pub z_index: i32,
     pub show_below: bool,
     pub attach_ui: Option<UIElement>,
+    pub scale_on_notes: u8,
 
     pub cache: JudgeLineCache,
     pub anchor: [f32; 2],
@@ -460,6 +461,8 @@ impl JudgeLine {
                 invisible_time: f64::INFINITY,
                 draw_below: self.show_below,
                 incline_sin: self.incline.now_opt().map(|it| it.to_radians().sin()).unwrap_or_default(),
+                clip_x_range: None,
+                clip_y_range: None,
             };
             if res.config.has_mod(Mods::FADE_OUT) {
                 config.invisible_time = LIMIT_BAD;
@@ -565,29 +568,19 @@ impl JudgeLine {
                     for index in &self.cache.below_indices {
                         let speed = self.notes[*index].speed;
                         for note in self.notes[*index..].iter() {
-                            if speed != note.speed {
-                                break;
-                            }
-                            if matches!(note.judge, JudgeStatus::Judged) && !matches!(note.kind, NoteKind::Hold { .. }) {
-                                continue;
-                            }
+                            if !note.above || speed != note.speed { break; }
+                            if matches!(note.judge, JudgeStatus::Judged) && !matches!(note.kind, NoteKind::Hold { .. }) { continue; }
                             if agg {
                                 let line_height = match note.kind {
                                     NoteKind::Hold { end_time, .. } => {
-                                        let time = if res.time < end_time {
-                                            res.time.min(note.time)
-                                        } else {
-                                            res.time
-                                        };
+                                        let time = if res.time < end_time { res.time.min(note.time) } else { res.time };
                                         height.set_time(time);
                                         height.now()
                                     }
-                                    _ => {
-                                        config.line_height
-                                    }
+                                    _ => config.line_height,
                                 };
                                 let note_height = ((note.height - line_height) * speed + note.object.translation.1.now() as f64) / aspect_ratio;
-                                match note.kind {   
+                                match note.kind {
                                     NoteKind::Hold { end_height, .. } => {
                                         let end_height = ((end_height - line_height) * speed + note.object.translation.1.now() as f64) / aspect_ratio;
                                         if note_height < -height_above && end_height < -height_above {
@@ -605,12 +598,30 @@ impl JudgeLine {
                                             break;
                                         }
                                     }
+                                    if note_height > -height_below { break; }
                                 }
                             }
-                            note.render(ui, res, &mut config, bpm_list, line_set_debug_alpha, id, -height_below, -height_above);
                         }
-                    }
-                });
+                    });
+                };
+
+                if self.scale_on_notes == 1 {
+                    res.with_model(self.object.now_scale(), |res| {
+                        render_notes(ui, res, &mut config);
+                    });
+                } else if self.scale_on_notes == 2 {
+                    let scale = self.object.scale.now_with_def(1.0, 1.0);
+                    let clip_x = scale.x.abs().min(1.0);
+                    let clip_y = scale.y.abs().min(1.0);
+                    let top = 1.0 / res.aspect_ratio;
+
+                    config.clip_x_range = if clip_x < 1.0 { Some((-clip_x, clip_x)) } else { None };
+                    config.clip_y_range = if clip_y < 1.0 { Some((-top * clip_y, top * clip_y)) } else { None };
+
+                    render_notes(ui, res, &mut config);
+                } else {
+                    render_notes(ui, res, &mut config);
+                }
             }
             if res.config.chart_debug_line > 0. {
                 res.with_model(Matrix::identity().append_nonuniform_scaling(&Vector::new(1.0, -1.0)), |res| {

@@ -481,6 +481,7 @@ impl BinaryData for JudgeLine {
         let ctrl_obj = RefCell::new(r.read()?);
         let incline = r.read()?;
         let z_index = r.read()?;
+        let scale_on_notes = r.read()?;
 
         let cache = JudgeLineCache::new(&mut notes);
         Ok(Self {
@@ -498,6 +499,7 @@ impl BinaryData for JudgeLine {
             ctrl_obj,
             incline,
             z_index,
+            scale_on_notes,
 
             cache,
         })
@@ -534,6 +536,7 @@ impl BinaryData for JudgeLine {
         w.write(self.ctrl_obj.borrow().deref())?;
         w.write(&self.incline)?;
         w.write(&self.z_index)?;
+        w.write_val(self.scale_on_notes)?;
         Ok(())
     }
 }

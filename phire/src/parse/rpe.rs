@@ -234,6 +234,8 @@ pub struct RPEJudgeLine {
     alpha_control: Vec<RPECtrlEvent>,
     #[serde(default)]
     y_control: Vec<RPECtrlEvent>,
+    #[serde(default)]
+    scale_on_notes: u8,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -751,6 +753,7 @@ async fn parse_judge_line(
         z_index: rpe.z_order,
         show_below: rpe.is_cover != 1,
         attach_ui: rpe.attach_ui,
+        scale_on_notes: rpe.scale_on_notes,
 
         cache,
     })
