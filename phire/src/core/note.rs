@@ -88,7 +88,7 @@ fn draw_tex(res: &Resource, texture: &Texture2D, order: i8, x: f32, y: f32, colo
     params.flip_y ^= true;
     draw_tex_pts(res, texture, order, p, color, params, clip_x_range, clip_y_range);
 }
-fn draw_tex_pts(res: &Resource, texture: Texture2D, order: i8, mut p: [Point; 4], color: Color, params: DrawTextureParams, clip_x_range: Option<(f32, f32)>, clip_y_range: Option<(f32, f32)>) {
+fn draw_tex_pts(res: &Resource, texture: &Texture2D, order: i8, mut p: [Point; 4], color: Color, params: DrawTextureParams, clip_x_range: Option<(f32, f32)>, clip_y_range: Option<(f32, f32)>) {
     p = p.map(|it| res.world_to_screen(it));
     if p[0].x.min(p[1].x.min(p[2].x.min(p[3].x))) > 1. / res.config.chart_ratio
         || p[0].x.max(p[1].x.max(p[2].x.max(p[3].x))) < -1. / res.config.chart_ratio
@@ -384,7 +384,7 @@ impl Note {
         match self.kind {
             NoteKind::Click => {
                 if self.fake && res.time >= self.time { return };
-                draw(res, *style.click);
+                draw(res, Texture2D::clone(&style.click));
             }
             NoteKind::Hold { end_time, end_height, end_speed } => {
                 if self.fake && res.time >= end_time { return };
@@ -516,11 +516,11 @@ impl Note {
             }
             NoteKind::Flick => {
                 if self.fake && res.time >= self.time { return };
-                draw(res, *style.flick);
+                draw(res, Texture2D::clone(&style.flick));
             }
             NoteKind::Drag => {
                 if self.fake && res.time >= self.time { return };
-                draw(res, *style.drag);
+                draw(res, Texture2D::clone(&style.drag));
             }
         }
         if res.config.chart_debug_note > 0. {
