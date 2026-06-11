@@ -7,7 +7,7 @@ use macroquad::prelude::{
     utils::{register_input_subscriber, repeat_all_miniquad_input},
     *,
 };
-use miniquad::{EventHandler, MouseButton};
+use macroquad::miniquad::{EventHandler, MouseButton};
 use once_cell::sync::Lazy;
 use rustc_hash::FxHashMap;
 use sasa::{PlaySfxParams, Sfx};
@@ -50,7 +50,9 @@ fn get_uptime() -> f64 {
 
 #[cfg(target_os = "windows")]
 fn get_uptime() -> f64 {
-    miniquad::native::windows::get_uptime()
+    static START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+    let start = START.get_or_init(std::time::Instant::now);
+    start.elapsed().as_secs_f64()
 }
 
 #[derive(Debug, Clone)]
@@ -246,7 +248,7 @@ impl JudgeInner {
         }
     }
 
-    pub fn result(&self) -> PlayResult {
+    pub fn result(&self, track_complete: bool) -> PlayResult {
         let early = self.diffs.iter().filter(|it| **it < 0.).count() as u32;
         PlayResult {
             score: self.score(),
@@ -257,6 +259,7 @@ impl JudgeInner {
             early,
             late: self.diffs.len() as u32 - early,
             std: 0.,
+            track_complete,
         }
     }
 
@@ -290,7 +293,12 @@ pub struct Judge {
 
 static SUBSCRIBER_ID: Lazy<usize> = Lazy::new(register_input_subscriber);
 thread_local! {
-    static TOUCHES: RefCell<(Vec<Touch>, i32, u32)> = RefCell::default();
+    static TOUCHES: RefCell<TouchStatus> = RefCell::default();
+    static WHEEL: RefCell<(f32, f32)> = RefCell::default();
+}
+
+pub fn take_wheel() -> (f32, f32) {
+    WHEEL.with(|it| std::mem::take(&mut *it.borrow_mut()))
 }
 
 impl Judge {
@@ -344,11 +352,17 @@ impl Judge {
     }
 
     pub(crate) fn on_new_frame() {
-        let mut handler = Handler(Vec::new(), 0, 0);
+        let mut handler = Handler {
+            status: TouchStatus::default(),
+            wheel: (0., 0.),
+        };
         repeat_all_miniquad_input(&mut handler, *SUBSCRIBER_ID);
         handler.finalize();
         TOUCHES.with(|it| {
-            *it.borrow_mut() = (handler.0, handler.1, handler.2);
+            *it.borrow_mut() = handler.status;
+        });
+        WHEEL.with(|it| {
+            *it.borrow_mut() = handler.wheel;
         });
     }
 
@@ -387,7 +401,7 @@ impl Judge {
             let guard = it.borrow();
             let tr = Self::touch_transform(false, scale, 0., low_resolution_mode);
             guard
-                .0
+                .touches
                 .iter()
                 .cloned()
                 .map(|mut it| {
@@ -416,7 +430,7 @@ impl Judge {
         let t = res.time;
         // TODO optimize
         let mut touches: HashMap<u64, Touch> = {
-            let mut touches = touches();
+            let mut touches: Vec<Touch> = touches().into_iter().map(|t| Touch { id: t.id, phase: t.phase, position: t.position, time: f64::NEG_INFINITY }).collect();
             let btn = MouseButton::Left;
             let id = button_to_id(btn);
             if is_mouse_button_pressed(btn) {
@@ -455,15 +469,15 @@ impl Judge {
         };
         let (events, keys_down) = TOUCHES.with(|it| {
             let guard = it.borrow();
-            (guard.0.clone(), guard.2)
+            (guard.touches.clone(), guard.keys_down)
         });
-        self.key_down_count = self.key_down_count.saturating_add_signed(TOUCHES.with(|it| it.borrow().1));
+        self.key_down_count = self.key_down_count.saturating_add_signed(TOUCHES.with(|it| it.borrow().key_delta));
         {
             fn to_local(Vec2 { x, y }: Vec2) -> Point {
                 Point::new(x / screen_width() * 2. - 1., y / screen_height() * 2. - 1.)
             }
-            let delta = (t / spd - self.last_time) as f64 / (events.len() + 1) as f64;
-            let mut t = self.last_time as f64;
+            let delta = ((t / spd - self.last_time)) / (events.len() + 1) as f64;
+            let mut t = self.last_time;
             for Touch {
                 id,
                 phase,
@@ -504,7 +518,7 @@ impl Judge {
                 it.time = if it.time.is_infinite() {
                     f64::NEG_INFINITY
                 } else {
-                    t as f64 - (uptime - it.time) * spd as f64
+                    t - (uptime - it.time) * spd
                 };
                 it
             })
@@ -544,7 +558,7 @@ impl Judge {
         for (id, touch) in touches.iter().enumerate() {
             let click = touch.phase == TouchPhase::Started;
             let flick =
-                matches!(touch.phase, TouchPhase::Moved | TouchPhase::Stationary) && self.trackers.get_mut(&touch.id).map_or(false, |it| it.flicked);
+                matches!(touch.phase, TouchPhase::Moved | TouchPhase::Stationary) && self.trackers.get_mut(&touch.id).is_some_and(|it| it.flicked);
             if !(click || flick) {
                 continue;
             }
@@ -607,8 +621,7 @@ impl Judge {
                     x.set_time(t);
                     let judge_time = t - note.time;
                     matches!(note.kind, NoteKind::Drag | NoteKind::Flick)
-                        && judge_time >= -LIMIT_GOOD
-                        && judge_time <= LIMIT_BAD
+                        && (-LIMIT_GOOD..=LIMIT_BAD).contains(&judge_time)
                         && (x.now() - posx).abs() as f64 <= (x_diff_max - NOTE_WIDTH_RATIO_BASE) + NOTE_WIDTH_RATIO_BASE * note.judge_scale // note_dist <= x_diff_max
                         && !note.protected
                         && !note.fake
@@ -732,7 +745,7 @@ impl Judge {
             line.object.set_time(t);
             for id in &idx[*st..] {
                 let note = &mut line.notes[*id as usize];
-                let x_diff_max = (x_diff_max - NOTE_WIDTH_RATIO_BASE) + NOTE_WIDTH_RATIO_BASE * note.judge_scale as f64;
+                let x_diff_max = (x_diff_max - NOTE_WIDTH_RATIO_BASE) + NOTE_WIDTH_RATIO_BASE * note.judge_scale;
                 if let NoteKind::Hold { end_time, .. } = &note.kind {
                     if let JudgeStatus::Hold(.., ref mut pre_judge, ref mut up_time) = note.judge {
                         if (*end_time - t) / spd <= LIMIT_BAD {
@@ -742,7 +755,7 @@ impl Judge {
                         let x = &mut note.object.translation.0;
                         x.set_time(t);
                         let x = x.now();
-                        if self.key_down_count == 0 && !pos.iter().any(|it| it.map_or(false, |it| (it.x - x).abs() <= x_diff_max as f32)) {
+                        if self.key_down_count == 0 && !pos.iter().any(|it| it.is_some_and(|it| (it.x - x).abs() <= x_diff_max as f32)) {
                             if t > *up_time + UP_TOLERANCE {
                                 note.judge = JudgeStatus::Judged;
                                 judgements.push((Judgement::Miss, line_id, *id, None));
@@ -785,7 +798,7 @@ impl Judge {
                 let x = x.now();
                 if self.key_down_count != 0
                     || pos.iter().any(|it| {
-                        it.map_or(false, |it| {
+                        it.is_some_and(|it| {
                             let dx = (it.x - x).abs() as f64;
                             dx <= x_diff_max && dt <= (LIMIT_BAD - LIMIT_PERFECT * (dx - 0.9).max(0.))
                         })
@@ -918,7 +931,7 @@ impl Judge {
         for (line, (idx, st)) in chart.lines.iter().zip(self.notes.iter_mut()) {
             while idx
                 .get(*st)
-                .map_or(false, |id| matches!(line.notes[*id as usize].judge, JudgeStatus::Judged))
+                .is_some_and(|id| matches!(line.notes[*id as usize].judge, JudgeStatus::Judged))
             {
                 *st += 1;
             }
@@ -978,7 +991,7 @@ impl Judge {
             }
             while idx
                 .get(*st)
-                .map_or(false, |id| matches!(line.notes[*id as usize].judge, JudgeStatus::Judged))
+                .is_some_and(|id| matches!(line.notes[*id as usize].judge, JudgeStatus::Judged))
             {
                 *st += 1;
             }
@@ -1045,8 +1058,8 @@ impl Judge {
     }
 
     #[inline]
-    pub fn result(&self) -> PlayResult {
-        self.inner.result()
+    pub fn result(&self, track_complete: bool) -> PlayResult {
+        self.inner.result(track_complete)
     }
 
     #[inline]
@@ -1060,11 +1073,21 @@ impl Judge {
     }
 }
 
-struct Handler(Vec<Touch>, i32, u32);
+#[derive(Default)]
+struct TouchStatus {
+    touches: Vec<Touch>,
+    key_delta: i32,
+    keys_down: u32,
+}
+
+struct Handler {
+    status: TouchStatus,
+    wheel: (f32, f32),
+}
 impl Handler {
     fn finalize(&mut self) {
         if is_mouse_button_down(MouseButton::Left) {
-            self.0.push(Touch {
+            self.status.touches.push(Touch {
                 id: button_to_id(MouseButton::Left),
                 phase: TouchPhase::Moved,
                 position: mouse_position().into(),
@@ -1085,10 +1108,10 @@ fn button_to_id(button: MouseButton) -> u64 {
 }
 
 impl EventHandler for Handler {
-    fn update(&mut self, _: &mut miniquad::Context) {}
-    fn draw(&mut self, _: &mut miniquad::Context) {}
-    fn touch_event(&mut self, _: &mut miniquad::Context, phase: miniquad::TouchPhase, id: u64, x: f32, y: f32, time: f64) {
-        self.0.push(Touch {
+    fn update(&mut self) {}
+    fn draw(&mut self) {}
+    fn touch_event(&mut self, phase: miniquad::TouchPhase, id: u64, x: f32, y: f32, time: f64) {
+        self.status.touches.push(Touch {
             id,
             phase: phase.into(),
             position: vec2(x, y),
@@ -1096,8 +1119,13 @@ impl EventHandler for Handler {
         });
     }
 
-    fn mouse_button_down_event(&mut self, _ctx: &mut miniquad::Context, button: MouseButton, x: f32, y: f32) {
-        self.0.push(Touch {
+    fn mouse_wheel_event(&mut self, x: f32, y: f32) {
+        self.wheel.0 += x;
+        self.wheel.1 += y;
+    }
+
+    fn mouse_button_down_event(&mut self, button: MouseButton, x: f32, y: f32) {
+        self.status.touches.push(Touch {
             id: button_to_id(button),
             phase: TouchPhase::Started,
             position: vec2(x, y),
@@ -1105,8 +1133,8 @@ impl EventHandler for Handler {
         });
     }
 
-    fn mouse_button_up_event(&mut self, _ctx: &mut miniquad::Context, button: MouseButton, x: f32, y: f32) {
-        self.0.push(Touch {
+    fn mouse_button_up_event(&mut self, button: MouseButton, x: f32, y: f32) {
+        self.status.touches.push(Touch {
             id: button_to_id(button),
             phase: TouchPhase::Ended,
             position: vec2(x, y),
@@ -1114,15 +1142,15 @@ impl EventHandler for Handler {
         });
     }
 
-    fn key_down_event(&mut self, _ctx: &mut miniquad::Context, _keycode: KeyCode, _keymods: miniquad::KeyMods, repeat: bool) {
+    fn key_down_event(&mut self, _keycode: KeyCode, _keymods: miniquad::KeyMods, repeat: bool) {
         if !repeat {
-            self.1 += 1;
-            self.2 += 1;
+            self.status.key_delta += 1;
+            self.status.keys_down += 1;
         }
     }
 
-    fn key_up_event(&mut self, _ctx: &mut miniquad::Context, _keycode: KeyCode, _keymods: miniquad::KeyMods) {
-        self.1 -= 1;
+    fn key_up_event(&mut self, _keycode: KeyCode, _keymods: miniquad::KeyMods) {
+        self.status.key_delta -= 1;
     }
 }
 
@@ -1136,17 +1164,19 @@ pub struct PlayResult {
     pub early: u32,
     pub late: u32,
     pub std: f32,
+    pub track_complete: bool,
 }
 
-pub fn icon_index(score: u32, full_combo: bool) -> usize {
-    match (score, full_combo) {
-        (x, _) if x >= 1000000 => 0,
-        (_, true) => 1,
-        (x, _) if x < 700000 => 7,
-        (x, _) if x < 820000 => 6,
-        (x, _) if x < 880000 => 5,
-        (x, _) if x < 920000 => 4,
-        (x, _) if x < 960000 => 3,
-        (_, false) => 2,
+pub fn icon_index(score: u32, full_combo: bool, track_complete: bool) -> usize {
+    match (score, full_combo, track_complete) {
+        (_, _, false) => 7,
+        (x, _, _) if x >= 1000000 => 0,
+        (_, true, _) => 1,
+        (x, _, _) if x < 700000 => 7,
+        (x, _, _) if x < 820000 => 6,
+        (x, _, _) if x < 880000 => 5,
+        (x, _, _) if x < 920000 => 4,
+        (x, _, _) if x < 960000 => 3,
+        (_, false, _) => 2,
     }
 }

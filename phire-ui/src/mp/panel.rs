@@ -14,10 +14,10 @@ use phire::{
     core::{Smooth, Tweenable},
     ext::{poll_future, semi_black, semi_white, LocalTask, RectExt, SafeTexture},
     info::ChartInfo,
-    scene::{request_input, return_input, show_error, show_message, take_input, GameMode, NextScene},
+    scene::{show_error, show_message, GameMode, NextScene},
     task::Task,
     time::TimeManager,
-    ui::{DRectButton, DrawText},
+    ui::{DRectButton, DrawText, InlineInputBox},
     ui::{Scroll, Ui},
 };
 use smallvec::SmallVec;
@@ -87,8 +87,12 @@ pub struct MPPanel {
 
     chat_text: String,
     chat_btn: DRectButton,
+    chat_input: InlineInputBox,
     chat_send_btn: DRectButton,
     chat_task: Option<Task<Result<()>>>,
+
+    room_id_input: InlineInputBox,
+    join_room_input: InlineInputBox,
 
     download_task: Option<Task<Result<Arc<Chart>>>>,
     downloading: Option<Downloading>,
@@ -143,8 +147,12 @@ impl MPPanel {
 
             chat_text: String::new(),
             chat_btn: DRectButton::new().with_delta(-0.002),
+            chat_input: InlineInputBox::new(),
             chat_send_btn: DRectButton::new(),
             chat_task: None,
+
+            room_id_input: InlineInputBox::new(),
+            join_room_input: InlineInputBox::new(),
 
             download_task: None,
             downloading: None,
@@ -298,12 +306,46 @@ impl MPPanel {
             return true;
         }
         if let Some(client) = &self.client {
+            if self.chat_input.is_active() {
+                if self.chat_input.touch(touch) {
+                    self.chat_text = self.chat_input.confirm();
+                    return true;
+                }
+                return true;
+            }
+            if self.room_id_input.is_active() {
+                if self.room_id_input.touch(touch) {
+                    let text = self.room_id_input.confirm();
+                    match text.try_into() {
+                        Ok(id) => self.create_room(id),
+                        Err(_) => { show_message(mtl!("create-invalid-id")).error(); }
+                    }
+                    return true;
+                }
+                return true;
+            }
+            if self.join_room_input.is_active() {
+                if self.join_room_input.touch(touch) {
+                    let text = self.join_room_input.confirm();
+                    let client = Arc::clone(client);
+                    if let Ok(id) = text.try_into() {
+                        self.join_room_task = Some(Task::new(async move {
+                            client.join_room(id, false).await?;
+                            client.room_state().await.ok_or_else(|| anyhow!("expected room state"))
+                        }));
+                    } else {
+                        show_message(mtl!("join-room-invalid-id")).error();
+                    }
+                    return true;
+                }
+                return true;
+            }
             if self.msg_scroll.touch(touch, t) {
                 return true;
             }
             if let Some(state) = client.blocking_state() {
                 if self.chat_btn.touch(touch, t) {
-                    request_input("chat", &self.chat_text, mtl!("chat-placeholder"));
+                    self.chat_input.activate(&self.chat_text, false, false);
                     return true;
                 }
                 if self.chat_send_btn.touch(touch, t) {
@@ -363,11 +405,11 @@ impl MPPanel {
                 }
             } else {
                 if self.create_room_btn.touch(touch, t) {
-                    request_input("room_id", "", "");
+                    self.room_id_input.activate("", false, false);
                     return true;
                 }
                 if self.join_room_btn.touch(touch, t) {
-                    request_input("join_room", "", mtl!("join-room"));
+                    self.join_room_input.activate("", false, false);
                     return true;
                 }
                 if self.disconnect_btn.touch(touch, t) {
@@ -397,6 +439,15 @@ impl MPPanel {
             self.msgs_dirty_from = 0;
         }
         self.msg_scroll.update(t);
+        if self.chat_input.is_active() {
+            let _ = self.chat_input.update();
+        }
+        if self.room_id_input.is_active() {
+            self.room_id_input.update()
+        }
+        if self.join_room_input.is_active() {
+            self.join_room_input.update()
+        }
         if let Some(client) = &self.client {
             self.msgs.extend(client.blocking_take_messages().into_iter().map(|msg| {
                 use phira_mp_common::Message as M;
@@ -469,6 +520,7 @@ impl MPPanel {
                         Mods::default(),
                         GameMode::NoRetry,
                         self.client.as_ref().map(Arc::clone),
+                        false,
                     )?;
                 }
             } else {
@@ -583,28 +635,6 @@ impl MPPanel {
                     }
                 }
                 self.task = None;
-            }
-        }
-        if let Some((id, text)) = take_input() {
-            match id.as_str() {
-                "chat" => {
-                    self.chat_text = text;
-                }
-                "room_id" => {
-                    self.create_room(text.try_into().with_context(|| mtl!("create-invalid-id"))?);
-                }
-                "join_room" => {
-                    let client = self.clone_client();
-                    if let Ok(id) = text.try_into() {
-                        self.join_room_task = Some(Task::new(async move {
-                            client.join_room(id, false).await?;
-                            client.room_state().await.ok_or_else(|| anyhow!("expected room state"))
-                        }));
-                    } else {
-                        show_message(mtl!("join-room-invalid-id")).error();
-                    }
-                }
-                _ => return_input(id, text),
             }
         }
         if let Some(task) = &mut self.scene_task {
@@ -724,7 +754,11 @@ impl MPPanel {
             let lw = 0.16;
             let h = 0.09;
             let br = Rect::new(r.x, r.bottom() - h, mr.w - lw - 0.02, h);
-            self.chat_btn.render_input(ui, br, t, 1., &self.chat_text, mtl!("chat-placeholder"), 0.5);
+            if self.chat_input.is_active() {
+                self.chat_input.render(ui, br, 1., &mtl!("chat-placeholder"));
+            } else {
+                self.chat_btn.render_input(ui, br, t, 1., &self.chat_text, mtl!("chat-placeholder"), 0.5);
+            }
             let br = Rect::new(mr.right() - lw, br.y, lw, br.h);
             self.chat_send_btn.render_text(ui, br, t, 1., mtl!("chat-send"), 0.5, true);
         }

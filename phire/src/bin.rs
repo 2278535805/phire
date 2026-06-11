@@ -1,7 +1,6 @@
 use crate::{
     core::{
-        Anim, AnimVector, BezierTween, BpmList, Chart, ChartExtra, ChartSettings, ClampedTween, CtrlObject, JudgeLine, JudgeLineCache, JudgeLineKind,
-        Keyframe, Note, NoteKind, Object, StaticTween, Tweenable, UIElement,
+        Anim, AnimVector, BezierTween, BpmList, Chart, ChartExtra, ChartSettings, ClampedTween, CtrlObject, JudgeLine, JudgeLineCache, JudgeLineKind, Keyframe, Note, NoteKind, Object, StaticTween, TextData, Tweenable, UIElement
     },
     judge::{HitSound, JudgeStatus},
     parse::process_lines,
@@ -228,6 +227,20 @@ impl BinaryData for Color {
         w.write_val((self.b * 255.) as u8)?;
         w.write_val((self.a * 255.) as u8)?;
         Ok(())
+    }
+}
+
+impl BinaryData for TextData {
+    fn read_binary<R: Read>(r: &mut BinaryReader<R>) -> Result<Self> {
+        Ok(Self {
+            text: r.read()?,
+            font_id: r.read()?,
+        })
+    }
+
+    fn write_binary<W: Write>(&self, w: &mut BinaryWriter<W>) -> Result<()> {
+        w.write(&self.text)?;
+        w.write(&self.font_id)
     }
 }
 
@@ -549,7 +562,7 @@ impl BinaryData for Chart {
         let mut lines = r.array()?;
         process_lines(&mut lines);
         let settings = r.read()?;
-        Ok(Chart::new(offset, lines, BpmList::new(vec![(0., 60.)]), settings, ChartExtra::default(), FxHashMap::default()))
+        Ok(Chart::new(offset, lines, BpmList::new(vec![(0., 60.)]), settings, ChartExtra::default(), FxHashMap::default(), Vec::new()))
     }
 
     fn write_binary<W: Write>(&self, w: &mut BinaryWriter<W>) -> Result<()> {

@@ -84,6 +84,7 @@ pub struct HealthConfig {
     pub mode: HealthType,
     pub max_health: f32,
     pub initial_health: f32,
+    pub complete_health: f32,
 
     pub perfect_heal: bool,
     pub good_heal: bool,
@@ -99,6 +100,7 @@ impl Default for HealthConfig {
             mode: HealthType::SpeedBased(SpeedBasedConfig::default()),
             max_health: 100.0,
             initial_health: 70.0,
+            complete_health: -1.0,
 
             perfect_heal: true,
             good_heal: false,
@@ -112,11 +114,11 @@ impl Default for HealthConfig {
 
 impl HealthConfig {
     pub fn to_json(&self) -> Result<String> {
-        serde_json::to_string_pretty(self).map_err(|e| anyhow::Error::from(e))
+        serde_json::to_string_pretty(self).map_err(anyhow::Error::from)
     }
 
     pub fn from_json(json: &str) -> Result<Self> {
-        serde_json::from_str(json).map_err(|e| anyhow::Error::from(e))
+        serde_json::from_str(json).map_err(anyhow::Error::from)
     }
 }
 

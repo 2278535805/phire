@@ -1,7 +1,7 @@
 crate::tl_file!("parser");
 
 use super::{BpmList, Effect, JudgeLine, JudgeLineKind, Matrix, Resource, UIElement, Vector};
-use crate::{core::Object, fs::FileSystem, judge::JudgeStatus, ui::Ui};
+use crate::{core::Object, fs::FileSystem, judge::JudgeStatus, ui::{TextPainter, Ui}};
 use anyhow::{Context, Result};
 use macroquad::prelude::*;
 use rustc_hash::FxHashMap;
@@ -33,6 +33,7 @@ pub struct Chart {
     pub settings: ChartSettings,
     pub extra: ChartExtra,
     pub hitsounds: HitSoundMap,
+    pub fonts: Vec<RefCell<TextPainter>>,
 
     order: Vec<usize>,
     attach_ui: [Option<usize>; 7],
@@ -40,7 +41,7 @@ pub struct Chart {
 }
 
 impl Chart {
-    pub fn new(offset: f64, lines: Vec<JudgeLine>, bpm_list: BpmList, settings: ChartSettings, extra: ChartExtra, hitsounds: HitSoundMap) -> Self {
+    pub fn new(offset: f64, lines: Vec<JudgeLine>, bpm_list: BpmList, settings: ChartSettings, extra: ChartExtra, hitsounds: HitSoundMap, fonts: Vec<RefCell<TextPainter>>) -> Self {
         let mut attach_ui = [None; 7];
         let mut order = (0..lines.len())
             .filter(|it| {
@@ -64,6 +65,7 @@ impl Chart {
             order,
             attach_ui,
             hitsounds,
+            fonts,
             trs,
         }
     }
@@ -79,9 +81,9 @@ impl Chart {
                 let mut tr = line.fetch_pos(res, lines);
                 tr.y *= -res.aspect_ratio;
                 tr.x *= res.aspect_ratio;
-                let sc = object.now_scale_wrt_point(scale_point.map_or_else(|| Vector::default(), |(x, y)| Vector::new(x, y)));
+                let sc = object.now_scale_wrt_point(scale_point.map_or_else(Vector::default, |(x, y)| Vector::new(x, y)));
                 let ro = 
-                Object::new_rotation_wrt_point(Rotation2::new(-line.fetch_rot(lines).to_radians()), rotation_point.map_or_else(|| Vector::default(), |(x, y)| Vector::new(x, y)));
+                Object::new_rotation_wrt_point(Rotation2::new(-line.fetch_rot(lines).to_radians()), rotation_point.map_or_else(Vector::default, |(x, y)| Vector::new(x, y)));
                 Matrix::new_translation(&tr) * ro * sc
             };
             let mut color = line.color.now_opt().unwrap_or(default_color);

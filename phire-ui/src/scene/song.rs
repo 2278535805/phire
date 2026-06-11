@@ -11,6 +11,7 @@ use crate::{
     popup::Popup,
     rate::RateDialog,
     save_data,
+    scene::UnlockScene,
     tags::TagsDialog,
 };
 use ::rand::{rng, Rng};
@@ -28,7 +29,7 @@ use phire::{
     judge::{icon_index, Judge},
     scene::{
         request_input, return_input, show_error, show_message, take_input, BasicPlayer, GameMode, LoadingScene, LocalSceneTask, NextScene,
-        RecordUpdateState, Scene, SimpleRecord, UpdateFn,
+        RecordUpdateState, Scene, SimpleRecord, UpdateFn, UploadFn,
     },
     task::Task,
     time::TimeManager,
@@ -540,6 +541,7 @@ impl SongScene {
                         local_path,
                         record: None,
                         mods: Mods::default(),
+                        played_unlock: false,
                     })
                 }
             }),
@@ -594,9 +596,17 @@ impl SongScene {
         if self.info.id.is_some() {
             self.menu_options.push("rate");
         }
-        if self.local_path.is_some() {
+        if let Some(local_path) = &self.local_path {
             self.menu_options.push("exercise");
             self.menu_options.push("offset");
+            if get_data()
+                .charts
+                .iter()
+                .find(|it| it.local_path == *local_path)
+                .is_some_and(|it| it.played_unlock)
+            {
+                self.menu_options.push("unlock");
+            }
         }
         let perms = get_data().me.as_ref().map(|it| it.perms()).unwrap_or_default();
         let is_uploader = get_data()
@@ -633,8 +643,16 @@ impl SongScene {
         self.menu.set_options(self.menu_options.iter().map(|it| tl!(it).into_owned()).collect());
     }
 
-    fn launch(&mut self, mode: GameMode) -> Result<()> {
-        self.scene_task = Self::global_launch(self.info.id, self.local_path.as_ref().unwrap(), self.mods, mode, None)?;
+    fn launch(&mut self, mode: GameMode, force_unlock: bool) -> Result<()> {
+        let local_path = self.local_path.as_ref().unwrap();
+        let is_unlock = force_unlock
+            || (mode == GameMode::Normal
+                && get_data()
+                    .charts
+                    .iter()
+                    .find(|it| it.local_path == *local_path)
+                    .is_some_and(|it| it.info.has_unlock && !it.played_unlock));
+        self.scene_task = Self::global_launch(self.info.id, local_path, self.mods, mode, None, is_unlock)?;
         Ok(())
     }
 
@@ -645,8 +663,10 @@ impl SongScene {
         mods: Mods,
         mode: GameMode,
         client: Option<Arc<phira_mp_client::Client>>,
+        is_unlock: bool,
     ) -> Result<LocalSceneTask> {
         let mut fs = fs_from_path(local_path)?;
+        let local_path = local_path.to_owned();
         #[cfg(feature = "closed")]
         let rated = {
             let config = &get_data().config;
@@ -775,59 +795,64 @@ impl SongScene {
             };
             let chart_updated = info.chart_updated;
             config.mods = mods;
-            LoadingScene::new(
-                None,
-                mode,
-                info,
-                &config,
-                fs,
-                get_data().me.as_ref().map(|it| BasicPlayer {
-                    avatar: UserManager::get_avatar(it.id).flatten(),
-                    id: it.id,
-                    rks: it.rks,
-                }),
-                Some(Arc::new(move |data| {
-                    Task::new(async move {
-                        #[derive(Serialize)]
-                        #[serde(rename_all = "camelCase")]
-                        struct Req {
-                            chart: i32,
-                            token: String,
-                            chart_updated: Option<DateTime<Utc>>,
-                        }
-                        #[derive(Deserialize)]
-                        #[serde(rename_all = "camelCase")]
-                        struct Resp {
-                            id: i32,
-                            exp_delta: f64,
-                            new_best: bool,
-                            improvement: u32,
-                            new_rks: f32,
-                        }
-                        let resp: Resp = recv_raw(Client::post(
-                            "/play/upload",
-                            &Req {
-                                chart: id.unwrap(),
-                                token: base64::Engine::encode(&base64::engine::general_purpose::STANDARD, data),
-                                chart_updated,
-                            },
-                        ))
-                        .await?
-                        .json()
-                        .await?;
-                        RECORD_ID.store(resp.id, Ordering::Relaxed);
-                        Ok(RecordUpdateState {
-                            best: resp.new_best,
-                            improvement: resp.improvement,
-                            gain_exp: resp.exp_delta as f32,
-                            new_rks: resp.new_rks,
-                        })
+            let player = get_data().me.as_ref().map(|it| BasicPlayer {
+                avatar: UserManager::get_avatar(it.id).flatten(),
+                id: it.id,
+                rks: it.rks,
+            });
+            let upload_fn: Option<UploadFn> = Some(Arc::new(move |data| {
+                Task::new(async move {
+                    #[derive(Serialize)]
+                    #[serde(rename_all = "camelCase")]
+                    struct Req {
+                        chart: i32,
+                        token: String,
+                        chart_updated: Option<DateTime<Utc>>,
+                    }
+                    #[derive(Deserialize)]
+                    #[serde(rename_all = "camelCase")]
+                    struct Resp {
+                        id: i32,
+                        exp_delta: f64,
+                        new_best: bool,
+                        improvement: u32,
+                        new_rks: f32,
+                    }
+                    let resp: Resp = recv_raw(Client::post(
+                        "/play/upload",
+                        &Req {
+                            chart: id.unwrap(),
+                            token: base64::Engine::encode(&base64::engine::general_purpose::STANDARD, data),
+                            chart_updated,
+                        },
+                    ))
+                    .await?
+                    .json()
+                    .await?;
+                    RECORD_ID.store(resp.id, Ordering::Relaxed);
+                    Ok(RecordUpdateState {
+                        best: resp.new_best,
+                        improvement: resp.improvement,
+                        gain_exp: resp.exp_delta as f32,
+                        new_rks: resp.new_rks,
                     })
-                })),
-                update_fn,
-            )
-            .await
-            .map(|it| NextScene::Overlay(Box::new(it)))
+                })
+            }));
+            if is_unlock {
+                let chart = get_data_mut().charts.iter_mut().find(|it| it.local_path == local_path).unwrap();
+                if !chart.played_unlock {
+                    chart.played_unlock = true;
+                    save_data()?;
+                }
+
+                UnlockScene::new(mode, info, config, fs, player, upload_fn, update_fn)
+                    .await
+                    .map(|it| NextScene::Overlay(Box::new(it)))
+            } else {
+                LoadingScene::new(None, mode, info, &config, fs, player, upload_fn, update_fn)
+                    .await
+                    .map(|it| NextScene::Overlay(Box::new(it)))
+            }
         })))
     }
 
@@ -1306,7 +1331,7 @@ impl Scene for SongScene {
         }
         if self.play_btn.touch(touch, t) {
             if self.local_path.is_some() {
-                self.launch(GameMode::Normal)?;
+                self.launch(GameMode::Normal, false)?;
             } else {
                 self.start_download()?;
             }
@@ -1508,10 +1533,13 @@ impl Scene for SongScene {
                     self.rate_dialog.enter(tm.real_time() as _);
                 }
                 "exercise" => {
-                    self.launch(GameMode::Exercise)?;
+                    self.launch(GameMode::Exercise, false)?;
                 }
                 "offset" => {
-                    self.launch(GameMode::TweakOffset)?;
+                    self.launch(GameMode::TweakOffset, false)?;
+                }
+                "unlock" => {
+                    self.launch(GameMode::Normal, true)?;
                 }
                 "review-approve" => {
                     let id = self.info.id.unwrap();
@@ -1883,14 +1911,14 @@ impl Scene for SongScene {
     fn render(&mut self, tm: &mut TimeManager, ui: &mut Ui) -> Result<()> {
         set_camera(&ui.camera());
         let t = tm.now() as f32;
-        ui.fill_rect(ui.screen_rect(), (*self.illu.texture.1, ui.screen_rect()));
+        ui.fill_rect(ui.screen_rect(), (Texture2D::clone(&self.illu.texture.1), ui.screen_rect()));
         ui.fill_rect(ui.screen_rect(), semi_black(0.55));
 
         let c = semi_white((t / FADE_IN_TIME).clamp(-1., 0.) + 1.);
 
         let r = ui.back_rect();
         self.back_btn.set(ui, r);
-        ui.fill_rect(r, (*self.icons.back, r, ScaleType::Fit, WHITE));
+        ui.fill_rect(r, (Texture2D::clone(&self.icons.back), r, ScaleType::Fit, WHITE));
 
         let r = ui
             .text(&self.info.name)
@@ -1908,8 +1936,8 @@ impl Scene for SongScene {
         // bottom bar
         let s = 0.25;
         let r = Rect::new(-0.94, ui.top - s - 0.06, s, s);
-        let icon = self.record.as_ref().map_or(7, |it| icon_index(it.score as _, it.full_combo));
-        ui.fill_rect(r, (*self.rank_icons[icon], r, ScaleType::Fit, c));
+        let icon = self.record.as_ref().map_or(7, |it| icon_index(it.score as _, it.full_combo, it.track_complete));
+        ui.fill_rect(r, (Texture2D::clone(&self.rank_icons[icon]), r, ScaleType::Fit, c));
         let score = self.record.as_ref().map(|it| it.score).unwrap_or_default();
         let score = (score as f64 / 1_000_000.0 * self.info.score_total as f64) as u32;
         let accuracy = self.record.as_ref().map(|it| it.accuracy).unwrap_or_default();
@@ -1930,7 +1958,7 @@ impl Scene for SongScene {
         if self.info.id.is_some() {
             let h = 0.09;
             let mut r = Rect::new(r.x, r.y - h, h, h);
-            ui.fill_rect(r, (*self.icons.ldb, r, ScaleType::Fit, c));
+            ui.fill_rect(r, (Texture2D::clone(&self.icons.ldb), r, ScaleType::Fit, c));
             if let Some((rank, _)) = &self.ldb {
                 ui.text(if let Some(rank) = rank {
                     format!("#{rank}")
@@ -1970,9 +1998,9 @@ impl Scene for SongScene {
             r,
             (
                 if self.local_path.is_some() {
-                    *self.icons.play
+                    Texture2D::clone(&self.icons.play)
                 } else {
-                    *self.icons.download
+                    Texture2D::clone(&self.icons.download)
                 },
                 r,
                 ScaleType::Fit,
@@ -1986,7 +2014,10 @@ impl Scene for SongScene {
             let s = 0.08;
             let r = Rect::new(-s, 0., s, s);
             let cc = semi_white(c.a * 0.4);
-            ui.fill_rect(r, (*self.icons.menu, r.feather(-0.02), ScaleType::Fit, if self.menu_options.is_empty() { cc } else { c }));
+            ui.fill_rect(
+                r,
+                (Texture2D::clone(&self.icons.menu), r.feather(-0.02), ScaleType::Fit, if self.menu_options.is_empty() { cc } else { c }),
+            );
             self.menu_btn.set(ui, r);
             if self.need_show_menu {
                 self.need_show_menu = false;
@@ -1996,13 +2027,13 @@ impl Scene for SongScene {
                 self.menu.show(ui, t, Rect::new(r.x - d, r.bottom() + 0.02, r.w + d, 0.5));
             }
             ui.dx(-r.w - 0.03);
-            ui.fill_rect(r, (*self.icons.info, r, ScaleType::Fit, c));
+            ui.fill_rect(r, (Texture2D::clone(&self.icons.info), r, ScaleType::Fit, c));
             self.info_btn.set(ui, r);
             ui.dx(-r.w - 0.03);
-            ui.fill_rect(r, (*self.icons.edit, r, ScaleType::Fit, if self.local_path.is_some() { c } else { cc }));
+            ui.fill_rect(r, (Texture2D::clone(&self.icons.edit), r, ScaleType::Fit, if self.local_path.is_some() { c } else { cc }));
             self.edit_btn.set(ui, r);
             ui.dx(-r.w - 0.03);
-            ui.fill_rect(r, (*self.icons.r#mod, r, ScaleType::Fit, if self.local_path.is_some() { c } else { cc }));
+            ui.fill_rect(r, (Texture2D::clone(&self.icons.r#mod), r, ScaleType::Fit, if self.local_path.is_some() { c } else { cc }));
             self.mod_btn.set(ui, r);
         });
 

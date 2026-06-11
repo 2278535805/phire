@@ -213,7 +213,7 @@ impl Element for Image {
         }
         let r = c.r.eval(uml)?.rect()?;
         if let Some(tex) = self.tex.borrow().as_ref() {
-            ui.fill_rect(r, (**tex, r, c.t, c.c.0));
+            ui.fill_rect(r, (Texture2D::clone(tex), r, c.t, c.c.0));
         }
         Ok(Var::Rect(r))
     }
@@ -704,12 +704,8 @@ impl Uml {
         }
     }
 
-    fn push(&self, ui: &mut Ui, layer: StackLayer) {
-        
-    }
-    fn pop(&self, ui: &mut Ui) {
-        
-    }
+    fn push(&self, ui: &mut Ui, layer: StackLayer) {}
+    fn pop(&self, ui: &mut Ui) {}
 
     pub(crate) fn get_var(&self, id: &str) -> Result<&Var> {
         self.var_map.get(id).ok_or_else(|| anyhow!("variable not found: {id}"))

@@ -5,6 +5,7 @@ pub mod dir;
 pub mod ext;
 pub mod fs;
 pub mod info;
+pub mod json;
 pub mod judge;
 pub mod l10n;
 pub mod parse;
@@ -25,7 +26,7 @@ pub mod inner;
 #[cfg(target_os = "ios")]
 pub mod objc;
 
-use miniquad::conf::Icon;
+use macroquad::miniquad::conf::Icon;
 use macroquad::window::Conf;
 pub use scene::Main;
 

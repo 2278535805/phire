@@ -13,15 +13,21 @@ use macroquad::prelude::*;
 use phire::{
     core::ResPackInfo,
     ext::{blur_image, unzip_into, RectExt, SafeTexture, ScaleType},
+    gyro::GYRO,
     scene::{return_file, show_error, show_message, take_file, NextScene, Scene},
     task::Task,
     time::TimeManager,
     ui::{button_hit, RectButton, Ui, UI_AUDIO},
-    gyro::GYRO
 };
 use sasa::{AudioClip, Music};
 use std::{
-    any::Any, cell::RefCell, fs::File, io::BufReader, sync::atomic::{AtomicBool, Ordering}, thread_local, time::{Duration, Instant}
+    any::Any,
+    cell::RefCell,
+    fs::File,
+    io::BufReader,
+    sync::atomic::{AtomicBool, Ordering},
+    thread_local,
+    time::{Duration, Instant},
 };
 use uuid::Uuid;
 
@@ -152,7 +158,7 @@ impl MainScene {
                 let _ = bgm.fade_in(0.5);
             }
         }
-        self.state.fader.back(self.state.t);
+        self.state.fader.back_from(self.state.t);
     }
 
     pub fn take_imported_respack() -> Option<ResPackItem> {
@@ -199,7 +205,27 @@ impl Scene for MainScene {
 
     fn touch(&mut self, tm: &mut TimeManager, touch: &Touch) -> Result<bool> {
         if self.state.fader.transiting() {
-            return Ok(false);
+            if self.state.fader.is_forward() {
+                if self.btn_back.touch(touch) && self.pages.len() > 1 {
+                    button_hit();
+                    if !self.pages.last_mut().unwrap().on_back_pressed(&mut self.state) {
+                        if self.pages.len() == 2 {
+                            if let Some(bgm) = &mut self.bgm {
+                                bgm.set_low_pass(0.)?;
+                            }
+                        }
+                        self.pop();
+                    }
+                    return Ok(true);
+                }
+                let s = &mut self.state;
+                s.update(tm);
+                return self.pages.last_mut().unwrap().touch(touch, s);
+            }
+            let pos = self.pages.len() - 2;
+            let s = &mut self.state;
+            s.update(tm);
+            return self.pages[pos].touch(touch, s);
         }
         if self.import_task.is_some() {
             return Ok(true);
@@ -302,9 +328,32 @@ impl Scene for MainScene {
                 }
                 NextPage::None => {}
             }
-        } else if let Some(true) = s.fader.done(s.t) {
-            self.pages.pop().unwrap().exit()?;
-            self.pages.last_mut().unwrap().enter(s)?;
+        } else if s.fader.is_forward() {
+            s.fader.done(s.t);
+        } else {
+            let pos = self.pages.len() - 2;
+            match self.pages[pos].next_page() {
+                NextPage::Overlay(mut sub) => {
+                    self.pages.pop().unwrap().exit()?;
+                    sub.enter(s)?;
+                    if !sub.can_play_bgm() {
+                        if let Some(bgm) = &mut self.bgm {
+                            let _ = bgm.fade_out(0.5);
+                        }
+                    }
+                    self.pages.push(sub);
+                    s.fader.sub(s.t);
+                }
+                NextPage::Pop => {
+                    self.pop();
+                }
+                NextPage::None => {
+                    if s.fader.done(s.t).is_some() {
+                        self.pages.pop().unwrap().exit()?;
+                        self.pages.last_mut().unwrap().enter(s)?;
+                    }
+                }
+            }
         }
         if let Some(bgm) = &mut self.bgm {
             if BGM_VOLUME_UPDATED.fetch_and(false, Ordering::Relaxed) {
@@ -393,14 +442,14 @@ impl Scene for MainScene {
         r.w += MAX_ROTATE_RATE * 0.5;
         r.h += MAX_ROTATE_RATE * 0.5;
 
-        ui.fill_rect(r, (*self.background, r));
+        ui.fill_rect(r, (Texture2D::clone(&self.background), r));
         let alpha = match self.pages.len() {
             1 => 0.,
             2 => 1. - s.fader.for_sub(|f| f.progress(s.t)),
             _ => 1.,
         };
         let c = Color::new(1., 1., 1., alpha);
-        ui.fill_rect(r, (*self.background_blur, r, ScaleType::CropCenter, c));
+        ui.fill_rect(r, (Texture2D::clone(&self.background_blur), r, ScaleType::CropCenter, c));
 
         // 1. title
         if s.fader.transiting() {
@@ -425,14 +474,14 @@ impl Scene for MainScene {
         if self.pages.len() >= 2 {
             let mut r = ui.back_rect();
             self.btn_back.set(ui, r);
-            ui.scissor(Some(r));
-            r.y += match self.pages.len() {
-                1 => 1.,
-                2 => s.fader.for_sub(|f| f.progress(s.t)),
-                _ => 0.,
-            } * r.h;
-            ui.fill_rect(r, (*self.icon_back, r));
-            ui.scissor(None);
+            ui.scissor(r, |ui| {
+                r.y += match self.pages.len() {
+                    1 => 1.,
+                    2 => s.fader.for_sub(|f| f.progress(s.t)),
+                    _ => 0.,
+                } * r.h;
+                ui.fill_rect(r, (Texture2D::clone(&self.icon_back), r));
+            });
         }
 
         if get_data().config.mp_enabled {
@@ -442,7 +491,7 @@ impl Scene for MainScene {
             let r = Rect::new(self.mp_btn_pos.x, self.mp_btn_pos.y, 0., 0.).feather(r);
             self.mp_btn.set(ui, r);
             let r = r.feather(-0.02);
-            ui.fill_rect(r, (*self.mp_icon, r));
+            ui.fill_rect(r, (Texture2D::clone(&self.mp_icon), r));
 
             MP_PANEL.with(|it| {
                 if let Some(panel) = it.borrow_mut().as_mut() {

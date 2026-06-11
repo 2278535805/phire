@@ -1,3 +1,6 @@
+mod character;
+pub use character::CharacterPage;
+
 mod event;
 pub use event::EventPage;
 
@@ -8,7 +11,6 @@ mod library;
 pub use library::LibraryPage;
 
 mod message;
-pub use message::MessagePage;
 
 mod offset;
 pub use offset::OffsetPage;
@@ -21,11 +23,7 @@ pub use settings::SettingsPage;
 use tokio::sync::Notify;
 
 use crate::{
-    client::File,
-    data::BriefChartInfo,
-    dir, get_data,
-    images::Images,
-    scene::{fs_from_path, ChartOrder},
+    character::Character, client::File, data::BriefChartInfo, dir, get_data, images::Images, scene::{ChartOrder, fs_from_path}
 };
 use anyhow::Result;
 use image::DynamicImage;
@@ -40,7 +38,11 @@ use phire::{
     ui::{FontArc, IntoShading, Shading, TextPainter, Ui},
 };
 use std::{
-    any::Any, borrow::Cow, ops::DerefMut, path::PathBuf, sync::{Arc, Mutex}
+    any::Any,
+    borrow::Cow,
+    ops::DerefMut,
+    path::PathBuf,
+    sync::{Arc, Mutex},
 };
 use tracing::warn;
 
@@ -195,7 +197,7 @@ impl Illustration {
     }
 
     pub fn shading(&self, r: Rect, t: f32, alpha: f32) -> impl Shading {
-        (*self.texture.0, r, ScaleType::CropCenter, semi_white(alpha * self.alpha(t))).into_shading()
+        (Texture2D::clone(&self.texture.0), r, ScaleType::CropCenter, semi_white(alpha * self.alpha(t))).into_shading()
     }
 }
 
@@ -267,6 +269,17 @@ impl Fader {
         self.back = true;
     }
 
+    pub fn back_from(&mut self, t: f32) {
+        let p = if self.start_time.is_nan() {
+            0.0
+        } else {
+            let p = ((t - self.start_time) / self.time).clamp(0., 1.);
+            1.0 - (1.0 - (1.0 - p).powi(3)).powf(1.0/3.0)
+        };
+        self.start_time = t - p * self.time;
+        self.back = true;
+    }
+
     pub fn progress(&self, t: f32) -> f32 {
         if self.start_time.is_nan() {
             0.
@@ -301,6 +314,11 @@ impl Fader {
         !self.start_time.is_nan()
     }
 
+    #[inline]
+    pub fn is_forward(&self) -> bool {
+        !self.start_time.is_nan() && !self.back
+    }
+
     pub fn done(&mut self, t: f32) -> Option<bool> {
         if !self.start_time.is_nan() && t - self.start_time > self.time {
             self.start_time = f32::NAN;
@@ -313,18 +331,18 @@ impl Fader {
     pub fn render_title(&mut self, ui: &mut Ui, painter: &mut TextPainter, t: f32, s: &str) {
         let tp = -ui.top + 0.08;
         let h = ui.text("L").size(1.4).no_baseline().measure().h;
-        ui.scissor(Some(Rect::new(-1., tp, 2., h)));
-        let p = self.progress(t);
-        let tp = tp + h * p;
-        for (i, c) in s.chars().enumerate() {
-            ui.text(c.to_string())
-                .pos(-0.8 + i as f32 * 0.117, tp)
-                .anchor(0.5, 0.)
-                .size(1.4)
-                .color(Color::new(1., 1., 1., 0.4))
-                .draw_with_font(Some(painter));
-        }
-        ui.scissor(None);
+        ui.scissor(Rect::new(-1., tp, 2., h), |ui| {
+            let p = self.progress(t);
+            let tp = tp + h * p;
+            for (i, c) in s.chars().enumerate() {
+                ui.text(c.to_string())
+                    .pos(-0.8 + i as f32 * 0.117, tp)
+                    .anchor(0.5, 0.)
+                    .size(1.4)
+                    .color(Color::new(1., 1., 1., 0.4))
+                    .draw_with_font(Some(painter));
+            }
+        });
     }
 }
 
@@ -392,6 +410,8 @@ pub struct SharedState {
     pub icons: [SafeTexture; 8],
 
     pub gyro_offset: Vec2,
+    pub character: Character,
+    pub all_characters: Vec<Character>,
 }
 
 pub const RESTORE_RATE: f32 = 0.005;
@@ -403,6 +423,9 @@ impl SharedState {
     pub async fn new() -> Result<Self> {
         let font = FontArc::try_from_vec(load_file("halva.ttf").await?)?;
         let painter = TextPainter::new(font);
+        let all_characters = Character::new_all().await?;
+        let character = all_characters.iter().find(|c| c.id == get_data().character_id).map_or_else(|| &all_characters[0], |c| c).clone();
+
         Ok(Self {
             t: 0.,
             rt: 0.,
@@ -412,6 +435,8 @@ impl SharedState {
 
             icons: Resource::load_icons().await?,
             gyro_offset: Vec2::ZERO,
+            character,
+            all_characters,
         })
     }
 

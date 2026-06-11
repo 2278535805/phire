@@ -264,6 +264,13 @@ impl Page for LibraryPage {
         Ok(())
     }
 
+    fn enter(&mut self, s: &mut SharedState) -> Result<()> {
+        if self.charts_view.is_empty() && self.chosen == ChartListType::Local {
+            self.sync_local(s);
+        }
+        Ok(())
+    }
+
     fn touch(&mut self, touch: &Touch, s: &mut SharedState) -> Result<bool> {
         let t = s.t;
         if self.order_menu.showing() {
@@ -276,7 +283,7 @@ impl Page for LibraryPage {
         if self.rating.touch(touch, t) {
             return Ok(true);
         }
-        if self.charts_view.transiting() {
+        if self.charts_view.transiting() && !self.charts_view.transiting_back() {
             return Ok(true);
         }
         if self.btn_local.touch(touch, t) {
@@ -462,11 +469,11 @@ impl Page for LibraryPage {
                     let mut r = r.feather(-0.01);
                     r.w = r.h;
                     if !empty {
-                        ui.fill_rect(r, (*self.icons.close, r, ScaleType::Fit, c));
+                        ui.fill_rect(r, (Texture2D::clone(&self.icons.close), r, ScaleType::Fit, c));
                         self.search_clr_btn.set(ui, r);
                         r.x += r.w;
                     }
-                    ui.fill_rect(r, (*self.icons.search, r, ScaleType::Fit, c));
+                    ui.fill_rect(r, (Texture2D::clone(&self.icons.search), r, ScaleType::Fit, c));
                     ui.text(&self.search_str)
                         .pos(r.right() + 0.01, r.center().y)
                         .anchor(0., 0.5)
@@ -481,7 +488,7 @@ impl Page for LibraryPage {
                         r.x += r.w;
                     }
                     let (cr, _) = self.order_btn.render_shadow(ui, r, t, c.a, |_| semi_black(0.4 * c.a));
-                    ui.fill_rect(cr, (*self.icons.order, cr, ScaleType::Fit, c));
+                    ui.fill_rect(cr, (Texture2D::clone(&self.icons.order), cr, ScaleType::Fit, c));
                     if self.need_show_order_menu {
                         self.need_show_order_menu = false;
                         self.order_menu.set_bottom(true);
@@ -491,7 +498,7 @@ impl Page for LibraryPage {
                     r.x -= r.w + 0.02;
                     let (cr, _) = self.filter_btn.render_shadow(ui, r, t, c.a, |_| semi_black(0.4 * c.a));
                     let cr = cr.feather(-0.005);
-                    ui.fill_rect(cr, (*self.icons.filter, cr, ScaleType::Fit, c));
+                    ui.fill_rect(cr, (Texture2D::clone(&self.icons.filter), cr, ScaleType::Fit, c));
                 });
             }
             ChartListType::Popular => {}
@@ -532,5 +539,14 @@ impl Page for LibraryPage {
 
     fn next_scene(&mut self, _s: &mut SharedState) -> NextScene {
         self.charts_view.next_scene().unwrap_or_default()
+    }
+
+    fn on_back_pressed(&mut self, s: &mut SharedState) -> bool {
+        if self.charts_view.transiting() && !self.charts_view.transiting_back() {
+            self.charts_view.cancel_transit(s.t);
+            true
+        } else {
+            false
+        }
     }
 }

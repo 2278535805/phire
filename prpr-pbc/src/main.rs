@@ -13,7 +13,7 @@ use std::{
     io::{BufWriter, Cursor},
 };
 
-const HELP: &'static str = "
+const HELP: &str = "
 Usage: prpr-pbc [options] input output
 
 Options:
@@ -41,10 +41,10 @@ impl FileSystem for DummyFileSystem {
 }
 
 fn main() -> Result<()> {
-    let mut iter = std::env::args().skip(1);
+    let iter = std::env::args().skip(1);
     let mut input = None;
     let mut output = None;
-    while let Some(arg) = iter.next() {
+    for arg in iter {
         match arg.as_str() {
             "-h" | "--help" => {
                 println!("{}", HELP.trim());

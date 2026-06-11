@@ -88,6 +88,8 @@ struct TransitState {
     back: bool,
     done: bool,
     delete: bool,
+    interrupt_position: Option<f32>,
+    interrupt_duration: Option<f32>,
 }
 
 pub struct ChartsView {
@@ -99,7 +101,7 @@ pub struct ChartsView {
 
     back_fade_in: Option<(u32, f32)>,
 
-    transit: Option<TransitState>,
+    transits: Vec<TransitState>,
     charts: Option<Vec<ChartDisplayItem>>,
 
     pub row_num: u32,
@@ -119,7 +121,7 @@ impl ChartsView {
 
             back_fade_in: None,
 
-            transit: None,
+            transits: Vec::new(),
             charts: None,
 
             row_num: 4,
@@ -140,6 +142,10 @@ impl ChartsView {
         self.charts = None;
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.charts.is_none()
+    }
+
     pub fn set(&mut self, t: f32, charts: Vec<ChartDisplayItem>) {
         self.charts = Some(charts);
         self.fader.sub(t);
@@ -150,11 +156,29 @@ impl ChartsView {
     }
 
     pub fn transiting(&self) -> bool {
-        self.transit.is_some()
+        !self.transits.is_empty()
+    }
+
+    pub fn transiting_back(&self) -> bool {
+        self.transits.iter().all(|t| t.back)
+    }
+
+    pub fn cancel_transit(&mut self, t: f32) {
+        for transit in &mut self.transits {
+            if !transit.back {
+                let elapsed = (t - transit.start_time).max(0.);
+                let p = (elapsed / TRANSIT_TIME).clamp(0., 1.);
+                transit.interrupt_position = Some(1. - (1. - p).powi(4));
+                transit.interrupt_duration = Some(elapsed);
+                transit.start_time = t;
+                transit.back = true;
+                transit.done = false;
+            }
+        }
     }
 
     pub fn on_result(&mut self, t: f32, delete: bool) {
-        let transit = self.transit.as_mut().unwrap();
+        let transit = self.transits.last_mut().unwrap();
         transit.start_time = t;
         transit.back = true;
         transit.done = false;
@@ -216,7 +240,7 @@ impl ChartsView {
                                 .map(|it| it.mods)
                                 .unwrap_or_default(),
                         );
-                        self.transit = Some(TransitState {
+                        self.transits.push(TransitState {
                             id: id as _,
                             rect: None,
                             chart: chart.clone(),
@@ -225,6 +249,8 @@ impl ChartsView {
                             back: false,
                             done: false,
                             delete: false,
+                            interrupt_position: None,
+                            interrupt_duration: None,
                         });
                         return Ok(true);
                     }
@@ -237,9 +263,17 @@ impl ChartsView {
     pub fn update(&mut self, t: f32) -> Result<bool> {
         let refreshed = self.can_refresh && self.scroll.y_scroller.pulled;
         self.scroll.update(t);
-        if let Some(transit) = &mut self.transit {
+        
+        let mut i = 0;
+        while i < self.transits.len() {
+            let transit = &mut self.transits[i];
             transit.chart.illu.settle(t);
-            if t > transit.start_time + TRANSIT_TIME {
+            let duration = if transit.back {
+                transit.interrupt_duration.unwrap_or(TRANSIT_TIME)
+            } else {
+                TRANSIT_TIME
+            };
+            if t > transit.start_time + duration {
                 if transit.back {
                     if transit.delete {
                         let data = get_data_mut();
@@ -249,17 +283,20 @@ impl ChartsView {
                         } else {
                             format!("download/{}", item.chart.info.id.unwrap())
                         };
-                        std::fs::remove_dir_all(format!("{}/{path}", dir::charts()?))?;
+                        let _ = std::fs::remove_dir_all(format!("{}/{path}", dir::charts().unwrap()));
                         data.charts.remove(data.find_chart_by_path(path.as_str()).unwrap());
-                        save_data()?;
+                        let _ = save_data();
                         NEED_UPDATE.store(true, Ordering::SeqCst);
                     } else {
                         self.back_fade_in = Some((transit.id, t));
                     }
-                    self.transit = None;
+                    self.transits.remove(i);
                 } else {
                     transit.done = true;
+                    i += 1;
                 }
+            } else {
+                i += 1;
             }
         }
 
@@ -305,7 +342,7 @@ impl ChartsView {
                 self.fader.reset();
                 self.fader.for_sub(|f| {
                     ui.hgrids(content_size.0, ch, self.row_num, charts.len() as u32, |ui, id| {
-                        if let Some(transit) = &mut self.transit {
+                        for transit in &mut self.transits {
                             if transit.id == id {
                                 transit.rect = Some(ui.rect_to_global(r));
                             }
@@ -378,24 +415,38 @@ impl ChartsView {
     }
 
     pub fn render_top(&mut self, ui: &mut Ui, t: f32) {
-        if let Some(transit) = &self.transit {
+        for transit in &self.transits {
             if let Some(fr) = transit.rect {
-                let p = ((t - transit.start_time) / TRANSIT_TIME).clamp(0., 1.);
-                let p = (1. - p).powi(4);
-                let p = if transit.back { p } else { 1. - p };
+                let p = if transit.back {
+                    if let (Some(start_p), Some(duration)) = (transit.interrupt_position, transit.interrupt_duration) {
+                        if duration > 0. {
+                            let elapsed = (t - transit.start_time).max(0.);
+                            let p_raw = (elapsed / duration).clamp(0., 1.);
+                            let p_start = 1. - start_p.powf(1.0/4.0);
+                            let p = p_start + (1. - p_start) * p_raw;
+                            (1. - p).powi(4)
+                        } else {
+                            0.
+                        }
+                    } else {
+                        let p = ((t - transit.start_time) / TRANSIT_TIME).clamp(0., 1.);
+                        (1. - p).powi(4)
+                    }
+                } else {
+                    let p = ((t - transit.start_time) / TRANSIT_TIME).clamp(0., 1.);
+                    1. - (1. - p).powi(4)
+                };
                 let r = Rect::tween(&fr, &ui.screen_rect(), p);
-                let path = r.rounded(0.02 * (1. - p));
-                ui.fill_path(&path, (*transit.chart.illu.texture.1, r.feather(0.01 * (1. - p))));
+                let path = r.rounded(0.);
+                ui.fill_path(&path, (Texture2D::clone(&transit.chart.illu.texture.1), r.feather(0.01 * (1. - p))));
                 ui.fill_path(&path, semi_black(0.55));
             }
         }
     }
 
     pub fn next_scene(&mut self) -> Option<NextScene> {
-        if let Some(transit) = &mut self.transit {
-            if transit.done {
-                return transit.next_scene.take();
-            }
+        if let Some(pos) = self.transits.iter().position(|t| t.done) {
+            return self.transits[pos].next_scene.take();
         }
         None
     }

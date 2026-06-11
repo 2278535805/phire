@@ -3,6 +3,8 @@ phire::tl_file!("common" ttl crate::);
 #[cfg(feature = "closed")]
 mod inner;
 
+mod anim;
+mod character;
 mod charts_view;
 mod client;
 mod data;
@@ -28,13 +30,18 @@ use phire::{
     scene::{show_error, show_message},
     time::TimeManager,
     ui::{FontArc, TextPainter},
-    gyro::{GYRO, GyroData},
     Main,
 };
 use scene::MainScene;
-use std::{collections::VecDeque, sync::{mpsc, Mutex}, time::Instant};
-use nalgebra::{UnitQuaternion, Vector3};
-use tracing::{error, debug, info};
+use std::sync::{mpsc, Mutex};
+use tracing::{error, info};
+
+#[cfg(any(target_os = "android", target_os = "ios"))]
+use phire::gyro::{GYRO, GyroData};
+#[cfg(any(target_os = "android", target_os = "ios"))]
+use std::time::Duration;
+#[cfg(any(target_os = "android", target_os = "ios"))]
+use nalgebra::Vector3;
 
 static ACTIVITY_LIFECYCLE: Mutex<Option<mpsc::Sender<bool>>> = Mutex::new(None);
 static ACTIVITY_FOUCUS: Mutex<Option<mpsc::Sender<bool>>> = Mutex::new(None);
@@ -161,6 +168,7 @@ async fn the_main() -> Result<()> {
     data.init().await?;
     set_data(data);
     sync_data();
+    miniquad::window::set_ime_enabled(false);
 
     let activity_lifecycle = {
         let (tx, rx) = mpsc::channel();
@@ -180,10 +188,11 @@ async fn the_main() -> Result<()> {
         rx
     };
 
-    unsafe { get_internal_gl() }
-        .quad_context
-        .display_mut()
-        .set_pause_resume_listener(on_pause_resume);
+    // NOTE: set_pause_resume_listener is not available in stock miniquad 0.4
+    // unsafe { get_internal_gl() }
+    //     .quad_context
+    //     .display_mut()
+    //     .set_pause_resume_listener(on_pause_resume);
 
     if let Some(me) = &get_data().me {
         anti_addiction_action("startup", Some(format!("Phigros-{}", me.id)));
@@ -488,10 +497,11 @@ pub unsafe extern "C" fn Java_quad_1native_QuadNative_updateGyroScope(
     x: ndk_sys::jfloat,
     y: ndk_sys::jfloat,
     z: ndk_sys::jfloat,
+    timestamp: ndk_sys::jlong,
 ) {
     let set_gyro_data = GyroData {
         angular_velocity: Vector3::new(x, y, z),
-        timestamp: Instant::now(),
+        timestamp: Duration::from_nanos(timestamp as u64),
     };
     GYRO.lock().unwrap().update_gyroscope(set_gyro_data);
 }

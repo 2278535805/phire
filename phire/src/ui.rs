@@ -19,6 +19,9 @@ pub use shadow::*;
 mod text;
 pub use text::{DrawText, TextPainter};
 
+mod input;
+pub use input::{InlineInputBox};
+
 pub use glyph_brush::ab_glyph::FontArc;
 
 use crate::{
@@ -122,7 +125,7 @@ impl<T: Shading> VertexBuilder<T> {
 
     pub fn commit(&self) {
         let gl = unsafe { get_internal_gl() }.quad_gl;
-        gl.texture(self.shading.texture());
+        gl.texture(self.shading.texture().as_ref());
         gl.draw_mode(DrawMode::Triangles);
         gl.geometry(&self.vertices, &self.indices);
     }
@@ -336,7 +339,7 @@ impl DRectButton {
     }
 
     pub fn progress(&mut self, t: f32) -> f32 {
-        if self.start_time.as_ref().map_or(false, |it| t > *it + Self::TIME) {
+        if self.start_time.as_ref().is_some_and(|it| t > *it + Self::TIME) {
             self.start_time = None;
         }
         let p = if let Some(time) = &self.start_time {
@@ -550,6 +553,7 @@ pub struct Ui<'a> {
     pub text_painter: &'a mut TextPainter,
 
     model_stack: Vec<Matrix>,
+    scissor: Option<(i32, i32, i32, i32)>,
     touches: Option<Vec<Touch>>,
 
     vertex_buffers: VertexBuffers<Vertex, u16>,
@@ -574,6 +578,7 @@ impl<'a> Ui<'a> {
             text_painter,
 
             model_stack: vec![Matrix::identity()],
+            scissor: None,
             touches: None,
 
             vertex_buffers: VertexBuffers::new(),
@@ -586,7 +591,7 @@ impl<'a> Ui<'a> {
 
     pub fn camera(&self) -> Camera2D {
         Camera2D {
-            zoom: vec2(1., -self.viewport.2 as f32 / self.viewport.3 as f32),
+            zoom: vec2(1., self.viewport.2 as f32 / self.viewport.3 as f32),
             viewport: Some(self.viewport),
             ..Default::default()
         }
@@ -668,7 +673,7 @@ impl<'a> Ui<'a> {
 
     fn emit_lyon(&mut self, texture: Option<Texture2D>) {
         let gl = unsafe { get_internal_gl() }.quad_gl;
-        gl.texture(texture);
+        gl.texture(texture.as_ref());
         gl.draw_mode(DrawMode::Triangles);
         gl.geometry(&std::mem::take(&mut self.vertex_buffers.vertices), &std::mem::take(&mut self.vertex_buffers.indices));
     }
@@ -700,6 +705,23 @@ impl<'a> Ui<'a> {
 
     pub fn to_global(&self, pt: (f32, f32)) -> (f32, f32) {
         let r = self.model_stack.last().unwrap().transform_point(&Point::new(pt.0, pt.1));
+        (r.x, r.y)
+    }
+
+    pub fn rect_to_local(&self, rect: Rect) -> Rect {
+        let pt = self.to_local((rect.x, rect.y));
+        let vec = self.vec_to_local((rect.w, rect.h));
+        Rect::new(pt.0, pt.1, vec.0, vec.1)
+    }
+
+    pub fn vec_to_local(&self, vec: (f32, f32)) -> (f32, f32) {
+        let r = self
+            .model_stack
+            .last()
+            .unwrap()
+            .try_inverse()
+            .unwrap()
+            .transform_vector(&Vector::new(vec.0, vec.1));
         (r.x, r.y)
     }
 
@@ -758,24 +780,36 @@ impl<'a> Ui<'a> {
         res
     }
 
-    pub fn scissor(&mut self, rect: Option<Rect>) {
+    pub fn scissor<R>(&mut self, rect: Rect, f: impl FnOnce(&mut Ui) -> R) -> R {
         let igl = unsafe { get_internal_gl() };
         let gl = igl.quad_gl;
-        if let Some(rect) = rect {
-            let rect = self.rect_to_global(rect);
-            let vp = get_viewport();
-            let screen_height = gl
-                .get_active_render_pass()
-                .map(|it| it.texture(igl.quad_context).height as f32)
-                .unwrap_or_else(screen_height);
-            let pt = (
-                vp.0 as f32 + (rect.x + 1.) / 2. * vp.2 as f32,
-                (screen_height - (vp.1 + vp.3) as f32) + (rect.y * vp.2 as f32 / vp.3 as f32 + 1.) / 2. * vp.3 as f32,
-            );
-            gl.scissor(Some((pt.0 as _, pt.1 as _, (rect.w * vp.2 as f32 / 2.) as _, (rect.h * vp.2 as f32 / 2.) as _)));
-        } else {
-            gl.scissor(None);
-        }
+        let rect = self.rect_to_global(rect);
+        let vp = get_viewport();
+        let pt = (
+            vp.0 as f32 + (rect.x + 1.) / 2. * vp.2 as f32,
+            (screen_height() - (vp.1 + vp.3) as f32) + (rect.y * vp.2 as f32 / vp.3 as f32 + 1.) / 2. * vp.3 as f32,
+        );
+
+        let old = self.scissor;
+        self.scissor = {
+            let mut l = pt.0 as i32;
+            let mut t = pt.1 as i32;
+            let mut r = (pt.0 + rect.w * vp.2 as f32 / 2.) as i32;
+            let mut b = (pt.1 + rect.h * vp.2 as f32 / 2.) as i32;
+            if let Some((l0, t0, w0, h0)) = old {
+                l = l.max(l0);
+                t = t.max(t0);
+                r = r.min(l0 + w0);
+                b = b.min(t0 + h0);
+            }
+            Some((l, t, r - l, b - t))
+        };
+
+        gl.scissor(self.scissor);
+        let res = f(self);
+        self.scissor = old;
+        gl.scissor(old);
+        res
     }
 
     pub fn text<'s, 'ui>(&'ui mut self, text: impl Into<Cow<'s, str>>) -> DrawText<'a, 's, 'ui> {
@@ -889,7 +923,7 @@ impl<'a> Ui<'a> {
         let lf = r.x;
         let r = Rect::new(0.02, r.y - 0.01, params.length, r.h + 0.02);
         if if params.password {
-            self.button(&id, r, &"*".repeat(value.chars().count()))
+            self.button(&id, r, "*".repeat(value.chars().count()))
         } else {
             self.button(&id, r, value.as_str())
         } {
@@ -1006,7 +1040,7 @@ impl<'a> Ui<'a> {
         let rect = Rect::new(cx - r, cy - r, r * 2., r * 2.);
         match avatar {
             Ok(Some(avatar)) => {
-                self.fill_circle(cx, cy, r, (*avatar, rect, ScaleType::CropCenter, c));
+                self.fill_circle(cx, cy, r, (Texture2D::clone(&avatar), rect, ScaleType::CropCenter, c));
             }
             Ok(None) => {
                 self.loading(
@@ -1023,7 +1057,7 @@ impl<'a> Ui<'a> {
             }
             Err(icon) => {
                 self.fill_circle(cx, cy, r, semi_black(c.a * 0.2));
-                self.fill_circle(cx, cy, r, (*icon, rect.feather(-0.025), ScaleType::CropCenter, c));
+                self.fill_circle(cx, cy, r, (Texture2D::clone(&icon), rect.feather(-0.025), ScaleType::CropCenter, c));
             }
         }
         self.stroke_circle(cx, cy, r, 0.004, c);
@@ -1161,7 +1195,7 @@ fn build_audio() -> AudioManager {
     {
         use sasa::backend::oboe::*;
         AudioManager::new(OboeBackend::new(OboeSettings {
-            performance_mode: PerformanceMode::PowerSaving,
+            performance_mode: PerformanceMode::None,
             sharing_mode: SharingMode::Shared,
             usage: Usage::Media,
             ..Default::default()
@@ -1179,9 +1213,9 @@ fn build_audio() -> AudioManager {
 
 thread_local! {
     pub static UI_AUDIO: RefCell<AudioManager> = RefCell::new(build_audio());
-    pub static UI_BTN_HITSOUND_LARGE: RefCell<Option<Sfx>> = RefCell::new(None);
-    pub static UI_BTN_HITSOUND: RefCell<Option<Sfx>> = RefCell::new(None);
-    pub static UI_SWITCH_SOUND: RefCell<Option<Sfx>> = RefCell::new(None);
+    pub static UI_BTN_HITSOUND_LARGE: RefCell<Option<Sfx>> = const { RefCell::new(None) };
+    pub static UI_BTN_HITSOUND: RefCell<Option<Sfx>> = const { RefCell::new(None) };
+    pub static UI_SWITCH_SOUND: RefCell<Option<Sfx>> = const { RefCell::new(None) };
 }
 
 pub fn button_hit() {

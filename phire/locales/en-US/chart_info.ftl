@@ -18,6 +18,7 @@ ps = P.S.
 aspect-hint = Aspect ratio can be either real number or texts like "w:h"
 score-total = Total score
 hold-partial-cover = Hold tail cover
+negative-length-hold = Allow negative length hold
 note-uniform-scale = Note uniform scale
 dim = Background dim
 chart-file = Beatmap
