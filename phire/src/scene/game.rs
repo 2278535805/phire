@@ -1426,7 +1426,7 @@ impl Scene for GameScene {
         let chart_viewport = if res.config.chart_ratio < 1. { viewport_window } else { viewport_chart };
 
         if res.config.render_bg_dim && res.config.chart_ratio < 1. {
-            set_camera( &Camera2D {
+            set_camera(&Camera2D {
                 zoom: chart_zoom,
                 viewport: chart_viewport,
                 render_target: chart_onto.clone(),
@@ -1441,7 +1441,7 @@ impl Scene for GameScene {
         } else {
             0.
         };
-        set_camera( &Camera2D {
+        set_camera(&Camera2D {
             zoom: chart_zoom,
             viewport: chart_viewport.map(|(x, y, w, h)| {
                 if res.info.fold_animation && matches!(self.state, State::Starting) {
