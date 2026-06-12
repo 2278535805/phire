@@ -108,6 +108,8 @@ pub struct Data {
     pub character_id: String,
     pub character_form_id: String,
     pub erosion_enabled: bool,
+    #[serde(default)]
+    pub revealed_forms: HashSet<String>,
 }
 
 impl Data {

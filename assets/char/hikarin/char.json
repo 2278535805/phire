@@ -1,25 +1,6 @@
 {
   "id": "hikarin",
   "visible": true,
-  "erosion": {
-    "target": {
-      "character": "hikarin",
-      "form": "kaede"
-    },
-    "trackComplete": true,
-    "fullCombo": true,
-    "minScore": null,
-    "minAccuracy": null,
-    "minPerfect": null,
-    "maxMiss": null,
-    "maxLate": null,
-    "maxEarly": null,
-    "probability": null,
-    "intro": {
-      "en-US": "......the end of the notes...your appearance...",
-      "zh-CN": "……音符的尽头…你的出现……"
-    }
-  },
   "listName": {
     "en-US": "Kaede Hikarin",
     "ja-JP": "楓光りん",
@@ -29,6 +10,27 @@
     {
       "id": "mxi",
       "visible": true,
+      "reveal": false,
+      "erosion": {
+        "target": {
+          "character": "hikarin",
+          "form": "kaede"
+        },
+        "trackComplete": true,
+        "fullCombo": true,
+        "minScore": null,
+        "minAccuracy": null,
+        "minPerfect": null,
+        "maxMiss": null,
+        "maxLate": null,
+        "maxEarly": null,
+        "probability": null,
+        "force": false,
+        "intro": {
+          "en-US": "...the end of the notes...your appearance...",
+          "zh-CN": "……音符的尽头…你的出现……"
+        }
+      },
       "healthMode": {
         "mode": {
           "speedBased": {
@@ -77,6 +79,27 @@
     {
       "id": "star",
       "visible": true,
+      "reveal": false,
+      "erosion": {
+        "target": {
+          "character": "hikarin",
+          "form": "kaede"
+        },
+        "trackComplete": false,
+        "fullCombo": false,
+        "minScore": null,
+        "minAccuracy": null,
+        "minPerfect": null,
+        "maxMiss": null,
+        "maxLate": null,
+        "maxEarly": null,
+        "probability": 0.5,
+        "force": false,
+        "intro": {
+          "en-US": "...I will await your arrival...",
+          "zh-CN": "……我会期待你的到来……"
+        }
+      },
       "healthMode": {
         "mode": {
           "speedBased": {
@@ -125,6 +148,7 @@
     {
       "id": "kaede",
       "visible": false,
+      "reveal": true,
       "healthMode": {
         "mode": {
           "speedBased": {

@@ -47,6 +47,9 @@ pub struct ErosionConfig {
     pub max_early: Option<u32>,
     #[serde(default)]
     pub probability: Option<f32>,
+
+    #[serde(default)]
+    pub force: bool,
 }
 
 impl ErosionConfig {
@@ -102,6 +105,11 @@ pub struct CharacterForm {
     #[serde(default = "default_visible")]
     pub visible: bool,
 
+    #[serde(default)]
+    pub reveal: bool,
+
+    pub erosion: Option<ErosionConfig>,
+
     #[serde(skip)]
     pub illu: Option<SafeTexture>,
 }
@@ -140,8 +148,6 @@ pub struct Character {
 
     #[serde(default)]
     pub list_name: HashMap<String, String>,
-
-    pub erosion: Option<ErosionConfig>,
 
     #[serde(default = "default_visible")]
     pub visible: bool,
@@ -182,7 +188,7 @@ impl Character {
     }
 
     pub fn erosion_target(&self) -> Option<&ErosionTarget> {
-        self.erosion.as_ref().map(|e| &e.target)
+        self.current_form().erosion.as_ref().map(|e| &e.target)
     }
 
     pub fn form_count(&self) -> usize {
@@ -190,11 +196,20 @@ impl Character {
     }
 
     pub fn visible_forms(&self) -> impl Iterator<Item = &CharacterForm> {
-        self.forms.iter().filter(|f| f.visible)
+        let revealed = &crate::get_data().revealed_forms;
+        self.forms.iter().filter(move |f| {
+            f.visible || (f.reveal && revealed.contains(&format!("{}/{}", self.id, f.id)))
+        })
     }
 
     pub fn visible_forms_indices(&self) -> Vec<usize> {
-        self.forms.iter().enumerate().filter(|(_, f)| f.visible).map(|(i, _)| i).collect()
+        let revealed = &crate::get_data().revealed_forms;
+        self.forms.iter().enumerate()
+            .filter(|(_, f)| {
+                f.visible || (f.reveal && revealed.contains(&format!("{}/{}", self.id, f.id)))
+            })
+            .map(|(i, _)| i)
+            .collect()
     }
 
     pub async fn load_by_id(id: &str) -> Result<Self> {
@@ -246,6 +261,8 @@ impl Character {
                 position: form.position,
                 health_mode: form.health_mode,
                 visible: form.visible,
+                reveal: form.reveal,
+                erosion: form.erosion,
                 illu,
             });
         }
@@ -253,7 +270,6 @@ impl Character {
             id: data.id,
             forms,
             list_name: data.list_name,
-            erosion: data.erosion,
             visible: data.visible,
             selected_form: 0,
         })

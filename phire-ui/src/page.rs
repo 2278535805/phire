@@ -456,14 +456,17 @@ impl SharedState {
     }
 
     pub fn switch_to_erosion(&mut self) {
-        let data = crate::get_data();
-        if !data.erosion_enabled {
-            return;
-        }
-        let (char_id, form_id) = match self.character.erosion_target() {
-            Some(t) => (t.character.clone(), t.form.clone()),
-            None => return,
+        let (char_id, form_id, reveal) = match self.character.current_form().erosion.as_ref() {
+            Some(e) if crate::get_data().erosion_enabled || e.force => {
+                (e.target.character.clone(), e.target.form.clone(), self.character.current_form().reveal)
+            }
+            _ => return,
         };
+        if reveal {
+            let key = format!("{}/{}", self.character.id, self.character.current_form().id);
+            crate::get_data_mut().revealed_forms.insert(key);
+            let _ = save_data();
+        }
         self.switch_character(&char_id, &form_id);
     }
 

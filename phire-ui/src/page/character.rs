@@ -40,7 +40,12 @@ pub struct CharacterPage {
 
 impl CharacterPage {
     pub fn new(active_id: String, mut characters: Vec<Character>) -> Result<Self> {
-        characters.retain(|c| c.visible);
+        let revealed = &get_data().revealed_forms;
+        characters.retain(|c| {
+            c.visible || c.forms.iter().any(|f| {
+                f.reveal && (f.visible || revealed.contains(&format!("{}/{}", c.id, f.id)))
+            })
+        });
         let char_count = characters.len();
         let mut expanded = vec![false; char_count];
         if let Some(pos) = characters.iter().position(|c| c.id == active_id) {
@@ -107,7 +112,7 @@ impl Page for CharacterPage {
             }
         }
         if self.info_btn.touch(touch) {
-            if s.character.erosion.is_some() {
+            if s.character.current_form().erosion.is_some() {
                 let data = get_data_mut();
                 data.erosion_enabled = !data.erosion_enabled;
                 let _ = save_data();
@@ -146,7 +151,7 @@ impl Page for CharacterPage {
             self.scrambled_name = scramble(form.name());
             self.scrambled_skill = scramble(form.skill());
             self.scrambled_illus = scramble(&format!("Illustrator: {}", form.illustrator));
-            self.scrambled_intro = s.character.erosion.as_ref()
+            self.scrambled_intro = form.erosion.as_ref()
                 .map(|e| scramble(e.intro()))
                 .unwrap_or_default();
         }
@@ -155,7 +160,8 @@ impl Page for CharacterPage {
 
     fn render(&mut self, ui: &mut Ui, s: &mut SharedState) -> Result<()> {
         let active_id = s.character.id.clone();
-        let has_erosion = s.character.erosion.is_some();
+        let has_erosion = s.character.current_form().erosion.is_some();
+        let force_erosion = s.character.current_form().erosion.as_ref().map_or(false, |e| e.force);
         let erosion_on = has_erosion && get_data().erosion_enabled;
 
         s.render_fader(ui, |ui, c| {
@@ -180,7 +186,9 @@ impl Page for CharacterPage {
                 let info_h = 0.25;
 
                 let info_r = Rect::new(info_x - info_w * 0.5, info_y - info_h * 0.5, info_w, info_h);
-                let info_bg = if has_erosion {
+                let info_bg = if force_erosion {
+                    Color::new(0.2, 0.05, 0.05, 0.6 * c.a)
+                } else if has_erosion {
                     Color::new(0.15, 0.05, 0.05, 0.5 * c.a)
                 } else {
                     semi_black(0.5 * c.a)
@@ -189,7 +197,7 @@ impl Page for CharacterPage {
                 self.info_btn.set(ui, info_r);
 
                 let illus_fmt = format!("Illustrator: {}", form.illustrator);
-                let has_intro = character.erosion.as_ref().map_or(false, |e| e.has_intro());
+                let has_intro = character.current_form().erosion.as_ref().map_or(false, |e| e.has_intro());
 
                 if erosion_on {
                     let alpha = c.a * 0.6;
