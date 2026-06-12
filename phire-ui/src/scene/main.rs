@@ -14,7 +14,7 @@ use phire::{
     core::ResPackInfo,
     ext::{blur_image, unzip_into, RectExt, SafeTexture, ScaleType},
     gyro::GYRO,
-    scene::{return_file, show_error, show_message, take_file, NextScene, Scene, ERODE},
+    scene::{return_file, show_error, show_message, take_file, NextScene, Scene, ERODE, LAST_RESULT},
     task::Task,
     time::TimeManager,
     ui::{button_hit, RectButton, Ui, UI_AUDIO},
@@ -357,7 +357,17 @@ impl Scene for MainScene {
         }
         if let Some(bgm) = &mut self.bgm {
             if ERODE.fetch_and(false, Ordering::Relaxed) {
-            self.state.switch_to_erosion();
+            let should_erode = crate::get_data().erosion_enabled
+                && self.state.character.erosion.is_some();
+            if should_erode {
+                let trigger = LAST_RESULT.lock().ok()
+                    .and_then(|lock| lock.clone())
+                    .map(|result| self.state.character.erosion.as_ref().unwrap().should_trigger(&result))
+                    .unwrap_or(false);
+                if trigger {
+                    self.state.switch_to_erosion();
+                }
+            }
         }
         if BGM_VOLUME_UPDATED.fetch_and(false, Ordering::Relaxed) {
                 bgm.set_amplifier(get_data().config.volume_bgm)?;

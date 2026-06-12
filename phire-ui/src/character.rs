@@ -2,8 +2,10 @@ phire::tl_file!("character");
 
 use std::collections::HashMap;
 
+use ::rand::rng;
+use ::rand::Rng;
 use macroquad::texture::load_texture;
-use phire::{ext::SafeTexture, health::HealthConfig};
+use phire::{ext::SafeTexture, health::HealthConfig, judge::PlayResult};
 use serde::{Deserialize, Serialize};
 use anyhow::Result;
 use tracing::error;
@@ -11,6 +13,64 @@ use tracing::error;
 use crate::get_data;
 
 fn default_visible() -> bool { true }
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ErosionConfig {
+    pub target: String,
+
+    #[serde(default)]
+    pub intro: HashMap<String, String>,
+
+    #[serde(default)]
+    pub track_complete: Option<bool>,
+    #[serde(default)]
+    pub full_combo: Option<bool>,
+    #[serde(default)]
+    pub min_score: Option<u32>,
+    #[serde(default)]
+    pub min_accuracy: Option<f32>,
+    #[serde(default)]
+    pub min_perfect: Option<u32>,
+    #[serde(default)]
+    pub max_miss: Option<u32>,
+    #[serde(default)]
+    pub max_late: Option<u32>,
+    #[serde(default)]
+    pub max_early: Option<u32>,
+    #[serde(default)]
+    pub probability: Option<f32>,
+}
+
+impl ErosionConfig {
+    pub fn intro(&self) -> &str {
+        let lang = get_data().language.as_deref().unwrap_or("en-US");
+        self.intro.get(lang)
+            .or_else(|| self.intro.get("en-US"))
+            .map(|s| s.as_str())
+            .unwrap_or("")
+    }
+
+    pub fn has_intro(&self) -> bool {
+        !self.intro.is_empty()
+    }
+
+    pub fn should_trigger(&self, result: &PlayResult) -> bool {
+        let full_combo = result.max_combo == result.num_of_notes;
+
+        if let Some(v) = self.track_complete { if result.track_complete != v { return false; } }
+        if let Some(v) = self.full_combo { if full_combo != v { return false; } }
+        if let Some(v) = self.min_score { if (result.score.round() as u32) < v { return false; } }
+        if let Some(v) = self.min_accuracy { if (result.accuracy as f32) < v { return false; } }
+        if let Some(v) = self.min_perfect { if result.counts[0] < v { return false; } }
+        if let Some(v) = self.max_miss { if result.counts[3] > v { return false; } }
+        if let Some(v) = self.max_late { if result.late > v { return false; } }
+        if let Some(v) = self.max_early { if result.early > v { return false; } }
+        if let Some(v) = self.probability { if rng().random::<f32>() >= v { return false; } }
+
+        true
+    }
+}
 
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -74,7 +134,7 @@ pub struct Character {
     #[serde(default)]
     pub list_name: HashMap<String, String>,
 
-    pub erosion_id: Option<String>,
+    pub erosion: Option<ErosionConfig>,
 
     #[serde(default = "default_visible")]
     pub visible: bool,
@@ -115,7 +175,7 @@ impl Character {
     }
 
     pub fn erosion_target(&self) -> Option<&str> {
-        self.erosion_id.as_deref()
+        self.erosion.as_ref().map(|e| e.target.as_str())
     }
 
     pub fn form_count(&self) -> usize {
@@ -186,7 +246,7 @@ impl Character {
             id: data.id,
             forms,
             list_name: data.list_name,
-            erosion_id: data.erosion_id,
+            erosion: data.erosion,
             visible: data.visible,
             selected_form: 0,
         })

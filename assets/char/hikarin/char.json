@@ -1,7 +1,22 @@
 {
   "id": "hikarin",
   "visible": true,
-  "erosionId": "kaede",
+  "erosion": {
+    "target": "kaede",
+    "trackComplete": true,
+    "fullCombo": true,
+    "minScore": null,
+    "minAccuracy": null,
+    "minPerfect": null,
+    "maxMiss": null,
+    "maxLate": null,
+    "maxEarly": null,
+    "probability": null,
+    "intro": {
+      "en-US": "......the end of the notes...your appearance...",
+      "zh-CN": "……音符的尽头…你的出现……"
+    }
+  },
   "listName": {
     "en-US": "Kaede Hikarin",
     "ja-JP": "楓光りん",

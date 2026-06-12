@@ -1154,7 +1154,7 @@ impl EventHandler for Handler {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct PlayResult {
     pub score: f64,
     pub accuracy: f64,

@@ -34,6 +34,7 @@ pub struct CharacterPage {
     scrambled_name: String,
     scrambled_skill: String,
     scrambled_illus: String,
+    scrambled_intro: String,
     last_scramble: f32,
 }
 
@@ -55,7 +56,8 @@ impl CharacterPage {
             scrambled_name: String::new(),
             scrambled_skill: String::new(),
             scrambled_illus: String::new(),
-            last_scramble: 0.0,
+            scrambled_intro: String::new(),
+            last_scramble: -0.5,
         };
         page.rebuild_form_btns();
         Ok(page)
@@ -105,7 +107,7 @@ impl Page for CharacterPage {
             }
         }
         if self.info_btn.touch(touch) {
-            if s.character.erosion_id.is_some() {
+            if s.character.erosion.is_some() {
                 let data = get_data_mut();
                 data.erosion_enabled = !data.erosion_enabled;
                 let _ = save_data();
@@ -144,13 +146,16 @@ impl Page for CharacterPage {
             self.scrambled_name = scramble(form.name());
             self.scrambled_skill = scramble(form.skill());
             self.scrambled_illus = scramble(&format!("Illustrator: {}", form.illustrator));
+            self.scrambled_intro = s.character.erosion.as_ref()
+                .map(|e| scramble(e.intro()))
+                .unwrap_or_default();
         }
         Ok(())
     }
 
     fn render(&mut self, ui: &mut Ui, s: &mut SharedState) -> Result<()> {
         let active_id = s.character.id.clone();
-        let has_erosion = s.character.erosion_id.is_some();
+        let has_erosion = s.character.erosion.is_some();
         let erosion_on = has_erosion && get_data().erosion_enabled;
 
         s.render_fader(ui, |ui, c| {
@@ -184,40 +189,71 @@ impl Page for CharacterPage {
                 self.info_btn.set(ui, info_r);
 
                 let illus_fmt = format!("Illustrator: {}", form.illustrator);
-                let (name_text, skill_text, illus_text): (&str, &str, &str) = if erosion_on {
-                    (&self.scrambled_name, &self.scrambled_skill, &self.scrambled_illus)
+                let has_intro = character.erosion.as_ref().map_or(false, |e| e.has_intro());
+
+                if erosion_on {
+                    let alpha = c.a * 0.6;
+                    if has_intro {
+                        draw_text_aligned_opt_width(ui,
+                            &self.scrambled_intro,
+                            info_x, info_y,
+                            (0.5, 0.5),
+                            0.35,
+                            Color::new(0.9, 0.2, 0.2, 0.9 * c.a),
+                            info_w - 0.04
+                        );
+                    } else {
+                        draw_text_aligned_opt_width(ui,
+                            &self.scrambled_name,
+                            info_x, info_y - 0.03,
+                            (0.5, 0.5),
+                            0.5,
+                            Color::new(1., 1., 1., 0.9 * alpha),
+                            info_w
+                        );
+                        draw_text_aligned_opt_width(ui,
+                            &self.scrambled_skill, info_x, info_y + 0.03,
+                            (0.5, 0.5),
+                            0.35,
+                            Color::new(1., 1., 1., 0.8 * alpha),
+                            info_w
+                        );
+                        draw_text_aligned_opt_width(ui,
+                            &self.scrambled_illus,
+                            info_x,
+                            info_y + info_h * 0.5 - 0.01,
+                            (0.5, 1.0),
+                            0.25,
+                            Color::new(1., 1., 1., 0.7 * alpha),
+                            info_w
+                        );
+                    }
                 } else {
-                    (form.name(), form.skill(), &illus_fmt)
-                };
-
-                let alpha = if erosion_on { c.a * 0.6 } else { c.a };
-
-                draw_text_aligned_opt_width(ui,
-                    &name_text,
-                    info_x, info_y - 0.03,
-                    (0.5, 0.5),
-                    0.5,
-                    Color::new(1., 1., 1., 0.9 * alpha),
-                    info_w
-                );
-
-                draw_text_aligned_opt_width(ui,
-                    &skill_text, info_x, info_y + 0.03,
-                    (0.5, 0.5),
-                    0.35,
-                    Color::new(1., 1., 1., 0.8 * alpha),
-                    info_w
-                );
-
-                draw_text_aligned_opt_width(ui,
-                    &illus_text,
-                    info_x,
-                    info_y + info_h * 0.5 - 0.01,
-                    (0.5, 1.0),
-                    0.25,
-                    Color::new(1., 1., 1., 0.7 * alpha),
-                    info_w
-                );
+                    draw_text_aligned_opt_width(ui,
+                        form.name(),
+                        info_x, info_y - 0.03,
+                        (0.5, 0.5),
+                        0.5,
+                        Color::new(1., 1., 1., 0.9 * c.a),
+                        info_w
+                    );
+                    draw_text_aligned_opt_width(ui,
+                        form.skill(), info_x, info_y + 0.03,
+                        (0.5, 0.5),
+                        0.35,
+                        Color::new(1., 1., 1., 0.8 * c.a),
+                        info_w
+                    );
+                    draw_text_aligned_opt_width(ui,
+                        &illus_fmt,
+                        info_x,
+                        info_y + info_h * 0.5 - 0.01,
+                        (0.5, 1.0),
+                        0.25,
+                        Color::new(1., 1., 1., 0.7 * c.a),
+                        info_w
+                    );
+                }
             }
 
             let list_x = 0.45;

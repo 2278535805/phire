@@ -1,7 +1,7 @@
 crate::tl_file!("scene" ttl);
 
 mod ending;
-pub use ending::{EndingScene, RecordUpdateState, ERODE};
+pub use ending::{EndingScene, RecordUpdateState, ERODE, LAST_RESULT};
 
 pub mod game;
 pub use game::{GameMode, GameScene, SimpleRecord};
