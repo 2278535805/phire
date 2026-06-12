@@ -31,6 +31,10 @@ pub struct CharacterPage {
     form_btns: Vec<RectButton>,
     info_btn: RectButton,
     scroll: Scroll,
+    scrambled_name: String,
+    scrambled_skill: String,
+    scrambled_illus: String,
+    last_scramble: f32,
 }
 
 impl CharacterPage {
@@ -48,6 +52,10 @@ impl CharacterPage {
             form_btns: Vec::new(),
             info_btn: RectButton::new(),
             scroll: Scroll::new(),
+            scrambled_name: String::new(),
+            scrambled_skill: String::new(),
+            scrambled_illus: String::new(),
+            last_scramble: 0.0,
         };
         page.rebuild_form_btns();
         Ok(page)
@@ -128,8 +136,15 @@ impl Page for CharacterPage {
         false
     }
 
-    fn update(&mut self, _s: &mut SharedState) -> Result<()> {
-        self.scroll.update(_s.t);
+    fn update(&mut self, s: &mut SharedState) -> Result<()> {
+        self.scroll.update(s.t);
+        if s.t - self.last_scramble >= 0.5 {
+            self.last_scramble = s.t;
+            let form = s.character.current_form();
+            self.scrambled_name = scramble(form.name());
+            self.scrambled_skill = scramble(form.skill());
+            self.scrambled_illus = scramble(&format!("Illustrator: {}", form.illustrator));
+        }
         Ok(())
     }
 
@@ -160,21 +175,19 @@ impl Page for CharacterPage {
                 let info_h = 0.25;
 
                 let info_r = Rect::new(info_x - info_w * 0.5, info_y - info_h * 0.5, info_w, info_h);
-                ui.fill_rect(info_r, semi_black(0.5 * c.a));
+                let info_bg = if has_erosion {
+                    Color::new(0.15, 0.05, 0.05, 0.5 * c.a)
+                } else {
+                    semi_black(0.5 * c.a)
+                };
+                ui.fill_rect(info_r, info_bg);
                 self.info_btn.set(ui, info_r);
 
-                let (name_text, skill_text, illus_text) = if erosion_on {
-                    (
-                        scramble(form.name()),
-                        scramble(form.skill()),
-                        scramble(&format!("Illustrator: {}", form.illustrator)),
-                    )
+                let illus_fmt = format!("Illustrator: {}", form.illustrator);
+                let (name_text, skill_text, illus_text): (&str, &str, &str) = if erosion_on {
+                    (&self.scrambled_name, &self.scrambled_skill, &self.scrambled_illus)
                 } else {
-                    (
-                        form.name().to_owned(),
-                        form.skill().to_owned(),
-                        format!("Illustrator: {}", form.illustrator),
-                    )
+                    (form.name(), form.skill(), &illus_fmt)
                 };
 
                 let alpha = if erosion_on { c.a * 0.6 } else { c.a };
