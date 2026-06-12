@@ -507,11 +507,11 @@ impl JudgeLine {
             let mut height = self.height.clone();
             let aspect_ratio = res.aspect_ratio as f64;
             if res.config.note_scale > 0. && res.config.render_note {
-                let mut render_notes_side = |res: &mut Resource, config: &mut RenderConfig<'_>, indices: &[usize], min_y: f64, max_y: f64| {
+                let mut render_notes_side = |res: &mut Resource, config: &mut RenderConfig<'_>, indices: &[usize], min_y: f64, max_y: f64, above: bool| {
                     for index in indices {
                         let speed = self.notes[*index].speed;
                         for note in self.notes[*index..].iter() {
-                            if speed != note.speed {
+                            if note.above != above || speed != note.speed {
                                 break;
                             }
                             if matches!(note.judge, JudgeStatus::Judged) && !matches!(note.kind, NoteKind::Hold { .. }) {
@@ -552,9 +552,9 @@ impl JudgeLine {
                     }
                 };
                 let mut render_notes = |res: &mut Resource, config: &mut RenderConfig<'_>| {
-                    render_notes_side(res, config, &self.cache.above_indices, height_below, height_above);
+                    render_notes_side(res, config, &self.cache.above_indices, height_below, height_above, true);
                     res.with_model(Matrix::identity().append_nonuniform_scaling(&Vector::new(1.0, -1.0)), |res| {
-                        render_notes_side(res, config, &self.cache.below_indices, -height_above, -height_below);
+                        render_notes_side(res, config, &self.cache.below_indices, -height_above, -height_below, false);
                     });
                 };
                 if self.scale_on_notes == 1 {
