@@ -463,7 +463,7 @@ impl SharedState {
             _ => return,
         };
         if reveal {
-            let key = format!("{}/{}", self.character.id, self.character.current_form().id);
+            let key = format!("{}/{}", char_id, form_id);
             crate::get_data_mut().revealed_forms.insert(key);
             let _ = save_data();
         }
