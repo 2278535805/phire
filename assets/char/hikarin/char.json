@@ -2,7 +2,10 @@
   "id": "hikarin",
   "visible": true,
   "erosion": {
-    "target": "kaede",
+    "target": {
+      "character": "hikarin",
+      "form": "kaede"
+    },
     "trackComplete": true,
     "fullCombo": true,
     "minScore": null,

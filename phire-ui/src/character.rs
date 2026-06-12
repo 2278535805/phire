@@ -16,8 +16,15 @@ fn default_visible() -> bool { true }
 
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ErosionTarget {
+    pub character: String,
+    pub form: String,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ErosionConfig {
-    pub target: String,
+    pub target: ErosionTarget,
 
     #[serde(default)]
     pub intro: HashMap<String, String>,
@@ -174,8 +181,8 @@ impl Character {
         }
     }
 
-    pub fn erosion_target(&self) -> Option<&str> {
-        self.erosion.as_ref().map(|e| e.target.as_str())
+    pub fn erosion_target(&self) -> Option<&ErosionTarget> {
+        self.erosion.as_ref().map(|e| &e.target)
     }
 
     pub fn form_count(&self) -> usize {
