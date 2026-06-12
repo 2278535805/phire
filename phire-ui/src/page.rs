@@ -423,9 +423,10 @@ impl SharedState {
     pub async fn new() -> Result<Self> {
         let font = FontArc::try_from_vec(load_file("halva.ttf").await?)?;
         let painter = TextPainter::new(font);
-        let all_characters = Character::new_all().await?;
-        let mut character = all_characters.iter().find(|c| c.id == get_data().character_id).map_or_else(|| &all_characters[0], |c| c).clone();
-        character.set_form(&get_data().character_form_id);
+        let mut all_characters = Character::new_all().await?;
+        let idx = all_characters.iter().position(|c| c.id == get_data().character_id).unwrap_or(0);
+        all_characters[idx].set_form(&get_data().character_form_id);
+        let character = all_characters[idx].clone();
 
         Ok(Self {
             t: 0.,
