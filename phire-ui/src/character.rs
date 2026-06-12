@@ -149,9 +149,6 @@ pub struct Character {
     #[serde(default)]
     pub list_name: HashMap<String, String>,
 
-    #[serde(default = "default_visible")]
-    pub visible: bool,
-
     #[serde(skip)]
     pub selected_form: usize,
 }
@@ -270,7 +267,6 @@ impl Character {
             id: data.id,
             forms,
             list_name: data.list_name,
-            visible: data.visible,
             selected_form: 0,
         })
     }

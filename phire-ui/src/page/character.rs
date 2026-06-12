@@ -40,11 +40,8 @@ pub struct CharacterPage {
 
 impl CharacterPage {
     pub fn new(active_id: String, mut characters: Vec<Character>) -> Result<Self> {
-        let revealed = &get_data().revealed_forms;
         characters.retain(|c| {
-            c.visible || c.forms.iter().any(|f| {
-                f.reveal && (f.visible || revealed.contains(&format!("{}/{}", c.id, f.id)))
-            })
+            c.visible_forms().next().is_some()
         });
         let char_count = characters.len();
         let mut expanded = vec![false; char_count];

@@ -1,6 +1,5 @@
 {
   "id": "blua",
-  "visible": true,
   "forms": [
     {
       "id": "default",
