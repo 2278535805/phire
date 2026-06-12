@@ -1,6 +1,7 @@
 {
   "id": "hikarin",
   "visible": true,
+  "erosionId": "kaede",
   "listName": {
     "en-US": "Kaede Hikarin",
     "ja-JP": "楓光りん",
@@ -105,7 +106,7 @@
     },
     {
       "id": "kaede",
-      "visible": true,
+      "visible": false,
       "healthMode": {
         "mode": {
           "speedBased": {

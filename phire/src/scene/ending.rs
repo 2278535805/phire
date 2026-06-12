@@ -18,7 +18,7 @@ use anyhow::Result;
 use macroquad::prelude::*;
 use sasa::{AudioClip, AudioManager, Music, MusicParams};
 use serde::Deserialize;
-use std::{cell::RefCell, ops::DerefMut};
+use std::{cell::RefCell, ops::DerefMut, sync::atomic::{AtomicBool, Ordering}};
 
 #[derive(Deserialize)]
 pub struct RecordUpdateState {
@@ -94,6 +94,7 @@ impl EndingScene {
         let upload_task = upload_fn
             .as_ref()
             .and_then(|f| record_data.clone().map(|data| (f(data), show_message(tl!("uploading")).handle())));
+        ERODE.store(result.track_complete, Ordering::Relaxed);
         Ok(Self {
             background,
             illustration,
@@ -142,6 +143,8 @@ impl EndingScene {
 thread_local! {
     static RE_UPLOAD: RefCell<bool> = RefCell::default();
 }
+
+pub static ERODE: AtomicBool = AtomicBool::new(false);
 
 impl Scene for EndingScene {
     fn enter(&mut self, tm: &mut TimeManager, target: Option<RenderTarget>) -> Result<()> {

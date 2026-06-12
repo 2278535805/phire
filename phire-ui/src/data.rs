@@ -107,6 +107,7 @@ pub struct Data {
     pub accept_invalid_cert: bool,
     pub character_id: String,
     pub character_form_id: String,
+    pub erosion_enabled: bool,
 }
 
 impl Data {

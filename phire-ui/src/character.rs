@@ -74,6 +74,8 @@ pub struct Character {
     #[serde(default)]
     pub list_name: HashMap<String, String>,
 
+    pub erosion_id: Option<String>,
+
     #[serde(default = "default_visible")]
     pub visible: bool,
 
@@ -110,6 +112,10 @@ impl Character {
         if let Some(pos) = self.forms.iter().position(|f| f.id == form_id) {
             self.selected_form = pos;
         }
+    }
+
+    pub fn erosion_target(&self) -> Option<&str> {
+        self.erosion_id.as_deref()
     }
 
     pub fn form_count(&self) -> usize {
@@ -180,6 +186,7 @@ impl Character {
             id: data.id,
             forms,
             list_name: data.list_name,
+            erosion_id: data.erosion_id,
             visible: data.visible,
             selected_form: 0,
         })

@@ -455,6 +455,16 @@ impl SharedState {
         self.charts_local = load_local(&(ChartOrder::Default, false));
     }
 
+    pub fn switch_to_erosion(&mut self) {
+        let data = crate::get_data();
+        if !data.erosion_enabled {
+            return;
+        }
+        if let Some(erosion_id) = self.character.erosion_target().map(|s| s.to_owned()) {
+            self.switch_character(&self.character.id.clone(), &erosion_id);
+        }
+    }
+
     pub fn switch_character(&mut self, character_id: &str, form_id: &str) {
         if let Some(character) = self.all_characters.iter_mut().find(|c| c.id == character_id) {
             character.set_form(form_id);

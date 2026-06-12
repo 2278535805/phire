@@ -2,6 +2,8 @@ use std::borrow::Cow;
 
 use super::{Page, SharedState};
 use crate::character::Character;
+use crate::{get_data, get_data_mut, save_data};
+use ::rand::{rng, Rng};
 use anyhow::Result;
 use macroquad::prelude::*;
 use phire::{
@@ -12,11 +14,22 @@ use phire::{
 const ITEM_HEIGHT: f32 = 0.10;
 const FORM_ITEM_HEIGHT: f32 = 0.08;
 
+fn scramble(text: &str) -> String {
+    const GLITCH: &[char] = &[
+        '█', '▓', '░', '■', '◆', '▰', '▮', '▯', '▱', '▰', '▮', '▯', '▱', '▰', '▮', '▯', '▱', '▰', '▮', '▯', '▱',
+    ];
+    let mut rng = rng();
+    text.chars()
+        .map(|c| if rng.random_bool(0.45) { GLITCH[rng.random_range(0..GLITCH.len())] } else { c })
+        .collect()
+}
+
 pub struct CharacterPage {
     characters: Vec<Character>,
     expanded: Vec<bool>,
     btns: Vec<RectButton>,
     form_btns: Vec<RectButton>,
+    info_btn: RectButton,
     scroll: Scroll,
 }
 
@@ -33,6 +46,7 @@ impl CharacterPage {
             expanded,
             btns: (0..char_count).map(|_| RectButton::new()).collect(),
             form_btns: Vec::new(),
+            info_btn: RectButton::new(),
             scroll: Scroll::new(),
         };
         page.rebuild_form_btns();
@@ -82,6 +96,14 @@ impl Page for CharacterPage {
                 return Ok(true);
             }
         }
+        if self.info_btn.touch(touch) {
+            if s.character.erosion_id.is_some() {
+                let data = get_data_mut();
+                data.erosion_enabled = !data.erosion_enabled;
+                let _ = save_data();
+            }
+            return Ok(true);
+        }
         let mut vi = 0;
         for (i, character) in self.characters.iter().enumerate() {
             if !self.expanded[i] || character.form_count() <= 1 {
@@ -113,6 +135,8 @@ impl Page for CharacterPage {
 
     fn render(&mut self, ui: &mut Ui, s: &mut SharedState) -> Result<()> {
         let active_id = s.character.id.clone();
+        let has_erosion = s.character.erosion_id.is_some();
+        let erosion_on = has_erosion && get_data().erosion_enabled;
 
         s.render_fader(ui, |ui, c| {
             let top = -ui.top;
@@ -135,32 +159,50 @@ impl Page for CharacterPage {
                 let info_w = 0.6;
                 let info_h = 0.25;
 
-                ui.fill_rect(Rect::new(info_x - info_w * 0.5, info_y - info_h * 0.5, info_w, info_h), semi_black(0.5 * c.a));
+                let info_r = Rect::new(info_x - info_w * 0.5, info_y - info_h * 0.5, info_w, info_h);
+                ui.fill_rect(info_r, semi_black(0.5 * c.a));
+                self.info_btn.set(ui, info_r);
+
+                let (name_text, skill_text, illus_text) = if erosion_on {
+                    (
+                        scramble(form.name()),
+                        scramble(form.skill()),
+                        scramble(&format!("Illustrator: {}", form.illustrator)),
+                    )
+                } else {
+                    (
+                        form.name().to_owned(),
+                        form.skill().to_owned(),
+                        format!("Illustrator: {}", form.illustrator),
+                    )
+                };
+
+                let alpha = if erosion_on { c.a * 0.6 } else { c.a };
 
                 draw_text_aligned_opt_width(ui,
-                    form.name(),
+                    &name_text,
                     info_x, info_y - 0.03,
                     (0.5, 0.5),
                     0.5,
-                    Color::new(1., 1., 1., 0.9 * c.a),
+                    Color::new(1., 1., 1., 0.9 * alpha),
                     info_w
                 );
 
                 draw_text_aligned_opt_width(ui,
-                    form.skill(), info_x, info_y + 0.03,
+                    &skill_text, info_x, info_y + 0.03,
                     (0.5, 0.5),
                     0.35,
-                    Color::new(1., 1., 1., 0.8 * c.a),
+                    Color::new(1., 1., 1., 0.8 * alpha),
                     info_w
                 );
 
                 draw_text_aligned_opt_width(ui,
-                    &format!("Illustrator: {}", form.illustrator),
+                    &illus_text,
                     info_x,
                     info_y + info_h * 0.5 - 0.01,
                     (0.5, 1.0),
                     0.25,
-                    Color::new(1., 1., 1., 0.7 * c.a),
+                    Color::new(1., 1., 1., 0.7 * alpha),
                     info_w
                 );
             }
