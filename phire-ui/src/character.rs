@@ -10,9 +10,11 @@ use tracing::error;
 
 use crate::get_data;
 
+fn default_visible() -> bool { true }
+
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct Character {
+pub struct CharacterForm {
     pub id: String,
     pub name: HashMap<String, String>,
     pub intro: HashMap<String, String>,
@@ -28,12 +30,16 @@ pub struct Character {
     pub position: (f32, f32, f32, f32),
 
     pub health_mode: Option<HealthConfig>,
+    
+
+    #[serde(default = "default_visible")]
+    pub visible: bool,
 
     #[serde(skip)]
     pub illu: Option<SafeTexture>,
 }
 
-impl Character {
+impl CharacterForm {
     pub fn name(&self) -> &str {
         let lang = get_data().language.as_deref().unwrap_or("en-US");
         self.name.get(lang)
@@ -56,6 +62,66 @@ impl Character {
             .or_else(|| self.skill.get("en-US"))
             .map(|s| s.as_str())
             .unwrap_or("")
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Character {
+    pub id: String,
+    pub forms: Vec<CharacterForm>,
+
+    #[serde(default)]
+    pub list_name: HashMap<String, String>,
+
+    #[serde(default = "default_visible")]
+    pub visible: bool,
+
+    #[serde(skip)]
+    pub selected_form: usize,
+}
+
+impl Character {
+    pub fn current_form(&self) -> &CharacterForm {
+        &self.forms[self.selected_form.min(self.forms.len().saturating_sub(1))]
+    }
+
+    pub fn name(&self) -> &str {
+        self.current_form().name()
+    }
+
+    pub fn list_name(&self) -> &str {
+        let lang = get_data().language.as_deref().unwrap_or("en-US");
+        self.list_name.get(lang)
+            .or_else(|| self.list_name.get("en-US"))
+            .map(|s| s.as_str())
+            .unwrap_or_else(|| self.name())
+    }
+
+    pub fn intro(&self) -> &str {
+        self.current_form().intro()
+    }
+
+    pub fn skill(&self) -> &str {
+        self.current_form().skill()
+    }
+
+    pub fn set_form(&mut self, form_id: &str) {
+        if let Some(pos) = self.forms.iter().position(|f| f.id == form_id) {
+            self.selected_form = pos;
+        }
+    }
+
+    pub fn form_count(&self) -> usize {
+        self.visible_forms().count()
+    }
+
+    pub fn visible_forms(&self) -> impl Iterator<Item = &CharacterForm> {
+        self.forms.iter().filter(|f| f.visible)
+    }
+
+    pub fn visible_forms_indices(&self) -> Vec<usize> {
+        self.forms.iter().enumerate().filter(|(_, f)| f.visible).map(|(i, _)| i).collect()
     }
 
     pub async fn load_by_id(id: &str) -> Result<Self> {
@@ -86,27 +152,36 @@ impl Character {
     }
 
     async fn new(data: Character) -> Result<Self> {
-        let illu = if let Ok(illu) = load_texture(&data.illust).await {
-            let illu: SafeTexture = illu.into();
-            Some(illu.with_mipmap())
-        } else {
-            error!("failed to load character illustration {}", data.illust);
-            None
-        };
+        let mut forms = Vec::new();
+        for form in data.forms {
+            let illu = if let Ok(illu) = load_texture(&form.illust).await {
+                let illu: SafeTexture = illu.into();
+                Some(illu.with_mipmap())
+            } else {
+                error!("failed to load character illustration {}", form.illust);
+                None
+            };
+            forms.push(CharacterForm {
+                id: form.id,
+                name: form.name,
+                intro: form.intro,
+                skill: form.skill,
+                illust: form.illust,
+                illustrator: form.illustrator,
+                name_size: form.name_size,
+                baseline: form.baseline,
+                position: form.position,
+                health_mode: form.health_mode,
+                visible: form.visible,
+                illu,
+            });
+        }
         Ok(Self {
             id: data.id,
-            name: data.name,
-            intro: data.intro,
-            skill: data.skill,
-            illust: data.illust,
-            illustrator: data.illustrator,
-
-            name_size: data.name_size,
-            baseline: data.baseline,
-
-            position: data.position,
-            health_mode: data.health_mode,
-            illu,
+            forms,
+            list_name: data.list_name,
+            visible: data.visible,
+            selected_form: 0,
         })
     }
 }

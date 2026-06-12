@@ -106,6 +106,7 @@ pub struct Data {
     pub respack_id: usize,
     pub accept_invalid_cert: bool,
     pub character_id: String,
+    pub character_form_id: String,
 }
 
 impl Data {

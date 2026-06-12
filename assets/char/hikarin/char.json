@@ -1,47 +1,155 @@
 {
   "id": "hikarin",
-  "illust": "char/hikarin/hikarin.png",
-  "illustrator": "NuanR_Mxi",
-  "baseline": false,
-  "position": [0.0, 0.2, 1.3, 1.3],
-  "name": {
-    "en-US": "Hikarin",
-    "zh-CN": "枫"
+  "visible": true,
+  "listName": {
+    "en-US": "Kaede Hikarin",
+    "ja-JP": "楓光りん",
+    "zh-CN": "枫暖日明曦"
   },
-  "intro": {
-    "en-US": "Intro",
-    "zh-CN": "简介"
-  },
-  "skill": {
-    "en-US": "Oblibion - Seal the Lost Memory",
-    "zh-CN": "忘却 - 丢失的记忆在此封印"
-  },
-  "healthMode": {
-    "mode": {
-      "speedBased": {
-        "withJudge": {
-          "successFactor": 0.4,
-          "failureFactor": 1.0,
-          "punishFactor": 0.0,
-          "maxSpeed": 0.0,
-          "minSpeed": -15.0
+  "forms": [
+    {
+      "id": "default",
+      "visible": true,
+      "healthMode": {
+        "mode": {
+          "speedBased": {
+            "withJudge": {
+              "successFactor": 0.4,
+              "failureFactor": 1.0,
+              "punishFactor": 0.0,
+              "maxSpeed": 0.0,
+              "minSpeed": -15.0
+            },
+            "withoutJudge": {
+              "successFactor": 0.1,
+              "failureFactor": 0.0,
+              "punishFactor": 0.2,
+              "maxSpeed": 1.0,
+              "minSpeed": -0.4
+            }
+          }
         },
-        "withoutJudge": {
-          "successFactor": 0.1,
-          "failureFactor": 0.0,
-          "punishFactor": 0.2,
-          "maxSpeed": 1.0,
-          "minSpeed": -0.4
-        }
-      }
+        "maxHealth": 100.0,
+        "initialHealth": 100.0,
+        "perfectHeal": true,
+        "goodHeal": false,
+        "badHeal": false,
+        "perfectFactor": 1.0,
+        "goodFactor": -3.0,
+        "badFactor": -8.0
+      },
+      "name": {
+        "en-US": "Kaede",
+        "ja-JP": "楓",
+        "zh-CN": "枫"
+      },
+      "intro": {
+        "en-US": "",
+        "zh-CN": ""
+      },
+      "skill": {
+        "en-US": "contradiction",
+        "zh-CN": "矛盾"
+      },
+      "illust": "char/hikarin/hikarin.png",
+      "illustrator": "NuanR_Mxi",
+      "position": [0.0, 0.2, 1.3, 1.3]
     },
-    "maxHealth": 100.0,
-    "initialHealth": 100.0,
-    "perfectHeal": true,
-    "goodHeal": false,
-    "badHeal": false,
-    "perfectFactor": 1.0,
-    "goodFactor": -3.0,
-    "badFactor": -8.0
-  }
+    {
+      "id": "mxi",
+      "visible": true,
+      "healthMode": {
+        "mode": {
+          "speedBased": {
+            "withJudge": {
+              "successFactor": 0.1,
+              "failureFactor": -0.2,
+              "punishFactor": 0.0,
+              "maxSpeed": 0.0,
+              "minSpeed": -0.4
+            },
+            "withoutJudge": {
+              "successFactor": 0.1,
+              "failureFactor": 0.0,
+              "punishFactor": 0.05,
+              "maxSpeed": 0.0,
+              "minSpeed": -0.2
+            }
+          }
+        },
+        "maxHealth": 100.0,
+        "initialHealth": 25.0,
+        "perfectHeal": true,
+        "goodHeal": false,
+        "badHeal": false,
+        "perfectFactor": 1.0,
+        "goodFactor": -1.0,
+        "badFactor": -1.0
+      },
+      "name": {
+        "en-US": "HikariN",
+        "ja-JP": "ひかりん",
+        "zh-CN": "明曦"
+      },
+      "intro": {
+        "en-US": "",
+        "zh-CN": ""
+      },
+      "skill": {
+        "en-US": "No steps ahead, no loss to dread.",
+        "zh-CN": "不再前行，又何谈失去"
+      },
+      "illust": "char/hikarin/暖日Only.png",
+      "illustrator": "NuanR_Mxi",
+      "position": [0.0, 0.2, 1.3, 1.3]
+    },
+    {
+      "id": "star",
+      "visible": true,
+      "healthMode": {
+        "mode": {
+          "speedBased": {
+            "withJudge": {
+              "successFactor": 0.4,
+              "failureFactor": 1.0,
+              "punishFactor": 0.0,
+              "maxSpeed": 0.0,
+              "minSpeed": -15.0
+            },
+            "withoutJudge": {
+              "successFactor": 0.1,
+              "failureFactor": 0.0,
+              "punishFactor": 0.2,
+              "maxSpeed": 1.0,
+              "minSpeed": -0.4
+            }
+          }
+        },
+        "maxHealth": 100.0,
+        "initialHealth": 100.0,
+        "perfectHeal": true,
+        "goodHeal": false,
+        "badHeal": false,
+        "perfectFactor": 1.0,
+        "goodFactor": -3.0,
+        "badFactor": -8.0
+      },
+      "name": {
+        "en-US": "Sutaraito",
+        "ja-JP": "スタライト",
+        "zh-CN": "星辉"
+      },
+      "intro": {
+        "en-US": "",
+        "zh-CN": ""
+      },
+      "skill": {
+        "en-US": "Oblibion - Seal the Lost Memory",
+        "zh-CN": "忘却 - 丢失的记忆在此封印"
+      },
+      "illust": "char/hikarin/暖星Only.png",
+      "illustrator": "NuanR_Mxi",
+      "position": [0.0, 0.2, 1.3, 1.3]
+    }
+  ]
 }

@@ -1,33 +1,49 @@
 use std::borrow::Cow;
 
-use super::{NextPage, Page, SharedState};
-use crate::{character::Character, get_data_mut};
+use super::{Page, SharedState};
+use crate::character::Character;
 use anyhow::Result;
 use macroquad::prelude::*;
 use phire::{
-    ext::{SafeTexture, ScaleType, draw_text_aligned_opt_width, semi_black, semi_white},
+    ext::{ScaleType, draw_text_aligned_opt_width, semi_black, semi_white},
     ui::{RectButton, Scroll, Ui},
 };
 
-const ITEM_HEIGHT: f32 = 0.12;
+const ITEM_HEIGHT: f32 = 0.10;
+const FORM_ITEM_HEIGHT: f32 = 0.08;
 
 pub struct CharacterPage {
     characters: Vec<Character>,
     selected: usize,
     btns: Vec<RectButton>,
+    form_btns: Vec<RectButton>,
     scroll: Scroll,
 }
 
 impl CharacterPage {
-    pub fn new(id: String, characters: Vec<Character>) -> Result<Self> {
+    pub fn new(id: String, mut characters: Vec<Character>) -> Result<Self> {
+        characters.retain(|c| c.visible);
         let selected = characters.iter().position(|c| c.id == id).unwrap_or(0);
-        let btns = (0..characters.len()).map(|_| RectButton::new()).collect();
+        let char_count = characters.len();
+        let form_count = characters.get(selected).map_or(0, |c| c.form_count());
         Ok(Self {
             characters,
             selected,
-            btns,
+            btns: (0..char_count).map(|_| RectButton::new()).collect(),
+            form_btns: (0..form_count).map(|_| RectButton::new()).collect(),
             scroll: Scroll::new(),
         })
+    }
+
+    fn rebuild_form_btns(&mut self) {
+        let form_count = self.characters.get(self.selected).map_or(0, |c| c.form_count());
+        self.form_btns.resize_with(form_count, RectButton::new);
+    }
+
+    fn apply_character(&self, i: usize, s: &mut SharedState) {
+        if let Some(character) = self.characters.get(i) {
+            s.switch_character(&character.id, &character.current_form().id);
+        }
     }
 }
 
@@ -42,11 +58,33 @@ impl Page for CharacterPage {
         }
         for (i, btn) in self.btns.iter_mut().enumerate() {
             if btn.touch(touch) {
-                self.selected = i;
-                s.character = self.characters[i].clone();
-                let data = get_data_mut();
-                data.character_id = self.characters[i].id.clone();
-                data.config.health_mode = self.characters[i].health_mode.clone().map_or_else(|| None, |mode| Some(mode));
+                if self.selected != i {
+                    self.selected = i;
+                    self.rebuild_form_btns();
+                }
+                let is_single_form = self.characters.get(i).map_or(false, |c| c.form_count() <= 1);
+                if is_single_form {
+                    let raw_idx = self.characters.get(i).and_then(|c| {
+                        if c.form_count() != 1 { return None; }
+                        c.visible_forms().next().and_then(|first_vis| c.forms.iter().position(|f| f.id == first_vis.id))
+                    });
+                    if let Some(raw_idx) = raw_idx {
+                        self.characters[i].selected_form = raw_idx;
+                    }
+                    self.apply_character(i, s);
+                }
+                return Ok(true);
+            }
+        }
+        for (vi, btn) in self.form_btns.iter_mut().enumerate() {
+            if btn.touch(touch) {
+                let raw_idx = self.characters.get(self.selected).and_then(|c| c.visible_forms_indices().get(vi).copied());
+                if let Some(raw_idx) = raw_idx {
+                    if let Some(character) = self.characters.get_mut(self.selected) {
+                        character.selected_form = raw_idx;
+                    }
+                    self.apply_character(self.selected, s);
+                }
                 return Ok(true);
             }
         }
@@ -65,24 +103,24 @@ impl Page for CharacterPage {
     fn render(&mut self, ui: &mut Ui, s: &mut SharedState) -> Result<()> {
 
         s.render_fader(ui, |ui, c| {
-            // ui.fill_rect(ui.screen_rect(), semi_black(0.4 * c.a));
             let top = -ui.top;
             draw_rectangle(-1., -top, 2., top * 2., Color::new(0., 0., 0., 0.4 * c.a));
 
             if let Some(character) = self.characters.get(self.selected) {
-                if let Some(illu) = &character.illu {
+                let form = character.current_form();
+                if let Some(illu) = &form.illu {
                     let r = Rect::new(
-                        character.position.0 - character.position.2 * 0.5 - 0.2,
-                        character.position.1 - character.position.3 * 0.5,
-                        character.position.2,
-                        character.position.3,
+                        form.position.0 - form.position.2 * 0.5 - 0.2,
+                        form.position.1 - form.position.3 * 0.5,
+                        form.position.2,
+                        form.position.3,
                     );
                     ui.fill_rect(r, (Texture2D::clone(illu), r, ScaleType::Inside, c));
                 }
 
-                let name = character.name();
-                let skill = character.skill();
-                let illustrator = &character.illustrator;
+                let name = form.name();
+                let skill = form.skill();
+                let illustrator = &form.illustrator;
 
                 let info_x = -0.2;
                 let info_y = -0.6 * top;
@@ -126,21 +164,27 @@ impl Page for CharacterPage {
 
             ui.fill_rect(list_r, semi_black(0.5 * c.a));
 
-            let content_h = self.characters.len() as f32 * ITEM_HEIGHT;
+            let mut total_h = self.characters.len() as f32 * ITEM_HEIGHT;
+            if let Some(character) = self.characters.get(self.selected) {
+                if character.form_count() > 1 {
+                    total_h += character.form_count() as f32 * FORM_ITEM_HEIGHT;
+                }
+            }
+
             self.scroll.size((list_w, list_h));
             self.scroll.render(ui, |ui| {
+                let mut y = top;
                 for (i, character) in self.characters.iter().enumerate() {
-                    let name = character.name();
-                    let r = Rect::new(list_x, top + i as f32 * ITEM_HEIGHT, list_w, ITEM_HEIGHT);
-
                     let is_selected = i == self.selected;
+
+                    // character row
+                    let r = Rect::new(list_x, y, list_w, ITEM_HEIGHT);
                     let bg_color = if is_selected {
-                        semi_white(0.3 * c.a)
+                        semi_white(0.2 * c.a)
                     } else {
                         semi_black(0.0)
                     };
                     ui.fill_rect(r, bg_color);
-
                     self.btns[i].set(ui, r);
 
                     let text_color = if is_selected {
@@ -149,14 +193,60 @@ impl Page for CharacterPage {
                         Color::new(1., 1., 1., 0.7 * c.a)
                     };
 
-                    ui.text(name)
-                        .pos(list_x + 0.02, top + i as f32 * ITEM_HEIGHT + ITEM_HEIGHT * 0.5)
+                    let has_forms = character.form_count() > 1;
+
+                    ui.text(character.list_name())
+                        .pos(list_x + 0.02, y + ITEM_HEIGHT * 0.5)
                         .anchor(0.0, 0.5)
-                        .size(0.4)
+                        .size(0.35)
                         .color(text_color)
                         .draw();
+
+                    if has_forms {
+                        ui.text(if is_selected { "v" } else { ">" })
+                            .pos(list_x + list_w - 0.05, y + ITEM_HEIGHT * 0.5)
+                            .anchor(1.0, 0.5)
+                            .size(0.28)
+                            .color(text_color)
+                            .draw();
+                    }
+
+                    y += ITEM_HEIGHT;
+
+                    if is_selected && has_forms {
+                        let raw_indices = character.visible_forms_indices();
+                        for (vi, &raw_idx) in raw_indices.iter().enumerate() {
+                            let form = &character.forms[raw_idx];
+                            let fr = Rect::new(list_x + 0.03, y, list_w - 0.03, FORM_ITEM_HEIGHT);
+                            let form_is_active = raw_idx == character.selected_form;
+                            let form_bg = if form_is_active {
+                                semi_white(0.15 * c.a)
+                            } else {
+                                semi_black(0.0)
+                            };
+                            ui.fill_rect(fr, form_bg);
+                            if vi < self.form_btns.len() {
+                                self.form_btns[vi].set(ui, fr);
+                            }
+
+                            let form_color = if form_is_active {
+                                Color::new(1., 1., 1., c.a)
+                            } else {
+                                Color::new(1., 1., 1., 0.6 * c.a)
+                            };
+
+                            ui.text(form.name())
+                                .pos(list_x + 0.06, y + FORM_ITEM_HEIGHT * 0.5)
+                                .anchor(0.0, 0.5)
+                                .size(0.28)
+                                .color(form_color)
+                                .draw();
+
+                            y += FORM_ITEM_HEIGHT;
+                        }
+                    }
                 }
-                (list_w, content_h)
+                (list_w, total_h)
             });
         });
         Ok(())

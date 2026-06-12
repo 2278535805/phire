@@ -23,7 +23,7 @@ pub use settings::SettingsPage;
 use tokio::sync::Notify;
 
 use crate::{
-    character::Character, client::File, data::BriefChartInfo, dir, get_data, images::Images, scene::{ChartOrder, fs_from_path}
+    character::Character, client::File, data::BriefChartInfo, dir, get_data, get_data_mut, images::Images, save_data, scene::{ChartOrder, fs_from_path}
 };
 use anyhow::Result;
 use image::DynamicImage;
@@ -424,7 +424,8 @@ impl SharedState {
         let font = FontArc::try_from_vec(load_file("halva.ttf").await?)?;
         let painter = TextPainter::new(font);
         let all_characters = Character::new_all().await?;
-        let character = all_characters.iter().find(|c| c.id == get_data().character_id).map_or_else(|| &all_characters[0], |c| c).clone();
+        let mut character = all_characters.iter().find(|c| c.id == get_data().character_id).map_or_else(|| &all_characters[0], |c| c).clone();
+        character.set_form(&get_data().character_form_id);
 
         Ok(Self {
             t: 0.,
@@ -451,6 +452,18 @@ impl SharedState {
 
     pub fn reload_local_charts(&mut self) {
         self.charts_local = load_local(&(ChartOrder::Default, false));
+    }
+
+    pub fn switch_character(&mut self, character_id: &str, form_id: &str) {
+        if let Some(character) = self.all_characters.iter_mut().find(|c| c.id == character_id) {
+            character.set_form(form_id);
+            self.character = character.clone();
+            let data = crate::get_data_mut();
+            data.character_id = character_id.to_owned();
+            data.character_form_id = form_id.to_owned();
+            data.config.health_mode = character.current_form().health_mode.clone();
+            let _ = save_data();
+        }
     }
 }
 
