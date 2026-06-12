@@ -14,7 +14,7 @@ const FORM_ITEM_HEIGHT: f32 = 0.08;
 
 pub struct CharacterPage {
     characters: Vec<Character>,
-    expanded: usize,
+    expanded: Vec<bool>,
     btns: Vec<RectButton>,
     form_btns: Vec<RectButton>,
     scroll: Scroll,
@@ -23,21 +23,28 @@ pub struct CharacterPage {
 impl CharacterPage {
     pub fn new(active_id: String, mut characters: Vec<Character>) -> Result<Self> {
         characters.retain(|c| c.visible);
-        let expanded = characters.iter().position(|c| c.id == active_id).unwrap_or(0);
         let char_count = characters.len();
-        let form_count = characters.get(expanded).map_or(0, |c| c.form_count());
-        Ok(Self {
+        let mut expanded = vec![false; char_count];
+        if let Some(pos) = characters.iter().position(|c| c.id == active_id) {
+            expanded[pos] = true;
+        }
+        let mut page = Self {
             characters,
             expanded,
             btns: (0..char_count).map(|_| RectButton::new()).collect(),
-            form_btns: (0..form_count).map(|_| RectButton::new()).collect(),
+            form_btns: Vec::new(),
             scroll: Scroll::new(),
-        })
+        };
+        page.rebuild_form_btns();
+        Ok(page)
     }
 
     fn rebuild_form_btns(&mut self) {
-        let form_count = self.characters.get(self.expanded).map_or(0, |c| c.form_count());
-        self.form_btns.resize_with(form_count, RectButton::new);
+        let count: usize = self.characters.iter().enumerate()
+            .filter(|(i, c)| self.expanded[*i] && c.form_count() > 1)
+            .map(|(_, c)| c.form_count())
+            .sum();
+        self.form_btns.resize_with(count, RectButton::new);
     }
 
     fn apply_character(&self, i: usize, s: &mut SharedState) {
@@ -58,11 +65,8 @@ impl Page for CharacterPage {
         }
         for (i, btn) in self.btns.iter_mut().enumerate() {
             if btn.touch(touch) {
-                if self.expanded != i {
-                    self.expanded = i;
-                    self.rebuild_form_btns();
-                }
-                if self.characters.get(i).map_or(false, |c| c.form_count() <= 1) {
+                let is_single_form = self.characters.get(i).map_or(false, |c| c.form_count() <= 1);
+                if is_single_form {
                     let raw_idx = self.characters.get(i).and_then(|c| {
                         if c.form_count() != 1 { return None; }
                         c.visible_forms().next().and_then(|first_vis| c.forms.iter().position(|f| f.id == first_vis.id))
@@ -71,20 +75,28 @@ impl Page for CharacterPage {
                         self.characters[i].selected_form = raw_idx;
                     }
                     self.apply_character(i, s);
+                } else {
+                    self.expanded[i] = !self.expanded[i];
+                    self.rebuild_form_btns();
                 }
                 return Ok(true);
             }
         }
-        for (vi, btn) in self.form_btns.iter_mut().enumerate() {
-            if btn.touch(touch) {
-                let raw_idx = self.characters.get(self.expanded).and_then(|c| c.visible_forms_indices().get(vi).copied());
-                if let Some(raw_idx) = raw_idx {
-                    if let Some(character) = self.characters.get_mut(self.expanded) {
+        let mut vi = 0;
+        for (i, character) in self.characters.iter().enumerate() {
+            if !self.expanded[i] || character.form_count() <= 1 {
+                continue;
+            }
+            let raw_indices = character.visible_forms_indices();
+            for (fi, &raw_idx) in raw_indices.iter().enumerate() {
+                if vi < self.form_btns.len() && self.form_btns[vi].touch(touch) {
+                    if let Some(character) = self.characters.get_mut(i) {
                         character.selected_form = raw_idx;
                     }
-                    self.apply_character(self.expanded, s);
+                    self.apply_character(i, s);
+                    return Ok(true);
                 }
-                return Ok(true);
+                vi += 1;
             }
         }
         Ok(true)
@@ -161,8 +173,8 @@ impl Page for CharacterPage {
             ui.fill_rect(list_r, semi_black(0.5 * c.a));
 
             let mut total_h = self.characters.len() as f32 * ITEM_HEIGHT;
-            if let Some(character) = self.characters.get(self.expanded) {
-                if character.form_count() > 1 {
+            for (i, character) in self.characters.iter().enumerate() {
+                if self.expanded[i] && character.form_count() > 1 {
                     total_h += character.form_count() as f32 * FORM_ITEM_HEIGHT;
                 }
             }
@@ -170,8 +182,9 @@ impl Page for CharacterPage {
             self.scroll.size((list_w, list_h));
             self.scroll.render(ui, |ui| {
                 let mut y = top;
+                let mut form_vi = 0;
                 for (i, character) in self.characters.iter().enumerate() {
-                    let is_expanded = i == self.expanded;
+                    let is_expanded = self.expanded[i];
                     let is_active = character.id == active_id;
                     let has_forms = character.form_count() > 1;
 
@@ -220,9 +233,10 @@ impl Page for CharacterPage {
                                 semi_black(0.0)
                             };
                             ui.fill_rect(fr, form_bg);
-                            if vi < self.form_btns.len() {
-                                self.form_btns[vi].set(ui, fr);
+                            if form_vi < self.form_btns.len() {
+                                self.form_btns[form_vi].set(ui, fr);
                             }
+                            form_vi += 1;
 
                             let form_color = if form_is_active {
                                 Color::new(1., 1., 1., c.a)
