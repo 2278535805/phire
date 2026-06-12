@@ -8,54 +8,6 @@
   },
   "forms": [
     {
-      "id": "default",
-      "visible": true,
-      "healthMode": {
-        "mode": {
-          "speedBased": {
-            "withJudge": {
-              "successFactor": 0.4,
-              "failureFactor": 1.0,
-              "punishFactor": 0.0,
-              "maxSpeed": 0.0,
-              "minSpeed": -15.0
-            },
-            "withoutJudge": {
-              "successFactor": 0.1,
-              "failureFactor": 0.0,
-              "punishFactor": 0.2,
-              "maxSpeed": 1.0,
-              "minSpeed": -0.4
-            }
-          }
-        },
-        "maxHealth": 100.0,
-        "initialHealth": 100.0,
-        "perfectHeal": true,
-        "goodHeal": false,
-        "badHeal": false,
-        "perfectFactor": 1.0,
-        "goodFactor": -3.0,
-        "badFactor": -8.0
-      },
-      "name": {
-        "en-US": "Kaede",
-        "ja-JP": "楓",
-        "zh-CN": "枫"
-      },
-      "intro": {
-        "en-US": "",
-        "zh-CN": ""
-      },
-      "skill": {
-        "en-US": "contradiction",
-        "zh-CN": "矛盾"
-      },
-      "illust": "char/hikarin/hikarin.png",
-      "illustrator": "NuanR_Mxi",
-      "position": [0.0, 0.2, 1.3, 1.3]
-    },
-    {
       "id": "mxi",
       "visible": true,
       "healthMode": {
@@ -63,28 +15,28 @@
           "speedBased": {
             "withJudge": {
               "successFactor": 0.1,
-              "failureFactor": -0.2,
+              "failureFactor": 1.0,
               "punishFactor": 0.0,
               "maxSpeed": 0.0,
-              "minSpeed": -0.4
+              "minSpeed": -2.0
             },
             "withoutJudge": {
-              "successFactor": 0.1,
+              "successFactor": 0.2,
               "failureFactor": 0.0,
-              "punishFactor": 0.05,
+              "punishFactor": 0.1,
               "maxSpeed": 0.0,
-              "minSpeed": -0.2
+              "minSpeed": -0.3
             }
           }
         },
         "maxHealth": 100.0,
-        "initialHealth": 25.0,
+        "initialHealth": 50.0,
         "perfectHeal": true,
         "goodHeal": false,
         "badHeal": false,
         "perfectFactor": 1.0,
         "goodFactor": -1.0,
-        "badFactor": -1.0
+        "badFactor": -3.0
       },
       "name": {
         "en-US": "HikariN",
@@ -148,6 +100,54 @@
         "zh-CN": "忘却 - 丢失的记忆在此封印"
       },
       "illust": "char/hikarin/暖星Only.png",
+      "illustrator": "NuanR_Mxi",
+      "position": [0.0, 0.2, 1.3, 1.3]
+    },
+    {
+      "id": "kaede",
+      "visible": true,
+      "healthMode": {
+        "mode": {
+          "speedBased": {
+            "withJudge": {
+              "successFactor": 0.4,
+              "failureFactor": 1.0,
+              "punishFactor": 0.0,
+              "maxSpeed": 0.0,
+              "minSpeed": -30.0
+            },
+            "withoutJudge": {
+              "successFactor": 0.1,
+              "failureFactor": 0.0,
+              "punishFactor": 0.2,
+              "maxSpeed": 2.0,
+              "minSpeed": -0.8
+            }
+          }
+        },
+        "maxHealth": 200.0,
+        "initialHealth": 100.0,
+        "perfectHeal": true,
+        "goodHeal": false,
+        "badHeal": false,
+        "perfectFactor": 2.0,
+        "goodFactor": -6.0,
+        "badFactor": -16.0
+      },
+      "name": {
+        "en-US": "Kaede",
+        "ja-JP": "楓",
+        "zh-CN": "枫"
+      },
+      "intro": {
+        "en-US": "",
+        "zh-CN": ""
+      },
+      "skill": {
+        "en-US": "??? - contradiction",
+        "zh-CN": "??? - 矛盾"
+      },
+      "illust": "char/hikarin/hikarin.png",
       "illustrator": "NuanR_Mxi",
       "position": [0.0, 0.2, 1.3, 1.3]
     }
