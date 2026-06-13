@@ -779,6 +779,7 @@ impl SongScene {
         Ok(Some(Box::pin(async move {
             let mut info = fs::load_info(fs.as_mut()).await?;
             info.id = id;
+            crate::character::check_erosion_trigger();
             let mut config = get_data().config.clone();
             config.player_name = get_data()
                 .me
