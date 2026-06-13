@@ -39,7 +39,9 @@ pub struct CharacterPage {
 }
 
 impl CharacterPage {
-    pub fn new(active_id: String, mut characters: Vec<Character>) -> Result<Self> {
+    pub fn new() -> Result<Self> {
+        let active_id = crate::character::CURRENT_CHARACTER.lock().unwrap().as_ref().unwrap().id.clone();
+        let mut characters: Vec<_> = crate::character::ALL_CHARACTERS.lock().unwrap().clone();
         characters.retain(|c| {
             c.visible_forms().next().is_some()
         });
@@ -73,9 +75,9 @@ impl CharacterPage {
         self.form_btns.resize_with(count, RectButton::new);
     }
 
-    fn apply_character(&self, i: usize, s: &mut SharedState) {
+    fn apply_character(&self, i: usize) {
         if let Some(character) = self.characters.get(i) {
-            s.switch_character(&character.id, &character.current_form().id);
+            crate::character::switch_character(&character.id, &character.current_form().id);
         }
     }
 }
@@ -100,7 +102,7 @@ impl Page for CharacterPage {
                     if let Some(raw_idx) = raw_idx {
                         self.characters[i].selected_form = raw_idx;
                     }
-                    self.apply_character(i, s);
+                    self.apply_character(i);
                 } else {
                     self.expanded[i] = !self.expanded[i];
                     self.rebuild_form_btns();
@@ -109,7 +111,7 @@ impl Page for CharacterPage {
             }
         }
         if self.info_btn.touch(touch) {
-            if s.character.current_form().erosion.is_some() {
+            if crate::character::CURRENT_CHARACTER.lock().unwrap().as_ref().unwrap().current_form().erosion.is_some() {
                 let data = get_data_mut();
                 data.erosion_enabled = !data.erosion_enabled;
                 let _ = save_data();
@@ -127,7 +129,7 @@ impl Page for CharacterPage {
                     if let Some(character) = self.characters.get_mut(i) {
                         character.selected_form = raw_idx;
                     }
-                    self.apply_character(i, s);
+                    self.apply_character(i);
                     return Ok(true);
                 }
                 vi += 1;
@@ -144,7 +146,9 @@ impl Page for CharacterPage {
         self.scroll.update(s.t);
         if s.t - self.last_scramble >= 0.5 {
             self.last_scramble = s.t;
-            let form = s.character.current_form();
+            let character = crate::character::CURRENT_CHARACTER.lock().unwrap();
+            let character = character.as_ref().unwrap();
+            let form = character.current_form();
             self.scrambled_name = scramble(form.name());
             self.scrambled_skill = scramble(form.skill());
             self.scrambled_illus = scramble(&format!("Illustrator: {}", form.illustrator));
@@ -156,9 +160,11 @@ impl Page for CharacterPage {
     }
 
     fn render(&mut self, ui: &mut Ui, s: &mut SharedState) -> Result<()> {
-        let active_id = s.character.id.clone();
-        let has_erosion = s.character.current_form().erosion.is_some();
-        let force_erosion = s.character.current_form().erosion.as_ref().map_or(false, |e| e.force);
+        let character = crate::character::CURRENT_CHARACTER.lock().unwrap();
+        let character = character.as_ref().unwrap();
+        let active_id = character.id.clone();
+        let has_erosion = character.current_form().erosion.is_some();
+        let force_erosion = character.current_form().erosion.as_ref().map_or(false, |e| e.force);
         let erosion_on = has_erosion && get_data().erosion_enabled;
 
         s.render_fader(ui, |ui, c| {

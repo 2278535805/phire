@@ -23,7 +23,7 @@ pub use settings::SettingsPage;
 use tokio::sync::Notify;
 
 use crate::{
-    character::Character, client::File, data::BriefChartInfo, dir, get_data, get_data_mut, images::Images, save_data, scene::{ChartOrder, fs_from_path}
+    client::File, data::BriefChartInfo, dir, get_data, images::Images, scene::{ChartOrder, fs_from_path}
 };
 use anyhow::Result;
 use image::DynamicImage;
@@ -410,8 +410,6 @@ pub struct SharedState {
     pub icons: [SafeTexture; 8],
 
     pub gyro_offset: Vec2,
-    pub character: Character,
-    pub all_characters: Vec<Character>,
 }
 
 pub const RESTORE_RATE: f32 = 0.005;
@@ -423,10 +421,6 @@ impl SharedState {
     pub async fn new() -> Result<Self> {
         let font = FontArc::try_from_vec(load_file("halva.ttf").await?)?;
         let painter = TextPainter::new(font);
-        let mut all_characters = Character::new_all().await?;
-        let idx = all_characters.iter().position(|c| c.id == get_data().character_id).unwrap_or(0);
-        all_characters[idx].set_form(&get_data().character_form_id);
-        let character = all_characters[idx].clone();
 
         Ok(Self {
             t: 0.,
@@ -437,8 +431,6 @@ impl SharedState {
 
             icons: Resource::load_icons().await?,
             gyro_offset: Vec2::ZERO,
-            character,
-            all_characters,
         })
     }
 
@@ -453,33 +445,6 @@ impl SharedState {
 
     pub fn reload_local_charts(&mut self) {
         self.charts_local = load_local(&(ChartOrder::Default, false));
-    }
-
-    pub fn switch_to_erosion(&mut self) {
-        let (char_id, form_id, reveal) = match self.character.current_form().erosion.as_ref() {
-            Some(e) if crate::get_data().erosion_enabled || e.force => {
-                (e.target.character.clone(), e.target.form.clone(), self.character.current_form().reveal)
-            }
-            _ => return,
-        };
-        if reveal {
-            let key = format!("{}/{}", char_id, form_id);
-            crate::get_data_mut().revealed_forms.insert(key);
-            let _ = save_data();
-        }
-        self.switch_character(&char_id, &form_id);
-    }
-
-    pub fn switch_character(&mut self, character_id: &str, form_id: &str) {
-        if let Some(character) = self.all_characters.iter_mut().find(|c| c.id == character_id) {
-            character.set_form(form_id);
-            self.character = character.clone();
-            let data = crate::get_data_mut();
-            data.character_id = character_id.to_owned();
-            data.character_form_id = form_id.to_owned();
-            data.config.health_mode = character.current_form().health_mode.clone();
-            let _ = save_data();
-        }
     }
 }
 

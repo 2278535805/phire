@@ -1,16 +1,20 @@
 phire::tl_file!("character");
 
 use std::collections::HashMap;
+use std::sync::Mutex;
 
 use ::rand::rng;
 use ::rand::Rng;
 use macroquad::texture::load_texture;
-use phire::{ext::SafeTexture, health::HealthConfig, judge::PlayResult};
+use phire::{ext::SafeTexture, health::HealthConfig, judge::PlayResult, scene::LAST_RESULT};
 use serde::{Deserialize, Serialize};
 use anyhow::Result;
 use tracing::error;
 
 use crate::get_data;
+
+pub static ALL_CHARACTERS: Mutex<Vec<Character>> = Mutex::new(Vec::new());
+pub static CURRENT_CHARACTER: Mutex<Option<Character>> = Mutex::new(None);
 
 fn default_visible() -> bool { true }
 
@@ -269,5 +273,64 @@ impl Character {
             list_name: data.list_name,
             selected_form: 0,
         })
+    }
+}
+
+pub async fn init_characters() -> Result<()> {
+    let mut all_characters = Character::new_all().await?;
+    let idx = all_characters.iter().position(|c| c.id == crate::get_data().character_id).unwrap_or(0);
+    all_characters[idx].set_form(&crate::get_data().character_form_id);
+    let current = all_characters[idx].clone();
+    *ALL_CHARACTERS.lock().unwrap() = all_characters;
+    *CURRENT_CHARACTER.lock().unwrap() = Some(current);
+    Ok(())
+}
+
+pub fn switch_to_erosion() {
+    let character = CURRENT_CHARACTER.lock().unwrap();
+    let character = character.as_ref().unwrap();
+    let (char_id, form_id, reveal) = match character.current_form().erosion.as_ref() {
+        Some(e) if crate::get_data().erosion_enabled || e.force => {
+            (e.target.character.clone(), e.target.form.clone(), character.current_form().reveal)
+        }
+        _ => return,
+    };
+    if reveal {
+        let key = format!("{}/{}", char_id, form_id);
+        crate::get_data_mut().revealed_forms.insert(key);
+        let _ = crate::save_data();
+    }
+    switch_character(&char_id, &form_id);
+}
+
+pub fn switch_character(character_id: &str, form_id: &str) {
+    let mut all = ALL_CHARACTERS.lock().unwrap();
+    if let Some(character) = all.iter_mut().find(|c| c.id == character_id) {
+        character.set_form(form_id);
+        *CURRENT_CHARACTER.lock().unwrap() = Some(character.clone());
+        let data = crate::get_data_mut();
+        data.character_id = character_id.to_owned();
+        data.character_form_id = form_id.to_owned();
+        data.config.health_mode = character.current_form().health_mode.clone();
+        let _ = crate::save_data();
+    }
+}
+
+pub fn check_erosion_trigger() {
+    let Some(result) = LAST_RESULT.lock().ok().and_then(|mut r| r.take()) else {
+        return;
+    };
+    let current = CURRENT_CHARACTER.lock().ok().and_then(|c| {
+        let character = c.as_ref()?;
+        let erosion = character.current_form().erosion.as_ref()?;
+        if !crate::get_data().erosion_enabled && !erosion.force {
+            return None;
+        }
+        Some(erosion.clone())
+    });
+    if let Some(erosion) = current {
+        if erosion.should_trigger(&result) {
+            switch_to_erosion();
+        }
     }
 }

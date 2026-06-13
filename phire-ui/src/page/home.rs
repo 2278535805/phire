@@ -180,7 +180,7 @@ impl Page for HomePage {
         }
         if self.char_btn.touch(touch) {
             button_hit_large();
-            self.next_page = Some(NextPage::Overlay(Box::new(CharacterPage::new(s.character.id.clone(), s.all_characters.clone())?)));
+            self.next_page = Some(NextPage::Overlay(Box::new(CharacterPage::new()?)));
             return Ok(true);
         }
         Ok(false)
@@ -273,15 +273,14 @@ impl Page for HomePage {
 
         let offset = s.gyro_offset;
 
-        s.fader.render(ui, s.t, |ui, c| {
-            // let r = Rect::new(-1. + 0.14 * cp, -ui.top + 0.12, 1., 1.7);
-            if let Some(illu) = &s.character.current_form().illu {
-                // let p = self.char_appear_p.now(t);
-                // let (ox, oy, ow, oh) = self.character.illu_adjust;
-                // let r = Rect::new(r.x + ox, r.y + (1. - p) * 0.05 + oy, r.w + ow, r.h + oh);
-                // ui.fill_rect(ui.screen_rect(), (Texture2D::clone(illu), r, ScaleType::CropCenter, semi_white(p)));
+        let char_data = crate::character::CURRENT_CHARACTER.lock().unwrap();
+        let char_data = char_data.as_ref().map(|c| {
+            let form = c.current_form();
+            (&form.illu, form.position)
+        });
+        s.render_fader(ui, |ui, c| {
+            if let Some((Some(illu), pos)) = char_data {
                 let time_y = (t * 0.5).sin() * 0.02;
-                let pos = s.character.current_form().position;
                 let r = Rect::new(
                     -pos.2 * 0.5 + offset.x * 0.4 + pos.0 - 0.2,
                     -pos.3 * 0.5 + offset.y * 0.4 + time_y + pos.1,

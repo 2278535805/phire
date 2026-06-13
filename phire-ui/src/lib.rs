@@ -168,6 +168,7 @@ async fn the_main() -> Result<()> {
     data.init().await?;
     set_data(data);
     sync_data();
+    character::init_characters().await?;
     miniquad::window::set_ime_enabled(false);
 
     let activity_lifecycle = {
