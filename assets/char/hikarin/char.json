@@ -156,7 +156,7 @@
               "failureFactor": 1.0,
               "punishFactor": 0.0,
               "maxSpeed": 0.0,
-              "minSpeed": -30.0
+              "minSpeed": -50.0
             },
             "withoutJudge": {
               "successFactor": 0.1,
@@ -169,6 +169,7 @@
         },
         "maxHealth": 200.0,
         "initialHealth": 100.0,
+        "completeHealth": 0.0,
         "perfectHeal": true,
         "goodHeal": false,
         "badHeal": false,

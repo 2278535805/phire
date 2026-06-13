@@ -100,7 +100,7 @@ impl Default for HealthConfig {
             mode: HealthType::SpeedBased(SpeedBasedConfig::default()),
             max_health: 100.0,
             initial_health: 70.0,
-            complete_health: -1.0,
+            complete_health: 0.0,
 
             perfect_heal: true,
             good_heal: false,
