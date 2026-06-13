@@ -779,7 +779,6 @@ impl SongScene {
         Ok(Some(Box::pin(async move {
             let mut info = fs::load_info(fs.as_mut()).await?;
             info.id = id;
-            crate::character::check_erosion_trigger();
             let mut config = get_data().config.clone();
             config.player_name = get_data()
                 .me
@@ -1212,6 +1211,7 @@ impl Scene for SongScene {
     }
 
     fn enter(&mut self, tm: &mut TimeManager, _target: Option<RenderTarget>) -> Result<()> {
+        crate::character::check_erosion_trigger();
         if self.first_in {
             self.first_in = false;
             tm.seek_to(-FADE_IN_TIME as _);

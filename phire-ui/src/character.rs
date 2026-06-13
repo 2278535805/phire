@@ -199,7 +199,7 @@ impl Character {
     pub fn visible_forms(&self) -> impl Iterator<Item = &CharacterForm> {
         let revealed = &crate::get_data().revealed_forms;
         self.forms.iter().filter(move |f| {
-            f.visible || (f.reveal && revealed.contains(&format!("{}/{}", self.id, f.id)))
+            f.visible || (f.reveal && revealed.contains(&(self.id.clone(), f.id.clone())))
         })
     }
 
@@ -207,7 +207,7 @@ impl Character {
         let revealed = &crate::get_data().revealed_forms;
         self.forms.iter().enumerate()
             .filter(|(_, f)| {
-                f.visible || (f.reveal && revealed.contains(&format!("{}/{}", self.id, f.id)))
+                f.visible || (f.reveal && revealed.contains(&(self.id.clone(), f.id.clone())))
             })
             .map(|(i, _)| i)
             .collect()
@@ -287,19 +287,20 @@ pub async fn init_characters() -> Result<()> {
 }
 
 pub fn switch_to_erosion() {
-    let character = CURRENT_CHARACTER.lock().unwrap();
-    let character = character.as_ref().unwrap();
-    let (char_id, form_id, reveal) = match character.current_form().erosion.as_ref() {
-        Some(e) if crate::get_data().erosion_enabled || e.force => {
-            (e.target.character.clone(), e.target.form.clone(), character.current_form().reveal)
+    let (char_id, form_id) = {
+        let character = CURRENT_CHARACTER.lock().unwrap();
+        let character = character.as_ref().unwrap();
+        let form = character.current_form();
+        if let Some(e) = &form.erosion {
+            if crate::get_data().erosion_enabled || e.force {
+                (e.target.character.clone(), e.target.form.clone())
+            } else {
+                return;
+            }
+        } else {
+            return;
         }
-        _ => return,
     };
-    if reveal {
-        let key = format!("{}/{}", char_id, form_id);
-        crate::get_data_mut().revealed_forms.insert(key);
-        let _ = crate::save_data();
-    }
     switch_character(&char_id, &form_id);
 }
 
@@ -311,7 +312,11 @@ pub fn switch_character(character_id: &str, form_id: &str) {
         let data = crate::get_data_mut();
         data.character_id = character_id.to_owned();
         data.character_form_id = form_id.to_owned();
-        data.config.health_mode = character.current_form().health_mode.clone();
+        let form = character.current_form();
+        data.config.health_mode = form.health_mode.clone();
+        if data.erosion_enabled || form.erosion.as_ref().map_or(false, |it| it.force) {
+            data.revealed_forms.insert((character_id.to_owned(), form_id.to_owned()));
+        }
         let _ = crate::save_data();
     }
 }

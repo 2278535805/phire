@@ -40,8 +40,8 @@ pub struct CharacterPage {
 
 impl CharacterPage {
     pub fn new() -> Result<Self> {
-        let active_id = crate::character::CURRENT_CHARACTER.lock().unwrap().as_ref().unwrap().id.clone();
         let mut characters: Vec<_> = crate::character::ALL_CHARACTERS.lock().unwrap().clone();
+        let active_id = crate::character::CURRENT_CHARACTER.lock().unwrap().as_ref().unwrap().id.clone();
         characters.retain(|c| {
             c.visible_forms().next().is_some()
         });

@@ -172,6 +172,7 @@ impl Scene for MainScene {
     }
 
     fn enter(&mut self, tm: &mut TimeManager, _target: Option<RenderTarget>) -> Result<()> {
+        crate::character::check_erosion_trigger();
         if let Some(bgm) = &mut self.bgm {
             let _ = bgm.fade_in(1.3);
         }
@@ -355,7 +356,6 @@ impl Scene for MainScene {
                 }
             }
         }
-        crate::character::check_erosion_trigger();
         if let Some(bgm) = &mut self.bgm {
             if BGM_VOLUME_UPDATED.fetch_and(false, Ordering::Relaxed) {
                 bgm.set_amplifier(get_data().config.volume_bgm)?;
