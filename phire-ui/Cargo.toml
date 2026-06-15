@@ -57,7 +57,7 @@ logos = "0.13.0"
 ndk-sys = "0.2"
 ndk-context = "0.1"
 sasa = { git = "https://github.com/2278535805/sasa", default-features = false, features = ["oboe"] }
-openssl = { version = "*", features = ["vendored"] }
+openssl = { version = "*", features = [] }
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
 sasa = { git = "https://github.com/2278535805/sasa" }
