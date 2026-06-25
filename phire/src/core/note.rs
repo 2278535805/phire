@@ -162,6 +162,7 @@ fn draw_tex_pts(res: &Resource, texture: &Texture2D, order: i8, mut p: [Point; 4
                     match unsafe { gl.quad_context.texture_raw_id(texture.raw_miniquad_id()) }
                     {
                         miniquad::RawId::OpenGl(id) => id,
+                        _ => todo!(),
                     }
                 }
             ),

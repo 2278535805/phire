@@ -91,7 +91,7 @@ impl SafeTexture {
     }
 
     pub fn with_mipmap(self) -> Self {
-        let macroquad::miniquad::RawId::OpenGl(id) = unsafe { get_internal_gl().quad_context.texture_raw_id(self.0 .0.raw_miniquad_id()) };
+        let macroquad::miniquad::RawId::OpenGl(id) = (unsafe { get_internal_gl().quad_context.texture_raw_id(self.0 .0.raw_miniquad_id()) }) else { todo!() };
         unsafe {
             use macroquad::miniquad::gl::*;
             glBindTexture(GL_TEXTURE_2D, id);
@@ -102,7 +102,7 @@ impl SafeTexture {
     }
 
     pub fn with_filter(self, filter: GLenum) -> Self{
-        let macroquad::miniquad::RawId::OpenGl(id) = unsafe { get_internal_gl().quad_context.texture_raw_id(self.0 .0.raw_miniquad_id()) };
+        let macroquad::miniquad::RawId::OpenGl(id) = (unsafe { get_internal_gl().quad_context.texture_raw_id(self.0 .0.raw_miniquad_id()) }) else { todo!() };
         unsafe {
             use macroquad::miniquad::gl::*;
             glBindTexture(GL_TEXTURE_2D, id);
