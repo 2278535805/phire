@@ -293,7 +293,12 @@ fn parse_text_events(
         }
     }
     for e in rpe {
-        let font_id = e.font.as_ref().and_then(|path| font_cache.get(path)).copied();
+        let font_id = e.font.as_ref().and_then(|path| {
+            if path.starts_with("cmdysj") {
+                return None;
+            }
+            font_cache.get(path)
+        }).copied();
         kfs.push(Keyframe {
             time: r.time(&e.start_time),
             value: TextData { text: e.start.clone(), font_id },
