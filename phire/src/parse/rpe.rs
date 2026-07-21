@@ -293,7 +293,12 @@ fn parse_text_events(
         }
     }
     for e in rpe {
-        let font_id = e.font.as_ref().and_then(|path| font_cache.get(path)).copied();
+        let font_id = e.font.as_ref().and_then(|path| {
+            if path.starts_with("cmdysj") {
+                return None;
+            }
+            font_cache.get(path)
+        }).copied();
         kfs.push(Keyframe {
             time: r.time(&e.start_time),
             value: TextData { text: e.start.clone(), font_id },
@@ -574,6 +579,9 @@ async fn parse_judge_line(
         if let Some(text_events) = &extended.text_events {
             for event in text_events {
                 if let Some(font_path) = &event.font {
+                    if font_path.starts_with("cmdysj") {
+                        continue;
+                    }
                     if !font_cache.contains_key(font_path) {
                         let font_data = fs.load_file(font_path).await.with_context(|| format!("failed to load font: {font_path}"))?;
                         let font_arc = FontArc::try_from_vec(font_data).map_err(|err| anyhow::anyhow!("failed to parse font: {err}"))?;
