@@ -3,7 +3,7 @@ phire::tl_file!("song");
 use super::{confirm_delete, confirm_dialog, fs_from_path, render_ldb, LdbDisplayItem, ProfileScene};
 use crate::{
     charts_view::NEED_UPDATE,
-    client::{basic_client_builder, recv_raw, Chart, Client, Ptr, Record, ResponseDto, UserManager, CLIENT_TOKEN, Permissions},
+    client::{basic_client_builder, recv_raw, Chart, Client, Permission, Ptr, Record, ResponseDto, UserManager, CLIENT_TOKEN},
     data::{BriefChartInfo, LocalChart},
     dir, get_data, get_data_mut,
     icons::Icons,
@@ -751,7 +751,7 @@ impl SongScene {
             .as_ref()
             .and_then(|u| u.id.parse::<i32>().ok())
             .map_or(false, |uploader_id| get_data().me.as_ref().map_or(false, |me| me.id == uploader_id));
-        if self.info.id.is_some() && perms & Permissions::REVIEW != 0 {
+        if self.info.id.is_some() && perms & Permission::Review as i64 != 0 {
             if self.entity.as_ref().map_or(false, |_it| true) {
                 self.menu_options.push("review-approve");
                 self.menu_options.push("review-deny");
@@ -761,7 +761,7 @@ impl SongScene {
         if self.info.id.is_some() && is_uploader && self.entity.as_ref().map_or(false, |it| it.is_locked || it.is_hidden) {
             self.menu_options.push("stabilize");
         }
-        if self.info.id.is_some() && self.entity.as_ref().map_or(false, |_it| false) && perms & Permissions::STABILIZE_CHART != 0 {
+        if self.info.id.is_some() && self.entity.as_ref().map_or(false, |_it| false) && perms & Permission::StabilizeChart as i64 != 0 {
             self.menu_options.push("stabilize-approve");
             self.menu_options.push("stabilize-approve-ranked");
             self.menu_options.push("stabilize-comment");
@@ -770,9 +770,9 @@ impl SongScene {
         if self.info.id.is_some()
             && self.entity.as_ref().map_or(false, |it| {
                 if !it.is_locked && !it.is_hidden {
-                    perms & Permissions::DELETE_STABLE != 0
+                    perms & Permission::DeleteStable as i64 != 0
                 } else {
-                    is_uploader || perms & Permissions::DELETE_UNSTABLE != 0
+                    is_uploader || perms & Permission::DeleteUnstable as i64 != 0
                 }
             })
         {

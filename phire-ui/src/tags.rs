@@ -1,6 +1,6 @@
 phire::tl_file!("tags");
 
-use crate::{client::Permissions, page::Fader};
+use crate::{client::Permission, page::Fader};
 use macroquad::prelude::*;
 use phire::{
     ext::{semi_black, RectExt},
@@ -330,10 +330,10 @@ impl TagsDialog {
                             ui.dy(h);
                             if self.unwanted.is_some() {
                                 let mut row: SmallVec<[_; 3]> = smallvec![(&mut self.btn_me, "filter-me", self.show_me)];
-                                if self.perms & Permissions::SEE_UNREVIEWED != 0 {
+                                if self.perms & Permission::SeeUnreviewed as i64 != 0 {
                                     row.push((&mut self.btn_unreviewed, "filter-unreviewed", self.show_unreviewed));
                                 }
-                                if self.perms & Permissions::SEE_STABLE_REQ != 0 {
+                                if self.perms & Permission::SeeStableReq as i64 != 0 {
                                     row.push((&mut self.btn_stabilize, "filter-stabilize", self.show_stabilize));
                                 }
                                 let bw = mw / row.len() as f32;

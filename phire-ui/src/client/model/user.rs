@@ -1,21 +1,24 @@
-pub mod Permissions {
-    pub const UPLOAD_CHART: i64 = 0x00000001;
-    pub const SEE_UNREVIEWED: i64 = 0x00000002;
-    pub const DELETE_UNSTABLE: i64 = 0x00000004;
-    pub const REVIEW: i64 = 0x00000008;
-    pub const SEE_STABLE_REQ: i64 = 0x00000010;
-    pub const STABILIZE_CHART: i64 = 0x00000020;
-    pub const EDIT_TAGS: i64 = 0x00000040;
-    pub const STABILIZE_JUDGE: i64 = 0x00000080;
-    pub const DELETE_STABLE: i64 = 0x00000100;
-    pub const SEE_ALL_EVENTS: i64 = 0x00000200;
-    pub const BAN_USER: i64 = 0x00000400;
-    pub const SET_RANKED: i64 = 0x00000800;
-    pub const SET_ALL_ROLE: i64 = 0x00001000;
-    pub const SET_REVIEWER: i64 = 0x00002000;
-    pub const SET_SUPERVISOR: i64 = 0x00004000;
-    pub const BAN_AVATAR: i64 = 0x00008000;
-    pub const REVIEW_PECJAM: i64 = 0x00010000;
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(i64)]
+#[allow(unused)]
+pub enum Permission {
+    UploadChart     = 0x00000001,
+    SeeUnreviewed   = 0x00000002,
+    DeleteUnstable  = 0x00000004,
+    Review          = 0x00000008,
+    SeeStableReq    = 0x00000010,
+    StabilizeChart  = 0x00000020,
+    EditTags        = 0x00000040,
+    StabilizeJudge  = 0x00000080,
+    DeleteStable    = 0x00000100,
+    SeeAllEvents    = 0x00000200,
+    BanUser         = 0x00000400,
+    SetRanked       = 0x00000800,
+    SetAllRole      = 0x00001000,
+    SetReviewer     = 0x00002000,
+    SetSupervisor   = 0x00004000,
+    BanAvatar       = 0x00008000,
+    ReviewPecJam    = 0x00010000,
 }
 
 use super::{File, Object};
