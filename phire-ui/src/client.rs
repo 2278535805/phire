@@ -18,7 +18,7 @@ static CLIENT: Lazy<ArcSwap<reqwest::Client>> = Lazy::new(|| ArcSwap::from_point
 pub struct Client;
 
 // const API_URL: &str = "http://localhost:2924";
-const API_URL: &str = "https://phira.5wyxi.com";
+const API_URL: &str = "https://api.phizone.cn";
 
 pub fn basic_client_builder() -> ClientBuilder {
     let mut builder = reqwest::ClientBuilder::new();
@@ -59,23 +59,58 @@ pub async fn recv_raw(request: RequestBuilder) -> Result<Response> {
             if let Some(detail) = what["detail"].as_str() {
                 bail!("request failed ({status}): {detail}");
             }
+            if let Some(msg) = what["message"].as_str().filter(|m| !m.is_empty()) {
+                bail!("request failed ({status}): {msg}");
+            }
+            if let Some(code) = what["code"].as_str() {
+                bail!("request failed ({status}): {code}");
+            }
+            if let Some(error) = what["error"].as_str() {
+                bail!("request failed ({status}): {error}");
+            }
+            if let Some(desc) = what["error_description"].as_str() {
+                bail!("request failed ({status}): {desc}");
+            }
         }
         bail!("request failed ({status}): {text}");
     }
     Ok(response)
 }
 
-#[derive(Serialize)]
-#[serde(untagged)]
 pub enum LoginParams<'a> {
     Password {
         email: &'a str,
         password: &'a str,
     },
     RefreshToken {
-        #[serde(rename = "refreshToken")]
         token: &'a str,
     },
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ResponseDto<T> {
+    pub status: u32,
+    pub code: String,
+    #[serde(default)]
+    pub message: Option<String>,
+    pub data: Option<T>,
+    pub total: Option<u64>,
+    pub per_page: Option<u64>,
+    pub has_previous: Option<bool>,
+    pub has_next: Option<bool>,
+}
+
+fn url_encode(s: &str) -> String {
+    let mut result = String::with_capacity(s.len());
+    for byte in s.bytes() {
+        match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => result.push(byte as char),
+            b' ' => result.push('+'),
+            _ => result.push_str(&format!("%{:02X}", byte)),
+        }
+    }
+    result
 }
 
 impl Client {
@@ -90,6 +125,16 @@ impl Client {
     }
 
     #[inline]
+    pub fn post_form(path: impl AsRef<str>, form: &[(&str, &str)]) -> RequestBuilder {
+        let body: String = form
+            .iter()
+            .map(|(k, v)| format!("{}={}", url_encode(k), url_encode(v)))
+            .collect::<Vec<_>>()
+            .join("&");
+        Self::request(Method::POST, path).header("Content-Type", "application/x-www-form-urlencoded").body(body)
+    }
+
+    #[inline]
     pub fn delete(path: impl AsRef<str>) -> RequestBuilder {
         Self::request(Method::DELETE, path)
     }
@@ -98,19 +143,19 @@ impl Client {
         CLIENT.load().request(method, API_URL.to_string() + path.as_ref())
     }
 
-    pub fn clear_cache<T: Object + 'static>(id: i32) -> Result<bool> {
+    pub fn clear_cache<T: Object + 'static>(id: &str) -> Result<bool> {
         let map = obtain_map_cache::<T>();
         let mut guard = map.lock().unwrap();
         let Some(actual_map) = guard.downcast_mut::<ObjectMap::<T>>() else { unreachable!() };
-        Ok(actual_map.pop(&id).is_some())
+        Ok(actual_map.pop(&id.to_string()).is_some())
     }
 
-    pub async fn load<T: Object + 'static>(id: i32) -> Result<Arc<T>> {
+    pub async fn load<T: Object + 'static>(id: &str) -> Result<Arc<T>> {
         {
             let map = obtain_map_cache::<T>();
             let mut guard = map.lock().unwrap();
             let Some(actual_map) = guard.downcast_mut::<ObjectMap::<T>>() else { unreachable!() };
-            if let Some(value) = actual_map.get(&id) {
+            if let Some(value) = actual_map.get(&id.to_string()) {
                 return Ok(Arc::clone(value));
             }
             drop(guard);
@@ -119,11 +164,11 @@ impl Client {
         Self::fetch(id).await
     }
 
-    pub async fn fetch<T: Object + 'static>(id: i32) -> Result<Arc<T>> {
+    pub async fn fetch<T: Object + 'static>(id: &str) -> Result<Arc<T>> {
         Self::fetch_opt(id).await?.ok_or_else(|| anyhow!("entry not found"))
     }
 
-    pub async fn fetch_opt<T: Object + 'static>(id: i32) -> Result<Option<Arc<T>>> {
+    pub async fn fetch_opt<T: Object + 'static>(id: &str) -> Result<Option<Arc<T>>> {
         let value = Client::fetch_inner::<T>(id).await?;
         let Some(value) = value else { return Ok(None) };
         let value = Arc::new(value);
@@ -132,11 +177,11 @@ impl Client {
         let Some(actual_map) = guard.downcast_mut::<ObjectMap::<T>>() else {
             unreachable!()
         };
-        actual_map.put(id, Arc::clone(&value));
+        actual_map.put(id.to_string(), Arc::clone(&value));
         Ok(Some(value))
     }
 
-    async fn fetch_inner<T: Object>(id: i32) -> Result<Option<T>> {
+    async fn fetch_inner<T: Object>(id: &str) -> Result<Option<T>> {
         let resp = Self::get(format!("/{}/{id}", T::QUERY_PATH)).send().await?;
         if resp.status() == StatusCode::NOT_FOUND {
             return Ok(None);
@@ -148,10 +193,17 @@ impl Client {
                 if let Some(detail) = what["detail"].as_str() {
                     bail!("request failed ({status}): {detail}");
                 }
+                if let Some(msg) = what["message"].as_str().filter(|m| !m.is_empty()) {
+                    bail!("request failed ({status}): {msg}");
+                }
+                if let Some(code) = what["code"].as_str() {
+                    bail!("request failed ({status}): {code}");
+                }
             }
             bail!("request failed ({status}): {text}");
         }
-        Ok(Some(resp.json().await?))
+        let resp: ResponseDto<T> = resp.json().await?;
+        Ok(resp.data)
     }
 
     pub fn query<T: Object>() -> QueryBuilder<T> {
@@ -165,10 +217,10 @@ impl Client {
 
     pub async fn register(email: &str, username: &str, password: &str) -> Result<()> {
         recv_raw(Self::post(
-            "/register",
+            "/users/brief",
             &json!({
                 "email": email,
-                "name": username,
+                "userName": username,
                 "password": password,
             }),
         ))
@@ -178,40 +230,46 @@ impl Client {
 
     pub async fn login(params: LoginParams<'_>) -> Result<()> {
         #[derive(Deserialize)]
-        #[serde(rename_all = "camelCase")]
         struct Resp {
-            id: i32,
-            token: String,
+            access_token: String,
+            token_type: String,
+            expires_in: u32,
+            scope: String,
             refresh_token: String,
         }
-        let resp: Resp = recv_raw(Self::post("/login", &params)).await?.json().await?;
+        let mut form: Vec<(&str, &str)> = vec![("client_id", "public")];
+        match &params {
+            LoginParams::Password { email, password } => {
+                form.push(("grant_type", "password"));
+                form.push(("username", email));
+                form.push(("password", password));
+            }
+            LoginParams::RefreshToken { token } => {
+                form.push(("grant_type", "refresh_token"));
+                form.push(("refresh_token", token));
+            }
+        }
+        let resp: Resp = recv_raw(Self::post_form("/auth/token", &form)).await?.json().await?;
 
-        anti_addiction_action("startup", Some(format!("Phigros-{}", resp.id)));
+        anti_addiction_action("startup", Some("PhiZone".to_string()));
 
-        set_access_token(&resp.token).await?;
-        get_data_mut().tokens = Some((resp.token, resp.refresh_token));
+        set_access_token(&resp.access_token).await?;
+        get_data_mut().tokens = Some((resp.access_token, resp.refresh_token));
         save_data()?;
         Ok(())
     }
 
     pub async fn get_me() -> Result<User> {
-        Ok(recv_raw(Self::get("/me")).await?.json().await?)
+        let resp: ResponseDto<User> = recv_raw(Self::get("/me")).await?.json().await?;
+        resp.data.ok_or_else(|| anyhow!("no user data in response"))
     }
 
-    pub async fn best_record(id: i32) -> Result<SimpleRecord> {
-        Ok(recv_raw(Self::get(format!("/record/best/{id}"))).await?.json().await?)
+    pub async fn best_record(_id: i32) -> Result<SimpleRecord> {
+        bail!("best_record not yet implemented for new API")
     }
 
-    pub async fn upload_file(name: &str, bytes: Vec<u8>) -> Result<String> {
-        #[derive(Deserialize)]
-        struct Resp {
-            id: String,
-        }
-        let resp: Resp = recv_raw(Self::request(Method::POST, format!("/upload/{name}")).body(bytes))
-            .await?
-            .json()
-            .await?;
-        Ok(resp.id)
+    pub async fn upload_file(_name: &str, _bytes: Vec<u8>) -> Result<String> {
+        bail!("upload_file not yet implemented for new API")
     }
 }
 
@@ -246,7 +304,7 @@ impl<T: Object> QueryBuilder<T> {
 
     #[inline]
     pub fn page_num(self, page_num: u64) -> Self {
-        self.query("pageNum", page_num.to_string())
+        self.query("perPage", page_num.to_string())
     }
 
     #[inline]
@@ -262,15 +320,11 @@ impl<T: Object> QueryBuilder<T> {
 
     pub async fn send(mut self) -> Result<(Vec<T>, u64)> {
         self.queries.insert("page".into(), (self.page.unwrap_or(0) + 1).to_string().into());
-        #[derive(Deserialize)]
-        struct PagedResult<T> {
-            count: u64,
-            results: Vec<T>,
-        }
-        let res: PagedResult<T> = recv_raw(Client::get(format!("/{}{}", T::QUERY_PATH, self.suffix)).query(&self.queries))
-            .await?
-            .json()
-            .await?;
-        Ok((res.results, res.count))
+        let res: ResponseDto<Vec<T>> =
+            recv_raw(Client::get(format!("/{}{}", T::QUERY_PATH, self.suffix)).query(&self.queries))
+                .await?
+                .json()
+                .await?;
+        Ok((res.data.unwrap_or_default(), res.total.unwrap_or(0)))
     }
 }

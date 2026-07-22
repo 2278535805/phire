@@ -1,5 +1,5 @@
 use crate::{
-    client::Chart,
+    client::{Chart, File},
     dir, get_data, get_data_mut,
     icons::Icons,
     page::{ChartItem, Fader, Illustration},
@@ -47,34 +47,39 @@ impl ChartDisplayItem {
     }
 
     pub fn from_remote(chart: &Chart) -> Self {
+        let illu_url = chart
+            .illustration
+            .clone()
+            .or_else(|| chart.song.as_ref().and_then(|s| s.illustration.clone()))
+            .unwrap_or_default();
         Self::new(
             ChartItem {
                 info: chart.to_info(),
                 illu: {
                     let notify = Arc::new(Notify::new());
+                    let has_url = !illu_url.is_empty();
                     Illustration {
                         texture: (BLACK_TEXTURE.clone(), BLACK_TEXTURE.clone()),
                         notify: Arc::clone(&notify),
-                        task: Some(Task::new({
-                            let illu = chart.illustration.clone();
-                            async move {
-                                notify.notified().await;
-                                Ok((illu.load_thumbnail().await?, None))
-                            }
-                        })),
+                        task: if has_url {
+                            Some(Task::new({
+                                let url = illu_url;
+                                async move {
+                                    notify.notified().await;
+                                    Ok((File { url }.load_thumbnail().await?, None))
+                                }
+                            }))
+                        } else {
+                            None
+                        },
                         loaded: Arc::default(),
                         load_time: f32::NAN,
                     }
                 },
                 local_path: None,
+                guid: Some(chart.id.clone()),
             },
-            if chart.stable_request {
-                Some('+')
-            } else if !chart.reviewed {
-                Some('*')
-            } else {
-                None
-            },
+            None,
         )
     }
 }

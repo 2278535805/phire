@@ -1,4 +1,4 @@
-use super::{File, Object, Ptr, User};
+use super::{File, Object, User};
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
 
@@ -6,17 +6,17 @@ use serde::Deserialize;
 #[serde(rename_all = "camelCase")]
 #[allow(dead_code)]
 pub struct Event {
-    pub id: i32,
-    pub creator: Ptr<User>,
-    pub name: String,
-    pub illustration: File,
-    pub time_start: DateTime<Utc>,
-    pub time_end: DateTime<Utc>,
+    pub id: String,
+    pub owner_id: i32,
+    pub title: String,
+    pub illustration: Option<String>,
+    pub date_start: Option<DateTime<Utc>>,
+    pub date_end: Option<DateTime<Utc>>,
 }
 impl Object for Event {
-    const QUERY_PATH: &'static str = "event";
+    const QUERY_PATH: &'static str = "events";
 
-    fn id(&self) -> i32 {
-        self.id
+    fn id(&self) -> String {
+        self.id.clone()
     }
 }

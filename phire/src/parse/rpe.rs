@@ -49,6 +49,13 @@ fn i32_one() -> i32 {
 
 type BezierMap = FxHashMap<(u16, i16, i16), Rc<dyn TweenFunction>>;
 
+fn deserialize_bezier_points<'de, D>(d: D) -> Result<[f32; 4], D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    Ok(Option::<[f32; 4]>::deserialize(d)?.unwrap_or_default())
+}
+
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RPEEvent<T = f32> {
@@ -58,7 +65,7 @@ pub struct RPEEvent<T = f32> {
     easing_right: f32,
     #[serde(default)]
     bezier: u8,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_bezier_points")]
     bezier_points: [f32; 4],
     #[serde(default = "i32_one")]
     easing_type: i32,
@@ -98,7 +105,7 @@ pub struct RPETextEvent {
     easing_right: f32,
     #[serde(default)]
     bezier: u8,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_bezier_points")]
     bezier_points: [f32; 4],
     #[serde(default = "i32_one")]
     easing_type: i32,

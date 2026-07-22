@@ -12,7 +12,7 @@ use crate::{
     page::{local_illustration, Illustration},
 };
 
-use super::{Chart, Object, Ptr, User};
+use super::{Chart, Object, User};
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use phire::{ext::BLACK_TEXTURE, info::ChartInfo, task::Task, ui::Dialog};
@@ -24,21 +24,31 @@ use uuid::Uuid;
 #[serde(rename_all = "camelCase")]
 #[allow(dead_code)]
 pub struct Collection {
-    pub id: i32,
-    pub cover: Option<File>,
-    pub owner: Ptr<User>,
-    pub name: String,
-    pub description: String,
-    pub created: DateTime<Utc>,
-    pub updated: DateTime<Utc>,
+    pub id: String,
+    pub title: String,
+    pub subtitle: Option<String>,
+    pub illustration: Option<String>,
+    pub illustrator: Option<String>,
+    pub description: Option<String>,
+    pub accessibility: u8,
+    pub is_hidden: bool,
+    pub is_locked: bool,
+    pub like_count: Option<i32>,
+    pub owner_id: i32,
+    #[serde(default)]
+    pub date_created: Option<DateTime<Utc>>,
+    #[serde(default)]
+    pub date_updated: Option<DateTime<Utc>>,
+    #[serde(default)]
+    pub date_liked: Option<DateTime<Utc>>,
+    #[serde(default)]
     pub charts: Vec<Chart>,
-    pub public: bool,
 }
 impl Object for Collection {
-    const QUERY_PATH: &'static str = "collection";
+    const QUERY_PATH: &'static str = "collections";
 
-    fn id(&self) -> i32 {
-        self.id
+    fn id(&self) -> String {
+        self.id.clone()
     }
 }
 
@@ -53,7 +63,7 @@ impl ChartRefChartInfo {
     pub fn from_chart(chart: &Chart) -> Self {
         Self {
             info: BriefChartInfo::from_chart(chart),
-            illustration: chart.illustration.clone(),
+            illustration: File { url: chart.illustration.clone().unwrap_or_default() },
         }
     }
 }
@@ -80,7 +90,7 @@ impl<'de> Deserialize<'de> for ChartRef {
         enum FuseChartRef {
             New { path: String, info: Option<Box<ChartRefChartInfo>> },
             Local(String),
-            Online(i32, Option<Box<ChartRefChartInfo>>),
+            Online(String, Option<Box<ChartRefChartInfo>>),
         }
 
         let fuse = FuseChartRef::deserialize(deserializer)?;
@@ -122,7 +132,6 @@ impl ChartRef {
         let Some(id) = self.id() else {
             return Ok(None);
         };
-        // TODO: optimize
         Ok(get_data().charts.iter().find_map(|it| {
             if it.info.id == Some(id) {
                 Some(Cow::Owned(it.local_path.clone()))
@@ -180,7 +189,7 @@ pub enum CollectionUpdate {
 #[derive(Clone, Serialize, Deserialize)]
 pub struct LocalCollection {
     pub id: Option<i32>,
-    pub owner: Option<Ptr<User>>,
+    pub owner: Option<i32>,
     pub cover: CollectionCover,
     pub name: String,
     pub description: String,
@@ -228,23 +237,23 @@ impl LocalCollection {
             || self
                 .owner
                 .as_ref()
-                .is_some_and(|it| get_data().me.as_ref().is_some_and(|me| me.id == it.id))
+                .is_some_and(|owner_id| get_data().me.as_ref().is_some_and(|me| me.id == *owner_id))
     }
 
     pub fn merge(&self, col: &Collection) -> Self {
-        assert_eq!(self.id, Some(col.id));
+        assert_eq!(self.id, Some(col.owner_id));
         Self {
-            id: Some(col.id),
-            owner: Some(col.owner.clone()),
-            cover: match &col.cover {
+            id: None,
+            owner: Some(col.owner_id),
+            cover: match &col.illustration {
                 None => CollectionCover::Unset,
-                Some(file) => CollectionCover::Online(file.clone()),
+                Some(url) => CollectionCover::Online(File { url: url.clone() }),
             },
-            name: col.name.clone(),
-            description: col.description.clone(),
-            remote_updated: Some(col.updated),
+            name: col.title.clone(),
+            description: col.description.clone().unwrap_or_default(),
+            remote_updated: col.date_updated,
             charts: col.charts.iter().cloned().map(Into::into).collect(),
-            public: col.public,
+            public: !col.is_hidden,
             is_default: self.is_default,
         }
     }
@@ -301,7 +310,7 @@ impl LocalCollection {
         CollectionUpdate::Updated {
             sync_task: Some(Task::new(async move {
                 let resp: Collection =
-                    recv_raw(Client::request(Method::PATCH, format!("/collection/{}", id.unwrap())).json(&CollectionPatch::Set(col_ids)))
+                    recv_raw(Client::request(Method::PATCH, format!("/collections/{}", id.unwrap())).json(&CollectionPatch::Set(col_ids)))
                         .await?
                         .json()
                         .await?;

@@ -239,7 +239,7 @@ impl MPPanel {
     fn check_download(&mut self, next: bool) {
         let id = self.chart_id.unwrap();
         self.download_next = next;
-        self.download_task = Some(Task::new(async move { Ptr::new(id).fetch().await }));
+        self.download_task = Some(Task::new(async move { Ptr::<Chart>::new(id.to_string()).fetch().await }));
     }
 
     fn post_download(&mut self) {
@@ -516,6 +516,7 @@ impl MPPanel {
                     self.entered = false;
                     self.scene_task = SongScene::global_launch(
                         Some(id),
+                        None,
                         &format!("download/{id}"),
                         Mods::default(),
                         GameMode::NoRetry,
@@ -567,7 +568,7 @@ impl MPPanel {
                             let local_info: ChartInfo = serde_yaml::from_reader(File::open(info_path)?)?;
                             local_info
                                 .updated
-                                .map_or(entity.updated != entity.created, |local_updated| local_updated != entity.updated)
+                                .map_or(entity.date_updated.unwrap_or_default() != entity.date_created.unwrap_or_default(), |local_updated| local_updated != entity.date_updated.unwrap_or_default())
                         } else {
                             true
                         };

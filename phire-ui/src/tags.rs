@@ -150,7 +150,7 @@ pub struct TagsDialog {
     pub show_unreviewed: bool,
     pub btn_stabilize: DRectButton,
     pub show_stabilize: bool,
-    pub perms: Permissions,
+    pub perms: i64,
 
     btn_cancel: DRectButton,
     btn_confirm: DRectButton,
@@ -178,7 +178,7 @@ impl TagsDialog {
             show_unreviewed: false,
             btn_stabilize: DRectButton::new(),
             show_stabilize: false,
-            perms: Permissions::empty(),
+            perms: 0,
 
             btn_cancel: DRectButton::new(),
             btn_confirm: DRectButton::new(),
@@ -330,10 +330,10 @@ impl TagsDialog {
                             ui.dy(h);
                             if self.unwanted.is_some() {
                                 let mut row: SmallVec<[_; 3]> = smallvec![(&mut self.btn_me, "filter-me", self.show_me)];
-                                if self.perms.contains(Permissions::SEE_UNREVIEWED) {
+                                if self.perms & Permissions::SEE_UNREVIEWED != 0 {
                                     row.push((&mut self.btn_unreviewed, "filter-unreviewed", self.show_unreviewed));
                                 }
-                                if self.perms.contains(Permissions::SEE_STABLE_REQ) {
+                                if self.perms & Permissions::SEE_STABLE_REQ != 0 {
                                     row.push((&mut self.btn_stabilize, "filter-stabilize", self.show_stabilize));
                                 }
                                 let bw = mw / row.len() as f32;

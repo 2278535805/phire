@@ -149,10 +149,10 @@ impl LibraryPage {
             show_message(tl!("offline-mode")).error();
             return;
         }
-        if get_data().me.is_none() {
-            show_error(anyhow!(tl!("must-login")));
-            return;
-        }
+        // if get_data().me.is_none() {
+        //     show_error(anyhow!(tl!("must-login")));
+        //     return;
+        // }
         self.charts_view.reset_scroll();
         self.charts_view.clear();
         let page = self.current_page;
@@ -162,10 +162,10 @@ impl LibraryPage {
             let order = match order {
                 ChartOrder::Default => {
                     rev ^= true;
-                    "updated"
+                    "DateUpdated"
                 }
-                ChartOrder::Name => "name",
-                ChartOrder::Rating => "rating",
+                ChartOrder::Name => "Title",
+                ChartOrder::Rating => "Rating",
             };
             if rev {
                 format!("-{order}")
@@ -173,48 +173,36 @@ impl LibraryPage {
                 order.to_owned()
             }
         };
-        let tags = self
-            .tags
-            .tags
-            .tags()
-            .iter()
-            .cloned()
-            .chain(self.tags.unwanted.as_ref().unwrap().tags().iter().map(|it| format!("-{it}")))
-            .join(",");
-        let division = self.tags.division;
-        let rating_range = format!("{},{}", self.rating.rate.score as f32 / 10., self.rating.rate_upper.as_ref().unwrap().score as f32 / 10.);
         let popular = matches!(self.chosen, ChartListType::Popular);
-        let typ = match self.chosen {
-            ChartListType::Ranked => 0,
-            ChartListType::Special => 1,
-            ChartListType::Unstable => 2,
-            _ => -1,
-        };
+        let chosen = self.chosen;
         let by_me = if self.tags.show_me {
             get_data().me.as_ref().map(|it| it.id)
         } else {
             None
         };
-        let show_unreviewed = self.tags.show_unreviewed;
-        let show_stabilize = self.tags.show_stabilize;
         self.online_task = Some(Task::new(async move {
             let mut q = Client::query::<Chart>();
             if popular {
-                q = q.suffix("/popular");
+                q = q.order("playCount").query("desc", "true");
             } else {
-                q = q.search(search).order(order).tags(tags).query("rating", rating_range);
+                q = q.search(search).order(order);
+            }
+            match chosen {
+                ChartListType::Ranked => {
+                    q = q.query("isRanked", "true").query("isHidden", "false").query("isLocked", "false");
+                }
+                ChartListType::Unstable => {
+                    q = q.query("isRanked", "false").query("isHidden", "false").query("isLocked", "false");
+                }
+                ChartListType::Special => {
+                    q = q.query("isRanked", "false").query("isHidden", "true").query("isLocked", "true");
+                }
+                _ => {}
             }
             if let Some(me) = by_me {
-                q = q.query("uploader", me.to_string());
-            }
-            if show_stabilize {
-                q = q.query("stableRequest", "true");
-            } else if show_unreviewed {
-                q = q.query("reviewed", "false").query("stableRequest", "false");
+                q = q.query("ownerId", me.to_string());
             }
             let (remote_charts, count) = q
-                .query("type", typ.to_string())
-                .query("division", division)
                 .page(page)
                 .page_num(PAGE_NUM)
                 .send()

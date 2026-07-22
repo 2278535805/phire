@@ -82,7 +82,7 @@ pub struct EventScene {
 
 impl EventScene {
     pub fn new(event: Event, illu: Illustration, icons: Arc<Icons>, rank_icons: [SafeTexture; 8]) -> Self {
-        let id = event.id;
+        let id = event.id.clone();
         Self {
             event,
             illu,
@@ -98,7 +98,7 @@ impl EventScene {
                 None
             } else {
                 Some(Task::new(async move {
-                    Ok(recv_raw(Client::get(format!("/event/{id}/uml")).query(&[("version", env!("CARGO_PKG_VERSION"))]))
+                    Ok(recv_raw(Client::get(format!("/events/{id}/uml")).query(&[("version", env!("CARGO_PKG_VERSION"))]))
                         .await?
                         .text()
                         .await?)
@@ -133,14 +133,14 @@ impl EventScene {
 
     fn load_status(&mut self) {
         self.status = None;
-        let id = self.event.id;
-        self.status_task = Some(Task::new(async move { Ok(recv_raw(Client::get(format!("/event/{id}/status"))).await?.json().await?) }));
+        let id = self.event.id.clone();
+        self.status_task = Some(Task::new(async move { Ok(recv_raw(Client::get(format!("/events/{id}/status"))).await?.json().await?) }));
     }
 
     fn load_ldb(&mut self) {
-        let id = self.event.id;
+        let id = self.event.id.clone();
         self.ldb = None;
-        self.ldb_task = Some(Task::new(async move { Ok(recv_raw(Client::get(format!("/event/{id}/list15"))).await?.json().await?) }));
+        self.ldb_task = Some(Task::new(async move { Ok(recv_raw(Client::get(format!("/events/{id}/list15"))).await?.json().await?) }));
     }
 
     fn loading(&self) -> bool {
@@ -150,16 +150,16 @@ impl EventScene {
     fn join_or(&mut self, rt: f32) {
         if let Some(status) = &self.status {
             if status.joined {
-                if (self.event.time_start..self.event.time_end).contains(&Utc::now()) {
+                if (self.event.date_start.unwrap_or_default()..self.event.date_end.unwrap_or_default()).contains(&Utc::now()) {
                     if self.ldb_task.is_none() && self.ldb.is_none() {
                         self.load_ldb();
                     }
                     self.side_enter_time = rt;
                 }
             } else {
-                let id = self.event.id;
+                let id = self.event.id.clone();
                 self.join_task = Some(Task::new(async move {
-                    recv_raw(Client::post(format!("/event/{id}/join"), &())).await?;
+                    recv_raw(Client::post(format!("/events/{id}/join"), &())).await?;
                     Ok(())
                 }));
             }
@@ -374,7 +374,7 @@ impl Scene for EventScene {
             self.scroll.size((2., ui.top * 2.));
             self.scroll.render(ui, |ui| {
                 let top = ui.top;
-                ui.text(&self.event.name)
+                ui.text(&self.event.title)
                     .pos(EventPage::LB_PAD, top * 2. - EventPage::LB_PAD)
                     .anchor(0., 1.)
                     .size(1.5)
@@ -438,9 +438,9 @@ impl Scene for EventScene {
                     };
                 };
                 if status.joined {
-                    if Utc::now() > self.event.time_end {
+                    if Utc::now() > self.event.date_end.unwrap_or_default() {
                         draw(tl!("btn-ended"), semi_black(0.4));
-                    } else if Utc::now() < self.event.time_start {
+                    } else if Utc::now() < self.event.date_start.unwrap_or_default() {
                         draw(tl!("btn-not-started"), Color::new(0xe3 as f32 / 255., 0xf2 as f32 / 255., 0xfd as f32 / 255., 0xff as f32 / 255.));
                     } else {
                         self.btn_join.render_shadow(ui, r, t, 1.0, |_| semi_white(0.3));

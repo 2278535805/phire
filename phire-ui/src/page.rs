@@ -93,6 +93,7 @@ pub fn load_local(order: &(ChartOrder, bool)) -> Vec<ChartItem> {
         .map(|it| ChartItem {
             info: it.info.clone(),
             local_path: Some(it.local_path.clone()),
+            guid: it.local_path.strip_prefix("download/").map(|s| s.to_string()),
             illu: {
                 let notify = Arc::new(Notify::new());
                 Illustration {
@@ -206,6 +207,7 @@ pub struct ChartItem {
     pub info: BriefChartInfo,
     pub local_path: Option<String>,
     pub illu: Illustration,
+    pub guid: Option<String>,
 }
 
 // srange name, isn't it?

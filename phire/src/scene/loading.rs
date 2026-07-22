@@ -197,8 +197,7 @@ impl Scene for LoadingScene {
             let last_str = Regex::new(r"[0-9?.]+").unwrap();
             draw_text_aligned_opt_width(ui, self.info.level
                 .split_whitespace()
-                .rev()
-                .nth(0)
+                .next_back()
                 //.and_then(|word| word.get(3..))
                 .and_then(|word| { first_str.find(word).map(|m| &word[m.start()..]) })
                 .and_then(|word| { last_str.find(word).map(|m| &word[..m.end()]) })
