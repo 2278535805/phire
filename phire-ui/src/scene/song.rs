@@ -224,8 +224,6 @@ pub struct SongScene {
     rank_icons: [SafeTexture; 8],
     record: Option<SimpleRecord>,
 
-    fetch_best_task: Option<Task<Result<SimpleRecord>>>,
-
     menu: Popup,
     menu_btn: RectButton,
     need_show_menu: bool,
@@ -339,8 +337,6 @@ impl SongScene {
             .iter()
             .find(|it| Some(&it.local_path) == local_path.as_ref())
             .and_then(|it| it.record.clone());
-        let fetch_best_task = None;
-        let id = chart.info.id;
         let offline_mode = get_data().config.offline_mode;
         let icon_star = icons.star.clone();
         let guid_for_self = guid.clone();
@@ -410,8 +406,6 @@ impl SongScene {
 
             rank_icons,
             record,
-
-            fetch_best_task,
 
             menu: Popup::new(),
             menu_btn: RectButton::new(),
@@ -938,7 +932,6 @@ impl SongScene {
                     Some(format!("{}/{}", dir::respacks()?, get_data().respacks[id - 1]))
                 }
             };
-            let chart_updated = info.chart_updated;
             config.mods = mods;
             let player = get_data().me.as_ref().map(|it| BasicPlayer {
                 avatar: UserManager::get_avatar(it.id).flatten(),

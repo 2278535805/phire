@@ -12,7 +12,7 @@ use crate::{
     page::{local_illustration, Illustration},
 };
 
-use super::{Chart, Object, User};
+use super::{Chart, Object};
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use phire::{ext::BLACK_TEXTURE, info::ChartInfo, task::Task, ui::Dialog};
@@ -259,8 +259,7 @@ impl LocalCollection {
     }
 
     #[must_use]
-    pub fn update(mut self, uuid: Uuid, charts: &[ChartRef], add: bool) -> CollectionUpdate {
-        let data = get_data();
+    pub fn update(mut self, _uuid: Uuid, charts: &[ChartRef], add: bool) -> CollectionUpdate {
         if self.id.is_some() && charts.iter().any(|it| !it.is_online()) {
             let dir = dir::charts().unwrap();
             let charts: Vec<_> = charts

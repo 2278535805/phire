@@ -14,7 +14,7 @@ use crate::{
 use anyhow::{anyhow, Result};
 use macroquad::prelude::*;
 use phire::{
-    ext::{semi_black, JoinToString, RectExt, SafeTexture, ScaleType},
+    ext::{semi_black, RectExt, SafeTexture, ScaleType},
     scene::{request_file, request_input, return_input, show_error, show_message, take_input, NextScene},
     task::Task,
     ui::{button_hit, DRectButton, RectButton, Ui},

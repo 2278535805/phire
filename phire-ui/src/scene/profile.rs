@@ -107,7 +107,6 @@ impl ProfileScene {
                     .map(|it| {
                         let chart_id = it.chart_id.clone();
                         let illu = {
-                            let chart = Ptr::<Chart>::new(chart_id.clone());
                             let notify = Arc::new(Notify::new());
                             Illustration {
                                 texture: (black.clone(), black.clone()),

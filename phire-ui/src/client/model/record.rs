@@ -1,4 +1,4 @@
-use super::{Chart, Object, User};
+use super::Object;
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
 
