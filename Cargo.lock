@@ -2755,6 +2755,7 @@ dependencies = [
  "dotenv-build",
  "futures-util",
  "hex",
+ "hmac",
  "image",
  "logos",
  "lru",

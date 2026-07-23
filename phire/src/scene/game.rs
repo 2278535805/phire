@@ -36,10 +36,10 @@ use tracing::{debug, warn};
 
 const PAUSE_CLICK_INTERVAL: f32 = 0.7;
 
+// #[cfg(feature = "closed")]
+// mod inner;
 #[cfg(feature = "closed")]
-mod inner;
-#[cfg(feature = "closed")]
-use inner::*;
+use crate::inner::*;
 
 pub const WAIT_TIME: f64 = 0.5;
 const AFTER_TIME: f64 = 0.7;
@@ -1144,19 +1144,19 @@ impl Scene for GameScene {
                     if self.res.config.autoplay() && !self.res.health.state.track_failed {
                         self.judge.commit_all(&mut self.chart);
                     }
+                    let result = self.judge.result(track_complete);
                     let mut record_data = None;
                     // TODO strengthen the protection
                     #[cfg(feature = "closed")]
                     if let Some(upload_fn) = &self.upload_fn {
                         if !self.res.config.offline_mode && !self.res.config.autoplay() && self.res.config.speed >= 1.0 - 1e-3 {
                             if let Some(player) = &self.player {
-                                if let Some(chart) = &self.res.info.id {
-                                    record_data = Some(encode_record(self, player.id, *chart));
+                                if let Some(chart) = &self.res.info.guid {
+                                    record_data = Some(encode_record(self));
                                 }
                             }
                         }
                     }
-                    let result = self.judge.result(track_complete);
                     let record = if self.res.config.autoplay() || self.res.config.speed < 1.0 - 1e-3 {
                         None
                     } else {

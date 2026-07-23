@@ -609,6 +609,7 @@ impl SongScene {
 
                     let song = entity.song.as_ref();
                     let info = ChartInfo {
+                        guid: Some(entity.id.clone()),
                         uploader: Some(entity.owner_id),
                         name: entity
                             .title.clone()
@@ -962,24 +963,37 @@ impl SongScene {
                 id: it.id,
                 rks: it.rks,
             });
-            let upload_fn: Option<UploadFn> = if chart_guid.is_some() && get_data().tokens.is_some() {
+            let play_session = if chart_guid.is_some() && get_data().tokens.is_some() {
+                Some(crate::inner::start_play(chart_guid.as_ref().unwrap()).await?)
+            } else {
+                None
+            };
+            let upload_fn: Option<UploadFn> = if let Some(session) = play_session {
                 let chart_id = chart_guid.unwrap();
-                let f: UploadFn = Arc::new(move |_data| {
+                let player_id = get_data().me.as_ref().map(|it| it.id).unwrap();
+                let f: UploadFn = Arc::new(move |data| {
                     let chart_id = chart_id.clone();
+                    let session = session.clone();
                     Task::new(async move {
-                        let _resp: ResponseDto<serde_json::Value> = recv_raw(
-                            Client::get("/player/play").query(&[("chartId", chart_id.as_str())]),
-                        )
-                        .await?
-                        .json()
-                        .await?;
-                        // TODO: 从游戏二进制数据中提取判定计数（encode_record 在 closed 特性中）
-                        // TODO: extract judgment counts (perfect/goodEarly/goodLate/bad/miss/maxCombo/stdDeviation)
-                        //       from game binary data (encode_record in closed feature)
-                        // TODO: 计算 HMAC-SHA256(digest, app_secret)，其中
-                        //       digest = "{chartId}:{configurationId}:{playerId}:{maxCombo}:{perfect}:{goodEarly}:{goodLate}:{bad}:{miss}:{timestamp}"
-                        // TODO: 发送 POST /records {token, checksum, maxCombo, perfect, goodEarly, goodLate, bad, miss, stdDeviation, hmac, deviceInfo}
-                        Err::<RecordUpdateState, _>(anyhow!("score upload not yet implemented"))
+                        let record = crate::inner::decode_record(&data)?;
+                        let result = crate::inner::upload_score(&session, &chart_id, &record, player_id).await;
+                        let result = match result {
+                            Ok(result) => result,
+                            Err(err) => {
+                                warn!("failed to upload score: {:?}", err);
+                                return Err(err);
+                            }
+                        };
+                        RECORD_ID.store(
+                            result.get("id").and_then(|v| v.as_str()).and_then(|s| s.parse().ok()).unwrap_or(-1),
+                            Ordering::Relaxed,
+                        );
+                        Ok(RecordUpdateState {
+                            best: result["isFullCombo"].as_bool().unwrap_or(false),
+                            improvement: 0,
+                            gain_exp: result["experienceDelta"].as_f64().unwrap_or(0.) as f32,
+                            new_rks: 0.0,
+                        })
                     })
                 });
                 Some(f)

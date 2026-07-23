@@ -87,11 +87,12 @@ pub enum LoginParams<'a> {
     },
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ResponseDto<T> {
     pub status: u32,
-    pub code: String,
+    #[serde(default)]
+    pub code: Option<String>,
     #[serde(default)]
     pub message: Option<String>,
     pub data: Option<T>,

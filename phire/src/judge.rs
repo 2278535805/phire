@@ -178,7 +178,7 @@ pub enum Judgement {
     Miss,
 }
 
-#[cfg(not(feature = "closed"))]
+// #[cfg(not(feature = "closed"))]
 #[derive(Default)]
 pub(crate) struct JudgeInner {
     diffs: Vec<f64>,
@@ -189,7 +189,7 @@ pub(crate) struct JudgeInner {
     num_of_notes: u32,
 }
 
-#[cfg(not(feature = "closed"))]
+// #[cfg(not(feature = "closed"))]
 impl JudgeInner {
     pub fn new(num_of_notes: u32) -> Self {
         Self {
@@ -272,10 +272,8 @@ impl JudgeInner {
     }
 }
 
-#[cfg(feature = "closed")]
-mod inner;
-#[cfg(feature = "closed")]
-use inner::*;
+// #[cfg(feature = "closed")]
+// use inner::*;
 
 #[repr(C)]
 pub struct Judge {
