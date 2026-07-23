@@ -199,8 +199,15 @@ async fn the_main() -> Result<()> {
         anti_addiction_action("startup", Some(format!("Phigros-{}", me.id)));
     }
 
-    let font = FontArc::try_from_vec(load_file("font.ttf").await?)?;
-    let mut painter = TextPainter::new(font);
+    let mut fonts = vec![FontArc::try_from_vec(load_file("font.ttf").await?)?];
+    for font_path in ["fallback.ttf", "emoji.ttf"] {
+        if let Ok(data) = load_file(font_path).await {
+            if let Ok(font) = FontArc::try_from_vec(data) {
+                fonts.push(font);
+            }
+        }
+    }
+    let mut painter = TextPainter::new(fonts);
 
     let mut main = Main::new(Box::new(MainScene::new().await?), TimeManager::default(), None).await?;
 

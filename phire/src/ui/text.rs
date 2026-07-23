@@ -4,7 +4,7 @@ use crate::{
     ext::get_viewport,
 };
 use glyph_brush::{
-    ab_glyph::{Font, FontArc, Glyph, ScaleFont},
+    ab_glyph::{Font, FontArc, Glyph, GlyphId, ScaleFont},
     BrushAction, BrushError, FontId, GlyphBrush, GlyphBrushBuilder, GlyphCruncher, HorizontalAlign, Layout, Section, SectionGlyph, Text,
 };
 use macroquad::{
@@ -104,7 +104,35 @@ impl<'a, 's, 'ui> DrawText<'a, 's, 'ui> {
     fn measure_inner<'c>(&mut self, text: &'c str, painter: &mut Option<&mut TextPainter>) -> (Section<'c>, Rect) {
         let vp = get_viewport();
         let scale = self.get_scale(vp.2);
-        let mut section = Section::new().add_text(Text::new(text).with_scale(scale).with_color(self.color));
+        let has_fallback = painter
+            .as_ref()
+            .map_or_else(|| self.ui.text_painter.brush.fonts().len() > 1, |p| p.brush.fonts().len() > 1);
+        let mut section = Section::new();
+        if has_fallback {
+            let find_font = |c: char| -> usize {
+                let fonts = painter
+                    .as_ref()
+                    .map_or_else(|| self.ui.text_painter.brush.fonts(), |p| p.brush.fonts());
+                fonts.iter().position(|f| f.glyph_id(c) != GlyphId(0)).unwrap_or(0)
+            };
+            let mut start = 0usize;
+            let mut cur_font = find_font(text.chars().next().unwrap_or('\0'));
+            for (i, c) in text.char_indices() {
+                let desired = find_font(c);
+                if desired != cur_font {
+                    if i > start {
+                        section = section.add_text(Text::new(&text[start..i]).with_font_id(FontId(cur_font)).with_scale(scale).with_color(self.color));
+                    }
+                    start = i;
+                    cur_font = desired;
+                }
+            }
+            if start < text.len() {
+                section = section.add_text(Text::new(&text[start..]).with_font_id(FontId(cur_font)).with_scale(scale).with_color(self.color));
+            }
+        } else {
+            section = section.add_text(Text::new(text).with_scale(scale).with_color(self.color));
+        }
         let s = 2. / vp.2 as f32;
         if let Some(max_width) = self.max_width {
             section = section.with_bounds((max_width / s, f32::INFINITY));
@@ -237,8 +265,8 @@ pub struct TextPainter {
 }
 
 impl TextPainter {
-    pub fn new(font: FontArc) -> Self {
-        let mut brush = GlyphBrushBuilder::using_font(font).build();
+    pub fn new(fonts: Vec<FontArc>) -> Self {
+        let mut brush = GlyphBrushBuilder::using_fonts(fonts).build();
         let dim = *TEXTURE_DIM;
         brush.resize_texture(dim, dim);
         // TODO optimize

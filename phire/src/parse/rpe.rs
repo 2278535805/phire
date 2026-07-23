@@ -590,9 +590,9 @@ async fn parse_judge_line(
                         continue;
                     }
                     if !font_cache.contains_key(font_path) {
-                        let font_data = fs.load_file(font_path).await.with_context(|| format!("failed to load font: {font_path}"))?;
-                        let font_arc = FontArc::try_from_vec(font_data).map_err(|err| anyhow::anyhow!("failed to parse font: {err}"))?;
-                        let painter = TextPainter::new(font_arc);
+                        let font_data = fs.load_file(font_path).await.with_context(|| format!("failed to load file: {font_path}"))?;
+                        let font_arc = FontArc::try_from_vec(font_data).map_err(|err| anyhow::anyhow!("failed to load font {font_path}: {err}"))?;
+                        let painter = TextPainter::new(vec![font_arc]);
                         let id = fonts.len();
                         fonts.push(RefCell::new(painter));
                         font_cache.insert(font_path.clone(), id);

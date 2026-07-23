@@ -422,7 +422,7 @@ pub const MAX_ROTATE_RATE: f32 = 0.7;
 impl SharedState {
     pub async fn new() -> Result<Self> {
         let font = FontArc::try_from_vec(load_file("halva.ttf").await?)?;
-        let painter = TextPainter::new(font);
+        let painter = TextPainter::new(vec![font]);
 
         Ok(Self {
             t: 0.,
