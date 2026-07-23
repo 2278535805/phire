@@ -157,7 +157,7 @@ impl LibraryPage {
         self.charts_view.clear();
         let page = self.current_page;
         let search = self.search_str.clone();
-        let order = {
+        let (order_field, rev) = {
             let (order, mut rev) = ORDERS[self.current_order];
             let order = match order {
                 ChartOrder::Default => {
@@ -167,11 +167,7 @@ impl LibraryPage {
                 ChartOrder::Name => "Title",
                 ChartOrder::Rating => "Rating",
             };
-            if rev {
-                format!("-{order}")
-            } else {
-                order.to_owned()
-            }
+            (order, rev)
         };
         let popular = matches!(self.chosen, ChartListType::Popular);
         let chosen = self.chosen;
@@ -180,12 +176,19 @@ impl LibraryPage {
         } else {
             None
         };
+        let tags_include = self.tags.tags.tags().to_vec();
+        let tags_exclude = self.tags.unwanted.as_ref().map(|t| t.tags().to_vec()).unwrap_or_default();
+        let rating_low = self.rating.rate.score;
+        let rating_high = self.rating.rate_upper.as_ref().map(|r| r.score);
         self.online_task = Some(Task::new(async move {
             let mut q = Client::query::<Chart>();
             if popular {
                 q = q.order("playCount").query("desc", "true");
             } else {
-                q = q.search(search).order(order);
+                q = q.search(search).order(order_field);
+                if rev {
+                    q = q.query("desc", "true");
+                }
             }
             match chosen {
                 ChartListType::Ranked => {
@@ -201,6 +204,13 @@ impl LibraryPage {
             }
             if let Some(me) = by_me {
                 q = q.query("ownerId", me.to_string());
+            }
+            if !tags_include.is_empty() || !tags_exclude.is_empty() {
+                q = q.tags(tags_include, tags_exclude);
+            }
+            q = q.query("minRating", rating_low.to_string());
+            if let Some(high) = rating_high {
+                q = q.query("maxRating", high.to_string());
             }
             let (remote_charts, count) = q
                 .page(page)

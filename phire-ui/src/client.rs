@@ -9,7 +9,7 @@ use phire::{l10n::LANG_IDENTS, scene::SimpleRecord};
 use reqwest::{header, ClientBuilder, Method, RequestBuilder, Response, StatusCode};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use std::{borrow::Cow, collections::HashMap, marker::PhantomData, sync::Arc};
+use std::{borrow::Cow, marker::PhantomData, sync::Arc};
 
 pub static CLIENT_TOKEN: Lazy<ArcSwap<Option<String>>> = Lazy::new(|| ArcSwap::from_pointee(None));
 
@@ -208,7 +208,7 @@ impl Client {
 
     pub fn query<T: Object>() -> QueryBuilder<T> {
         QueryBuilder {
-            queries: HashMap::new(),
+            queries: Vec::new(),
             page: None,
             suffix: "",
             _phantom: PhantomData::default(),
@@ -275,7 +275,7 @@ impl Client {
 
 #[must_use]
 pub struct QueryBuilder<T> {
-    queries: HashMap<Cow<'static, str>, Cow<'static, str>>,
+    queries: Vec<(Cow<'static, str>, Cow<'static, str>)>,
     page: Option<u64>,
     suffix: &'static str,
     _phantom: PhantomData<T>,
@@ -283,7 +283,7 @@ pub struct QueryBuilder<T> {
 
 impl<T: Object> QueryBuilder<T> {
     pub fn query(mut self, key: impl Into<Cow<'static, str>>, value: impl Into<Cow<'static, str>>) -> Self {
-        self.queries.insert(key.into(), value.into());
+        self.queries.push((key.into(), value.into()));
         self
     }
 
@@ -293,8 +293,14 @@ impl<T: Object> QueryBuilder<T> {
     }
 
     #[inline]
-    pub fn tags(self, tags: impl Into<Cow<'static, str>>) -> Self {
-        self.query("tags", tags)
+    pub fn tags(mut self, include: Vec<String>, exclude: Vec<String>) -> Self {
+        for tag in include {
+            self.queries.push(("tagsToInclude".into(), tag.into()));
+        }
+        for tag in exclude {
+            self.queries.push(("tagsToExclude".into(), tag.into()));
+        }
+        self
     }
 
     #[inline]
@@ -319,7 +325,7 @@ impl<T: Object> QueryBuilder<T> {
     }
 
     pub async fn send(mut self) -> Result<(Vec<T>, u64)> {
-        self.queries.insert("page".into(), (self.page.unwrap_or(0) + 1).to_string().into());
+        self.queries.push(("page".into(), (self.page.unwrap_or(0) + 1).to_string().into()));
         let res: ResponseDto<Vec<T>> =
             recv_raw(Client::get(format!("/{}{}", T::QUERY_PATH, self.suffix)).query(&self.queries))
                 .await?

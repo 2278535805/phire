@@ -40,13 +40,52 @@ pub struct ChartAssetInfo {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct SongBrief {
+pub struct Song {
+    pub id: String,
     pub title: String,
+    pub edition_type: u8,
+    pub edition: Option<String>,
+    pub author_name: Option<String>,
     pub file: Option<String>,
+    pub file_checksum: Option<String>,
     pub illustration: Option<String>,
     pub illustrator: Option<String>,
+    pub description: Option<String>,
+    pub accessibility: u8,
+    pub is_hidden: bool,
+    pub is_locked: bool,
+    pub lyrics: Option<String>,
+    pub bpm: f64,
+    pub min_bpm: f64,
+    pub max_bpm: f64,
+    pub offset: i32,
+    pub license: Option<String>,
+    pub is_original: bool,
+    pub duration: Option<String>,
     pub preview_start: Option<String>,
     pub preview_end: Option<String>,
+    #[serde(default)]
+    pub chart_levels: Vec<ChartLevelInfo>,
+    #[serde(default, deserialize_with = "deserialize_tags")]
+    pub tags: Vec<String>,
+    pub play_count: Option<i64>,
+    pub like_count: Option<i32>,
+    pub owner_id: Option<i32>,
+    #[serde(default)]
+    pub date_created: Option<DateTime<Utc>>,
+    #[serde(default)]
+    pub date_file_updated: Option<DateTime<Utc>>,
+    #[serde(default)]
+    pub date_updated: Option<DateTime<Utc>>,
+    #[serde(default)]
+    pub date_liked: Option<DateTime<Utc>>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChartLevelInfo {
+    pub level_type: u8,
+    pub count: i32,
 }
 
 pub fn parse_author_name(author: &str) -> String {
@@ -87,7 +126,7 @@ pub struct Chart {
 
     pub song_id: String,
     #[serde(default)]
-    pub song: Option<SongBrief>,
+    pub song: Option<Song>,
 
     pub owner_id: i32,
 

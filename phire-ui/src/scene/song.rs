@@ -606,10 +606,13 @@ impl SongScene {
                         .and_then(|s| s.preview_end.as_deref())
                         .and_then(|s| s.parse::<f64>().ok());
 
+                    let song = entity.song.as_ref();
                     let info = ChartInfo {
-                        id: Some(0),
                         uploader: Some(entity.owner_id),
-                        name: entity.title.clone().or_else(|| entity.song.as_ref().map(|s| s.title.clone())).unwrap_or_default(),
+                        name: entity
+                            .title.clone()
+                            .or_else(|| song.map(|s| s.title.clone()))
+                            .unwrap_or_default(),
                         difficulty: entity.difficulty,
                         level: {
                             let mut level = entity.level.clone();
@@ -620,20 +623,20 @@ impl SongScene {
                             level
                         },
                         charter: crate::client::parse_author_name(&entity.author_name),
-                        composer: String::new(),
+                        composer: song.and_then(|s| s.author_name.clone()).unwrap_or_default(),
                         illustrator: entity
                             .illustrator
                             .clone()
-                            .or_else(|| entity.song.as_ref().and_then(|s| s.illustrator.clone()))
+                            .or_else(|| song.and_then(|s| s.illustrator.clone()))
                             .unwrap_or_default(),
                         chart: if chart_file_url.is_empty() { String::new() } else { format!("chart.{chart_ext}") },
-                        format: Some(match entity.format {
-                            0 => ChartFormat::Rpe,
-                            1 => ChartFormat::Pec,
-                            2 => ChartFormat::Pgr,
-                            3 => ChartFormat::Pbc,
-                            _ => ChartFormat::Rpe,
-                        }),
+                        format: match entity.format {
+                            0 => Some(ChartFormat::Rpe),
+                            1 => Some(ChartFormat::Pec),
+                            2 => Some(ChartFormat::Pgr),
+                            3 => Some(ChartFormat::Pbc),
+                            _ => None,
+                        },
                         music: music_filename.to_string(),
                         illustration: if illu_url.is_empty() { String::new() } else { illu_filename.to_string() },
                         preview_start,
@@ -643,7 +646,6 @@ impl SongScene {
                         created: entity.date_created,
                         updated: entity.date_updated,
                         chart_updated: entity.date_file_updated,
-                        score_total: 1_000_000,
                         ..Default::default()
                     };
                     serde_yaml::to_writer(dir.create("info.yml")?, &info)?;
