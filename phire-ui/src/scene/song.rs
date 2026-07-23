@@ -570,11 +570,10 @@ impl SongScene {
                     }
 
                     for asset in &entity.assets {
-                        let ext = asset.file.rsplitn(2, '.').next().unwrap_or("bin");
-                        let filename = format!("{}.{ext}", asset.name);
+                        let filename = asset.file.rsplitn(2, '/').next().unwrap_or("unknown.bin");
                         let mut data = Vec::new();
                         download(Cursor::new(&mut data), &asset.file, &prog_wk).await?;
-                        tokio::fs::write(dir.join(&filename)?, &data).await?;
+                        tokio::fs::write(dir.join(filename)?, &data).await?;
                     }
 
                     *status.lock().unwrap() = tl!("dl-status-saving");
