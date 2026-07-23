@@ -1140,7 +1140,10 @@ impl Scene for GameScene {
                 #[cfg(feature = "play")]
                 let is_ending = is_ending || self.res.health.state.track_failed;
                 if is_ending {
+                    #[cfg(feature = "play")]
                     let track_complete = self.res.health.state.now_health >= self.res.health.config.complete_health && !self.res.health.state.track_failed;
+                    #[cfg(not(feature = "play"))]
+                    let track_complete = true;
                     if self.res.config.autoplay() && !self.res.health.state.track_failed {
                         self.judge.commit_all(&mut self.chart);
                     }
