@@ -177,7 +177,7 @@ impl Chart {
             difficulty: self.difficulty,
             intro: self.description.clone().unwrap_or_default(),
             charter: parse_author_name(&self.author_name),
-            composer: String::new(),
+            composer: self.song.as_ref().and_then(|s| s.author_name.clone()).unwrap_or_default(),
             illustrator: self.illustrator.clone().unwrap_or_default(),
             score_total: 1_000_000,
             created: self.date_created,

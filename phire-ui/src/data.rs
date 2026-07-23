@@ -55,7 +55,7 @@ impl BriefChartInfo {
             difficulty: chart.difficulty,
             intro: chart.description.clone().unwrap_or_default(),
             charter: crate::client::parse_author_name(&chart.author_name),
-            composer: String::new(),
+            composer: chart.song.as_ref().and_then(|s| s.author_name.clone()).unwrap_or_default(),
             illustrator: chart.illustrator.clone().unwrap_or_default(),
             score_total: 1_000_000,
             created: chart.date_created,
