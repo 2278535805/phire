@@ -14,6 +14,7 @@ uploading-avatar = 頭像上傳中...
 
 load-record-failed = 載入遊玩紀錄失敗
 
+user-id = 星空探險家 #{ $id }
 last-login = 上次登入於：{ $time }
 badge-admin = 管理員
 badge-sponsor = 贊助者

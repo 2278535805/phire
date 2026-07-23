@@ -14,6 +14,7 @@ uploading-avatar = 上传头像中
 
 load-record-failed = 加载游玩记录失败
 
+user-id = 星空探险家 #{ $id }
 last-login = 最近登录：{ $time }
 badge-admin = 管理员
 badge-sponsor = 赞助者

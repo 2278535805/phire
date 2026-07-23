@@ -13,6 +13,7 @@ uploading-avatar = Đang tải ảnh lên
 
 load-record-failed = Không thể tải bản ghi
 
+user-id = UID: { $id }
 last-login = Đăng nhập lần cuối: { $time }
 badge-admin = Quản trị viên
 badge-sponsor = Nhà tài trợ

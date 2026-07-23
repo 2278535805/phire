@@ -13,6 +13,7 @@ uploading-avatar = 아바타 업로드 중
 
 load-record-failed = 기록을 불러오는 데 실패했습니다.
 
+user-id = UID: { $id }
 last-login = 마지막 로그인: { $time }
 badge-admin = 관리자
 badge-sponsor = 후원자

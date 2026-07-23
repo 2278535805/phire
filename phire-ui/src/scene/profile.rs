@@ -338,6 +338,12 @@ impl Scene for ProfileScene {
                 .color(user.name_color())
                 .draw();
             let r = ui
+                .text(tl!("user-id", "id" => user.id))
+                .size(0.5)
+                .pos(cx, r.bottom() + 0.01)
+                .anchor(0.5, 0.)
+                .draw();
+            let r = ui
                 .text(format!("RKS {:.2}", user.rks))
                 .size(0.5)
                 .pos(cx, r.bottom() + 0.01)
