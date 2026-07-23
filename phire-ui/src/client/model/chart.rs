@@ -89,12 +89,12 @@ pub struct ChartLevelInfo {
 }
 
 pub fn parse_author_name(author: &str) -> String {
-    if let Some(s) = author.strip_prefix("[PZUser:") {
-        let s = s.strip_suffix(":PZRT]").unwrap_or(s);
-        s.split(':').nth(1).unwrap_or(s).to_string()
-    } else {
-        author.to_string()
-    }
+    use once_cell::sync::Lazy;
+    use regex::Regex;
+
+    static RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\[PZUser:[0-9]+:([^\]\:]+)(\])*(:PZRT\])*").unwrap());
+    RE.replace_all(author, |caps: &regex::Captures| caps.get(1).map(|m| m.as_str().to_string()).unwrap_or_default())
+        .to_string()
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

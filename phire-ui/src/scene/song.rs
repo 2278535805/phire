@@ -1149,8 +1149,8 @@ impl SongScene {
                         tl!("unreviewed"),
                         match (!entity.is_locked && !entity.is_hidden, entity.is_ranked) {
                             (true, true) => ttl!("chart-ranked"),
-                            (true, false) => ttl!("chart-special"),
-                            (false, _) => ttl!("chart-unstable"),
+                            (true, false) => ttl!("chart-unstable"),
+                            (false, _) => ttl!("chart-special"),
                         }
                     )
                     .into(),
