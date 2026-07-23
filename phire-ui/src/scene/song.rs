@@ -570,7 +570,7 @@ impl SongScene {
                     }
 
                     for asset in &entity.assets {
-                        let filename = asset.file.rsplitn(2, '/').next().unwrap_or("unknown.bin");
+                        let filename = asset.file.rsplit('/').next().unwrap_or("unknown.bin");
                         let mut data = Vec::new();
                         download(Cursor::new(&mut data), &asset.file, &prog_wk).await?;
                         tokio::fs::write(dir.join(filename)?, &data).await?;
