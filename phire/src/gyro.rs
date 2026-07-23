@@ -32,6 +32,12 @@ lazy_static! {
     pub static ref GYRO: Mutex<Gyro> = Mutex::new(Gyro::new());
 }
 
+impl Default for Gyro {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Gyro {
     pub fn new() -> Self {
         Self {
@@ -109,8 +115,8 @@ impl Gyro {
         let world = self.gravity.transform_vector(&Vector3::new(0.0, 1.0, 0.0));
 
         let proj = Vector3::new(world.x, world.y, world.z);
-        let tan = world.y.atan2(proj.x);
-        tan
+        
+        world.y.atan2(proj.x)
     }
 
     pub fn get_angle(&self) -> f32 {

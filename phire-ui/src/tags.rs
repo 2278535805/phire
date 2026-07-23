@@ -4,27 +4,27 @@ use crate::{client::Permissions, page::Fader};
 use macroquad::prelude::*;
 use phire::{
     ext::{semi_black, RectExt},
-    scene::{request_input, return_input, show_message, take_input},
-    ui::{DRectButton, Scroll, Ui},
+    scene::{show_message},
+    ui::{DRectButton, InlineInputBox, Scroll, Ui},
 };
 use smallvec::{smallvec, SmallVec};
 
 const DIVISION_TAGS: &[&str] = &["regular", "troll", "plain", "visual"];
 
 pub struct Tags {
-    input_id: &'static str,
     tags: Vec<String>,
     btns: Vec<DRectButton>,
     add: DRectButton,
+    add_input: InlineInputBox,
 }
 
 impl Tags {
-    pub fn new(input_id: &'static str) -> Self {
+    pub fn new() -> Self {
         Self {
-            input_id,
             tags: Vec::new(),
             btns: Vec::new(),
             add: DRectButton::new(),
+            add_input: InlineInputBox::new(),
         }
     }
 
@@ -61,6 +61,14 @@ impl Tags {
     }
 
     pub fn touch(&mut self, touch: &Touch, t: f32) -> bool {
+        if self.add_input.is_active() {
+            if self.add_input.touch(touch) {
+                let text = self.add_input.confirm();
+                self.try_add(text.trim());
+                return true;
+            }
+            return true;
+        }
         for (index, btn) in self.btns.iter_mut().enumerate() {
             if btn.touch(touch, t) {
                 self.tags.remove(index);
@@ -69,10 +77,16 @@ impl Tags {
             }
         }
         if self.add.touch(touch, t) {
-            request_input(self.input_id, "", tl!("edit"));
+            self.add_input.activate("", false, false);
             return true;
         }
         false
+    }
+
+    pub fn update(&mut self) {
+        if self.add_input.is_active() {
+            self.add_input.update()
+        }
     }
 
     pub fn render(&mut self, ui: &mut Ui, mw: f32, t: f32, alpha: f32) -> f32 {
@@ -96,7 +110,15 @@ impl Tags {
         for (tag, btn) in self.tags.iter().zip(self.btns.iter_mut()) {
             draw(btn, tag);
         }
-        draw(&mut self.add, "+");
+        if self.add_input.is_active() {
+            let w = mw - x;
+            if w > 0.08 {
+                let r = Rect::new(x, h, w, row_height).feather(-pad);
+                self.add_input.render(ui, r, alpha, &tl!("edit"));
+            }
+        } else {
+            draw(&mut self.add, "+");
+        }
         h + row_height
     }
 
@@ -144,8 +166,8 @@ impl TagsDialog {
             show: false,
 
             scroll: Scroll::new(),
-            tags: Tags::new("add_tag"),
-            unwanted: if search_mode { Some(Tags::new("add_tag_unwanted")) } else { None },
+            tags: Tags::new(),
+            unwanted: if search_mode { Some(Tags::new()) } else { None },
 
             division: DIVISION_TAGS[0],
             div_btns: DIVISION_TAGS.iter().map(|_| DRectButton::new()).collect(),
@@ -196,6 +218,19 @@ impl TagsDialog {
             return true;
         }
         if self.show {
+            let input_active = self.tags.add_input.is_active()
+                || self.unwanted.as_ref().map_or(false, |u| u.add_input.is_active());
+            if input_active {
+                if self.tags.touch(touch, t) {
+                    return true;
+                }
+                if let Some(unwanted) = &mut self.unwanted {
+                    if unwanted.touch(touch, t) {
+                        return true;
+                    }
+                }
+                return true;
+            }
             if !self.dialog_rect().contains(touch.position) && touch.phase == TouchPhase::Started {
                 self.dismiss(t);
                 return true;
@@ -256,18 +291,9 @@ impl TagsDialog {
             self.show = !done;
         }
         self.scroll.update(t);
-        if let Some((id, text)) = take_input() {
-            match id.as_str() {
-                "add_tag" => {
-                    self.tags.try_add(text.trim());
-                }
-                "add_tag_unwanted" => {
-                    self.unwanted.as_mut().unwrap().try_add(text.trim());
-                }
-                _ => {
-                    return_input(id, text);
-                }
-            }
+        self.tags.update();
+        if let Some(unwanted) = &mut self.unwanted {
+            unwanted.update();
         }
     }
 

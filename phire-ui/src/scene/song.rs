@@ -2,7 +2,17 @@ phire::tl_file!("song");
 
 use super::{confirm_delete, confirm_dialog, fs_from_path, render_ldb, LdbDisplayItem, ProfileScene};
 use crate::{
-    charts_view::NEED_UPDATE, client::{CLIENT_TOKEN, Chart, Client, Permissions, Ptr, Record, UserManager, basic_client_builder, recv_raw}, data::{BriefChartInfo, LocalChart}, dir, get_data, get_data_mut, icons::Icons, page::{ChartItem, Fader, Illustration, SFader, thumbnail_path}, popup::Popup, rate::RateDialog, save_data, scene::UnlockScene, tags::TagsDialog
+    charts_view::NEED_UPDATE,
+    client::{basic_client_builder, recv_raw, Chart, Client, Permissions, Ptr, Record, UserManager, CLIENT_TOKEN},
+    data::{BriefChartInfo, LocalChart},
+    dir, get_data, get_data_mut,
+    icons::Icons,
+    page::{thumbnail_path, ChartItem, Fader, Illustration, SFader},
+    popup::Popup,
+    rate::RateDialog,
+    save_data,
+    scene::UnlockScene,
+    tags::TagsDialog,
 };
 use ::rand::{rng, Rng};
 use anyhow::{anyhow, bail, Context, Result};
@@ -13,16 +23,17 @@ use phira_mp_common::{ClientCommand, CompactPos, JudgeEvent, TouchFrame};
 use phire::{
     config::Mods,
     core::Tweenable,
-    ext::{JoinToString, LocalTask, RectExt, SafeTexture, ScaleType, poll_future, semi_black, semi_white, unzip_into},
+    ext::{poll_future, semi_black, semi_white, unzip_into, JoinToString, LocalTask, RectExt, SafeTexture, ScaleType},
     fs,
     info::ChartInfo,
-    judge::{Judge, icon_index},
+    judge::{icon_index, Judge},
     scene::{
-        BasicPlayer, GameMode, LoadingScene, LocalSceneTask, NextScene, RecordUpdateState, Scene, SimpleRecord, UpdateFn, UploadFn, request_input, return_input, show_error, show_message, take_input
+        request_input, return_input, show_error, show_message, take_input, BasicPlayer, GameMode, LoadingScene, LocalSceneTask, NextScene,
+        RecordUpdateState, Scene, SimpleRecord, UpdateFn, UploadFn,
     },
     task::Task,
     time::TimeManager,
-    ui::{ChartInfoEdit, DRectButton, Dialog, LoadingParams, RectButton, Scroll, UI_AUDIO, Ui, button_hit, render_chart_info},
+    ui::{button_hit, render_chart_info, ChartInfoEdit, DRectButton, Dialog, LoadingParams, RectButton, Scroll, Ui, UI_AUDIO},
 };
 use reqwest::Method;
 use sasa::{AudioClip, Frame, Music, MusicParams};
@@ -1200,6 +1211,7 @@ impl Scene for SongScene {
     }
 
     fn enter(&mut self, tm: &mut TimeManager, _target: Option<RenderTarget>) -> Result<()> {
+        crate::character::check_erosion_trigger();
         if self.first_in {
             self.first_in = false;
             tm.seek_to(-FADE_IN_TIME as _);
@@ -1900,14 +1912,14 @@ impl Scene for SongScene {
     fn render(&mut self, tm: &mut TimeManager, ui: &mut Ui) -> Result<()> {
         set_camera(&ui.camera());
         let t = tm.now() as f32;
-        ui.fill_rect(ui.screen_rect(), (*self.illu.texture.1, ui.screen_rect()));
+        ui.fill_rect(ui.screen_rect(), (Texture2D::clone(&self.illu.texture.1), ui.screen_rect()));
         ui.fill_rect(ui.screen_rect(), semi_black(0.55));
 
         let c = semi_white((t / FADE_IN_TIME).clamp(-1., 0.) + 1.);
 
         let r = ui.back_rect();
         self.back_btn.set(ui, r);
-        ui.fill_rect(r, (*self.icons.back, r, ScaleType::Fit, WHITE));
+        ui.fill_rect(r, (Texture2D::clone(&self.icons.back), r, ScaleType::Fit, WHITE));
 
         let r = ui
             .text(&self.info.name)
@@ -1925,8 +1937,8 @@ impl Scene for SongScene {
         // bottom bar
         let s = 0.25;
         let r = Rect::new(-0.94, ui.top - s - 0.06, s, s);
-        let icon = self.record.as_ref().map_or(7, |it| icon_index(it.score as _, it.full_combo));
-        ui.fill_rect(r, (*self.rank_icons[icon], r, ScaleType::Fit, c));
+        let icon = self.record.as_ref().map_or(7, |it| icon_index(it.score as _, it.full_combo, it.track_complete));
+        ui.fill_rect(r, (Texture2D::clone(&self.rank_icons[icon]), r, ScaleType::Fit, c));
         let score = self.record.as_ref().map(|it| it.score).unwrap_or_default();
         let score = (score as f64 / 1_000_000.0 * self.info.score_total as f64) as u32;
         let accuracy = self.record.as_ref().map(|it| it.accuracy).unwrap_or_default();
@@ -1947,7 +1959,7 @@ impl Scene for SongScene {
         if self.info.id.is_some() {
             let h = 0.09;
             let mut r = Rect::new(r.x, r.y - h, h, h);
-            ui.fill_rect(r, (*self.icons.ldb, r, ScaleType::Fit, c));
+            ui.fill_rect(r, (Texture2D::clone(&self.icons.ldb), r, ScaleType::Fit, c));
             if let Some((rank, _)) = &self.ldb {
                 ui.text(if let Some(rank) = rank {
                     format!("#{rank}")
@@ -1987,9 +1999,9 @@ impl Scene for SongScene {
             r,
             (
                 if self.local_path.is_some() {
-                    *self.icons.play
+                    Texture2D::clone(&self.icons.play)
                 } else {
-                    *self.icons.download
+                    Texture2D::clone(&self.icons.download)
                 },
                 r,
                 ScaleType::Fit,
@@ -2003,7 +2015,10 @@ impl Scene for SongScene {
             let s = 0.08;
             let r = Rect::new(-s, 0., s, s);
             let cc = semi_white(c.a * 0.4);
-            ui.fill_rect(r, (*self.icons.menu, r.feather(-0.02), ScaleType::Fit, if self.menu_options.is_empty() { cc } else { c }));
+            ui.fill_rect(
+                r,
+                (Texture2D::clone(&self.icons.menu), r.feather(-0.02), ScaleType::Fit, if self.menu_options.is_empty() { cc } else { c }),
+            );
             self.menu_btn.set(ui, r);
             if self.need_show_menu {
                 self.need_show_menu = false;
@@ -2013,13 +2028,13 @@ impl Scene for SongScene {
                 self.menu.show(ui, t, Rect::new(r.x - d, r.bottom() + 0.02, r.w + d, 0.5));
             }
             ui.dx(-r.w - 0.03);
-            ui.fill_rect(r, (*self.icons.info, r, ScaleType::Fit, c));
+            ui.fill_rect(r, (Texture2D::clone(&self.icons.info), r, ScaleType::Fit, c));
             self.info_btn.set(ui, r);
             ui.dx(-r.w - 0.03);
-            ui.fill_rect(r, (*self.icons.edit, r, ScaleType::Fit, if self.local_path.is_some() { c } else { cc }));
+            ui.fill_rect(r, (Texture2D::clone(&self.icons.edit), r, ScaleType::Fit, if self.local_path.is_some() { c } else { cc }));
             self.edit_btn.set(ui, r);
             ui.dx(-r.w - 0.03);
-            ui.fill_rect(r, (*self.icons.r#mod, r, ScaleType::Fit, if self.local_path.is_some() { c } else { cc }));
+            ui.fill_rect(r, (Texture2D::clone(&self.icons.r#mod), r, ScaleType::Fit, if self.local_path.is_some() { c } else { cc }));
             self.mod_btn.set(ui, r);
         });
 

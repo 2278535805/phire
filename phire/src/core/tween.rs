@@ -654,12 +654,10 @@ impl Tweenable for String {
                 let mut text = y.clone();
                 text.push_str(&x.chars().skip(y_len).take(take_num - y_len).collect::<String>());
                 text
+            } else if x.contains("%P%") {
+                x.replace("%P%", "")
             } else {
-                if x.contains("%P%") {
-                    x.replace("%P%", "")
-                } else {
-                    x.clone()
-                }
+                x.clone()
             }
         }
     }

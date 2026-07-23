@@ -1,6 +1,6 @@
 use super::Ui;
 use macroquad::prelude::*;
-use miniquad::{BlendFactor, BlendState, BlendValue, Equation};
+use macroquad::miniquad::{BlendFactor, BlendState, BlendValue, Equation};
 use once_cell::sync::Lazy;
 
 fn alpha_blend_material_params(uniforms: Vec<(String, UniformType)>) -> MaterialParams {
@@ -13,18 +13,22 @@ fn alpha_blend_material_params(uniforms: Vec<(String, UniformType)>) -> Material
             )),
             ..Default::default()
         },
-        uniforms,
+        uniforms: uniforms.into_iter().map(|(name, uniform_type)| UniformDesc { name, uniform_type, array_count: 1 }).collect(),
         textures: Vec::new(),
     }
 }
 
-static SHADOW_MATERIAL: Lazy<Material> =
-    Lazy::new(|| load_material(shader::VERTEX, shader::SHADOW_FRAGMENT, alpha_blend_material_params(ShadowConfig::uniforms())).unwrap());
+static SHADOW_MATERIAL: Lazy<Material> = Lazy::new(|| {
+    load_material(
+        ShaderSource::Glsl { vertex: shader::VERTEX, fragment: shader::SHADOW_FRAGMENT },
+        alpha_blend_material_params(ShadowConfig::uniforms()),
+    )
+    .unwrap()
+});
 
 static RR_MATERIAL: Lazy<Material> = Lazy::new(|| {
     load_material(
-        shader::VERTEX,
-        shader::RR_FRAGMENT,
+        ShaderSource::Glsl { vertex: shader::VERTEX, fragment: shader::RR_FRAGMENT },
         alpha_blend_material_params(vec![("rect".to_owned(), UniformType::Float4), ("radius".to_owned(), UniformType::Float1)]),
     )
     .unwrap()
@@ -65,11 +69,11 @@ impl ShadowConfig {
 
 pub fn rounded_rect_shadow(ui: &mut Ui, r: Rect, config: &ShadowConfig) {
     // r.y += elevation * 0.5;
-    let mat = *SHADOW_MATERIAL;
+    let mat = SHADOW_MATERIAL.clone();
     let gr = ui.rect_to_global(r);
     mat.set_uniform("rect", vec4(gr.x, gr.y, gr.right(), gr.bottom()));
     config.apply(&mat);
-    gl_use_material(mat);
+    gl_use_material(&mat);
     let r3 = config.elevation * 3.0;
     draw_rectangle(gr.x - r3, gr.y - r3, gr.w + r3 * 2., gr.h + r3 * 2., WHITE);
     gl_use_default_material();
@@ -77,11 +81,11 @@ pub fn rounded_rect_shadow(ui: &mut Ui, r: Rect, config: &ShadowConfig) {
 
 pub fn rounded_rect<R>(ui: &mut Ui, r: Rect, radius: f32, f: impl FnOnce(&mut Ui) -> R) -> R {
     // r.y += elevation * 0.5;
-    let mat = *RR_MATERIAL;
+    let mat = RR_MATERIAL.clone();
     let gr = ui.rect_to_global(r);
     mat.set_uniform("rect", vec4(gr.x, gr.y, gr.right(), gr.bottom()));
     mat.set_uniform("radius", radius);
-    gl_use_material(mat);
+    gl_use_material(&mat);
     let res = f(ui);
     gl_use_default_material();
     res
