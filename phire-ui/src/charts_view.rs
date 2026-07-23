@@ -285,6 +285,8 @@ impl ChartsView {
                         let item = &self.charts.as_ref().unwrap()[transit.id as usize];
                         let path = if let Some(path) = &item.chart.local_path {
                             path.clone()
+                        } else if let Some(guid) = &item.chart.guid {
+                            format!("download/{guid}")
                         } else {
                             format!("download/{}", item.chart.info.id.unwrap())
                         };
