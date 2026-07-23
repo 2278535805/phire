@@ -40,17 +40,9 @@ use sasa::{AudioClip, Frame, Music, MusicParams};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::{
-    any::Any,
-    borrow::Cow,
-    collections::{hash_map, HashMap, VecDeque},
-    fs::File,
-    io::{Cursor, Write},
-    path::Path,
-    sync::{
-        atomic::{AtomicBool, AtomicI32, Ordering},
-        Arc, Mutex, Weak,
-    },
-    thread_local,
+    any::Any, borrow::Cow, collections::{HashMap, VecDeque, hash_map}, fs::File, io::{Cursor, Write}, path::Path, println, sync::{
+        Arc, Mutex, Weak, atomic::{AtomicBool, AtomicI32, Ordering},
+    }, thread_local,
 };
 use tokio::net::TcpStream;
 use tracing::warn;
@@ -155,6 +147,7 @@ impl Downloading {
                         }
                     }
                     save_data()?;
+                    NEED_UPDATE.store(true, Ordering::Relaxed);
                     show_message(tl!("dl-success")).ok();
                     Ok(Some(true))
                 }
@@ -502,9 +495,15 @@ impl SongScene {
                     tokio::fs::create_dir(path).await?;
                     let dir = phire::dir::Dir::new(path)?;
 
-                    async fn download(mut file: impl Write, url: &str, prog_wk: &Weak<Mutex<Option<f32>>>) -> Result<()> {
+                    async fn download(
+                        mut file: impl Write,
+                        url: &str,
+                        file_index: usize,
+                        total: usize,
+                        prog_wk: &Weak<Mutex<Option<f32>>>,
+                    ) -> Result<()> {
                         let Some(prog) = prog_wk.upgrade() else { return Ok(()) };
-                        *prog.lock().unwrap() = None;
+                        *prog.lock().unwrap() = Some(file_index as f32 / total as f32);
                         let req = basic_client_builder().build().unwrap().get(url);
                         let req = if let Some(token) = CLIENT_TOKEN.load().as_ref() {
                             req.header("Authorization", format!("Bearer {token}"))
@@ -520,7 +519,8 @@ impl SongScene {
                             file.write_all(&chunk)?;
                             count += chunk.len() as u64;
                             if let Some(size) = size {
-                                *prog.lock().unwrap() = Some(count.min(size) as f32 / size as f32);
+                                let file_prog = count.min(size) as f32 / size as f32;
+                                *prog.lock().unwrap() = Some((file_index as f32 + file_prog) / total as f32);
                             }
                             if prog_wk.strong_count() == 1 {
                                 break;
@@ -541,6 +541,11 @@ impl SongScene {
                         .unwrap_or_default();
                     let chart_file_url = entity.file.as_deref().unwrap_or_default();
 
+                    let total = 1usize
+                        + !illu_url.is_empty() as usize
+                        + entity.assets.len();
+                    let mut idx = 0usize;
+
                     *status.lock().unwrap() = tl!("dl-status-chart");
                     if chart_file_url.is_empty() {
                         bail!(tl!("no-chart-for-download"))
@@ -550,35 +555,37 @@ impl SongScene {
                         .next()
                         .unwrap_or("json");
                     let mut chart_bytes = Vec::new();
-                    download(Cursor::new(&mut chart_bytes), chart_file_url, &prog_wk).await?;
+                    download(Cursor::new(&mut chart_bytes), chart_file_url, idx, total, &prog_wk).await?;
+                    idx += 1;
                     let chart_filename = format!("chart.{chart_ext}");
                     tokio::fs::write(dir.join(&chart_filename)?, &chart_bytes).await?;
 
-                    *status.lock().unwrap() = tl!("dl-status-extract");
                     let music_filename = "music.ogg";
                     {
                         let mut music_bytes = Vec::new();
-                        download(Cursor::new(&mut music_bytes), audio_url, &prog_wk).await?;
+                        download(Cursor::new(&mut music_bytes), audio_url, idx, total, &prog_wk).await?;
+                        idx += 1;
                         tokio::fs::write(dir.join(music_filename)?, &music_bytes).await?;
                     }
 
                     let illu_filename = "illustration.webp";
                     if !illu_url.is_empty() {
                         let mut illu_bytes = Vec::new();
-                        download(Cursor::new(&mut illu_bytes), illu_url, &prog_wk).await?;
+                        download(Cursor::new(&mut illu_bytes), illu_url, idx, total, &prog_wk).await?;
+                        idx += 1;
                         tokio::fs::write(dir.join(illu_filename)?, &illu_bytes).await?;
                     }
 
                     for asset in &entity.assets {
-                        let filename = asset.file.rsplit('/').next().unwrap_or("unknown.bin");
                         let mut data = Vec::new();
-                        download(Cursor::new(&mut data), &asset.file, &prog_wk).await?;
-                        tokio::fs::write(dir.join(filename)?, &data).await?;
+                        download(Cursor::new(&mut data), &asset.file, idx, total, &prog_wk).await?;
+                        idx += 1;
+                        tokio::fs::write(dir.join(&asset.name)?, &data).await?;
                     }
 
                     *status.lock().unwrap() = tl!("dl-status-saving");
                     if let Some(prog) = prog_wk.upgrade() {
-                        *prog.lock().unwrap() = None;
+                        *prog.lock().unwrap() = Some(1.0);
                     }
 
                     let preview_start = entity
