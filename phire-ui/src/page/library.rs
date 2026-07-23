@@ -33,7 +33,7 @@ const PAGE_NUM: u64 = 28;
 enum ChartListType {
     Local,
     Ranked,
-    Special,
+    // Special,
     Unstable,
     Popular,
 }
@@ -44,7 +44,7 @@ type OnlineTask = Task<Result<OnlineTaskResult>>;
 pub struct LibraryPage {
     btn_local: DRectButton,
     btn_ranked: DRectButton,
-    btn_special: DRectButton,
+    // btn_special: DRectButton,
     btn_unstable: DRectButton,
     btn_popular: DRectButton,
     chosen: ChartListType,
@@ -86,7 +86,7 @@ impl LibraryPage {
         Ok(Self {
             btn_local: DRectButton::new(),
             btn_ranked: DRectButton::new(),
-            btn_special: DRectButton::new(),
+            // btn_special: DRectButton::new(),
             btn_unstable: DRectButton::new(),
             btn_popular: DRectButton::new(),
             chosen: ChartListType::Local,
@@ -192,14 +192,14 @@ impl LibraryPage {
             }
             match chosen {
                 ChartListType::Ranked => {
-                    q = q.query("isRanked", "true").query("isHidden", "false").query("isLocked", "false");
+                    q = q.query("isRanked", "true");
                 }
                 ChartListType::Unstable => {
-                    q = q.query("isRanked", "false").query("isHidden", "false").query("isLocked", "false");
+                    q = q.query("isRanked", "false");
                 }
-                ChartListType::Special => {
-                    q = q.query("isRanked", "false").query("isHidden", "true").query("isLocked", "true");
-                }
+                // ChartListType::Special => {
+                //     q = q.query("isRanked", "false").query("isHidden", "true").query("isLocked", "true");
+                // }
                 _ => {}
             }
             if let Some(me) = by_me {
@@ -291,7 +291,7 @@ impl Page for LibraryPage {
         }
         let to_type = [
             (&mut self.btn_ranked, ChartListType::Ranked),
-            (&mut self.btn_special, ChartListType::Special),
+            // (&mut self.btn_special, ChartListType::Special),
             (&mut self.btn_unstable, ChartListType::Unstable),
             (&mut self.btn_popular, ChartListType::Popular),
         ]
@@ -332,7 +332,7 @@ impl Page for LibraryPage {
                     return Ok(true);
                 }
             }
-            ChartListType::Ranked | ChartListType::Special | ChartListType::Unstable => {
+            ChartListType::Ranked | ChartListType::Unstable => { // ChartListType::Special
                 if !self.search_str.is_empty() && self.search_clr_btn.touch(touch) {
                     button_hit();
                     self.search_str.clear();
@@ -433,7 +433,7 @@ impl Page for LibraryPage {
                 [
                     (&mut self.btn_local, tl!("local"), ChartListType::Local),
                     (&mut self.btn_ranked, ttl!("chart-ranked"), ChartListType::Ranked),
-                    (&mut self.btn_special, ttl!("chart-special"), ChartListType::Special),
+                    // (&mut self.btn_special, ttl!("chart-special"), ChartListType::Special),
                     (&mut self.btn_unstable, ttl!("chart-unstable"), ChartListType::Unstable),
                     (&mut self.btn_popular, tl!("popular"), ChartListType::Popular),
                 ]
@@ -453,7 +453,7 @@ impl Page for LibraryPage {
                     self.import_btn.render_text(ui, r, t, c.a, tl!("import"), 0.6, false);
                 });
             }
-            ChartListType::Ranked | ChartListType::Special | ChartListType::Unstable => {
+            ChartListType::Ranked | ChartListType::Unstable => { // ChartListType::Special
                 s.render_fader(ui, |ui, c| {
                     let empty = self.search_str.is_empty();
                     let w = 0.53;
