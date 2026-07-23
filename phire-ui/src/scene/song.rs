@@ -124,7 +124,7 @@ impl Downloading {
         if let Some(res) = self.task.take() {
             match res {
                 Err(err) => {
-                    let path = format!("{}/{}", dir::downloaded_charts()?, self.info.id.unwrap());
+                    let path = format!("{}/{}", dir::downloaded_charts()?, self.info.guid.clone().unwrap_or(self.info.id.map(|it| it.to_string()).unwrap()));
                     let path = Path::new(&path);
                     if path.exists() {
                         std::fs::remove_dir_all(path)?;
@@ -463,6 +463,10 @@ impl SongScene {
             show_error(anyhow!(tl!("no-chart-for-download")));
             return Ok(());
         };
+        if entity.file.as_deref().map_or(true, |s| s.is_empty()) {
+            show_error(anyhow!(tl!("no-chart-for-download")));
+            return Ok(());
+        }
         self.loading_last = 0.;
         self.downloading = Some(Self::global_start_download(chart, entity, self.local_path.clone())?);
         Ok(())
@@ -547,9 +551,6 @@ impl SongScene {
                     let mut idx = 0usize;
 
                     *status.lock().unwrap() = tl!("dl-status-chart");
-                    if chart_file_url.is_empty() {
-                        bail!(tl!("no-chart-for-download"))
-                    }
                     let chart_ext = chart_file_url
                         .rsplitn(2, '.')
                         .next()
@@ -684,6 +685,7 @@ impl SongScene {
             return;
         }
         let Some(chart_id) = self.entity.as_ref().map(|e| e.id.clone()) else { return };
+        let ldb_std = self.ldb_std;
         self.ldb = None;
         self.ldb_task = Some(Task::new(async move {
             let resp: ResponseDto<Vec<Record>> = recv_raw(
@@ -692,16 +694,28 @@ impl SongScene {
             .await?
             .json()
             .await?;
-            let records = resp.data.unwrap_or_default();
+            let mut records = resp.data.unwrap_or_default();
+            if ldb_std {
+                records.sort_by(|a, b| {
+                    a.std_deviation
+                        .partial_cmp(&b.std_deviation)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                        .then_with(|| b.accuracy.partial_cmp(&a.accuracy).unwrap_or(std::cmp::Ordering::Equal))
+                });
+            } else {
+                records.sort_by(|a, b| {
+                    b.score
+                        .cmp(&a.score)
+                        .then_with(|| b.accuracy.partial_cmp(&a.accuracy).unwrap_or(std::cmp::Ordering::Equal))
+                });
+            }
             Ok(records
                 .into_iter()
-                .map(|r| {
-                    let rank = r.position.unwrap_or(0) as u32;
-                    LdbItem {
-                        inner: r,
-                        rank,
-                        btn: RectButton::new(),
-                    }
+                .enumerate()
+                .map(|(i, r)| LdbItem {
+                    inner: r,
+                    rank: (i + 1) as u32,
+                    btn: RectButton::new(),
                 })
                 .collect())
         }));
@@ -1083,12 +1097,12 @@ impl SongScene {
                     player_id: it.inner.owner_id,
                     rank: it.rank,
                     score: if self.ldb_std {
-                        format!("{:07}", 0i64)
+                        format!("{:.2}ms", it.inner.std_deviation)
                     } else {
                         format!("{:07}", it.inner.score)
                     },
                     alt: Some(if self.ldb_std {
-                        format!("{}ms", (it.inner.std_deviation * 1000.) as i32)
+                        format!("{:.2}%", it.inner.accuracy * 100.)
                     } else {
                         format!("{:.2}%", it.inner.accuracy * 100.)
                     }),
