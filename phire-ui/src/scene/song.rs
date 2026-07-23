@@ -701,12 +701,14 @@ impl SongScene {
                         .partial_cmp(&b.std_deviation)
                         .unwrap_or(std::cmp::Ordering::Equal)
                         .then_with(|| b.accuracy.partial_cmp(&a.accuracy).unwrap_or(std::cmp::Ordering::Equal))
+                        .then_with(|| a.date_created.cmp(&b.date_created))
                 });
             } else {
                 records.sort_by(|a, b| {
                     b.score
                         .cmp(&a.score)
                         .then_with(|| b.accuracy.partial_cmp(&a.accuracy).unwrap_or(std::cmp::Ordering::Equal))
+                        .then_with(|| a.date_created.cmp(&b.date_created))
                 });
             }
             Ok(records
