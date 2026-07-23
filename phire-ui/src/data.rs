@@ -20,6 +20,7 @@ fn default_score_total() -> u32 {
 #[serde(rename_all = "camelCase")]
 pub struct BriefChartInfo {
     pub id: Option<i32>,
+    pub guid: Option<String>,
     pub uploader: Option<Ptr<User>>,
     pub name: String,
     pub level: String,
@@ -46,7 +47,8 @@ impl BriefChartInfo {
             .or_else(|| chart.song.as_ref().map(|s| s.title.clone()))
             .unwrap_or_default();
         Self {
-            id: Some(0),
+            id: None,
+            guid: Some(chart.id.clone()),
             uploader: Some(Ptr::new(chart.owner_id.to_string())),
             name,
             level: chart.level.clone(),
@@ -68,6 +70,7 @@ impl From<ChartInfo> for BriefChartInfo {
     fn from(info: ChartInfo) -> Self {
         Self {
             id: info.id,
+            guid: info.guid,
             uploader: info.uploader.map(|id| Ptr::new(id.to_string())),
             name: info.name,
             level: info.level,

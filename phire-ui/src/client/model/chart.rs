@@ -169,7 +169,8 @@ impl Chart {
             .or_else(|| self.song.as_ref().map(|s| s.title.clone()))
             .unwrap_or_default();
         BriefChartInfo {
-            id: Some(0),
+            id: None,
+            guid: None,
             uploader: Some(Ptr::new(self.owner_id.to_string())),
             name,
             level: self.level.clone(),

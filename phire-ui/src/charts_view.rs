@@ -222,16 +222,19 @@ impl ChartsView {
                         if handled_by_mp {
                             continue;
                         }
-                        let download_path = chart.info.id.map(|it| format!("download/{it}"));
+                        let download_path = chart.info.guid.clone().map(|it| format!("download/{it}"));
                         let scene = SongScene::new(
                             chart.clone(),
                             None,
                             if let Some(path) = &chart.local_path {
                                 Some(path.clone())
                             } else {
-                                let path = download_path.clone().unwrap();
-                                if Path::new(&format!("{}/{path}", dir::charts()?)).exists() {
-                                    Some(path)
+                                if let Some(path) = download_path.clone() {
+                                    if Path::new(&format!("{}/{path}", dir::charts()?)).exists() {
+                                        Some(path)
+                                    } else {
+                                        None
+                                    }
                                 } else {
                                     None
                                 }
