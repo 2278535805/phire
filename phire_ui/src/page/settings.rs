@@ -277,14 +277,12 @@ struct GeneralList {
 
     lang_btn: ChooseButton,
     offline_btn: DRectButton,
-    #[cfg(any(target_os = "windows", target_os = "linux"))]
+    #[cfg(all(any(target_os = "windows", target_os = "linux"), not(target_env = "ohos")))]
     fullscreen_btn: DRectButton,
     mp_btn: DRectButton,
     mp_addr_btn: DRectButton,
     mp_addr_input: InlineInputBox,
-    #[cfg(not(target_env = "ohos"))]
     anti_aliasing_btn: DRectButton,
-    #[cfg(not(target_env = "ohos"))]
     low_resolution_btn: DRectButton,
     insecure_btn: DRectButton,
 }
@@ -305,14 +303,12 @@ impl GeneralList {
                         .unwrap_or_default(),
                 ),
             offline_btn: DRectButton::new(),
-            #[cfg(any(target_os = "windows", target_os = "linux"))]
+            #[cfg(all(any(target_os = "windows", target_os = "linux"), not(target_env = "ohos")))]
             fullscreen_btn: DRectButton::new(),
             mp_btn: DRectButton::new(),
             mp_addr_btn: DRectButton::new(),
             mp_addr_input: InlineInputBox::new(),
-            #[cfg(not(target_env = "ohos"))]
             anti_aliasing_btn: DRectButton::new(),
-            #[cfg(not(target_env = "ohos"))]
             low_resolution_btn: DRectButton::new(),
             insecure_btn: DRectButton::new(),
         }
