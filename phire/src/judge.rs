@@ -266,7 +266,7 @@ impl JudgeInner {
         let early = self.good_diffs.iter().filter(|it| **it < 0.).count() as u32;
         let n = self.perfect_diffs.len() + self.good_diffs.len() + self.bad_diffs.len();
         let std = if n == 0 {
-            0.
+            LIMIT_BAD as f32
         } else {
             let n = n as f64;
             let all_diffs = self.perfect_diffs.iter().chain(self.good_diffs.iter()).chain(self.bad_diffs.iter());
