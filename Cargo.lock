@@ -2787,6 +2787,7 @@ dependencies = [
  "tracing",
  "uuid",
  "walkdir",
+ "zeroize",
  "zip",
  "zstd",
 ]

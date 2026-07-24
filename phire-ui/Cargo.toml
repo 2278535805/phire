@@ -53,6 +53,7 @@ phira-mp-common = { workspace = true }
 uuid = { workspace = true }
 logos = { workspace = true }
 hmac = { workspace = true }
+zeroize = { workspace = true }
 
 [target.'cfg(target_os = "android")'.dependencies]
 ndk-sys = { workspace = true }
