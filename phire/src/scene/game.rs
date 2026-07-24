@@ -19,6 +19,7 @@ use crate::{
     info::{ChartFormat, ChartInfo},
     judge::Judge,
     parse::{RPE_WIDTH, parse_extra, parse_pec, parse_phigros, parse_rpe},
+    task::Task,
     time::TimeManager,
     ui::{RectButton, Ui}
 };
@@ -147,6 +148,7 @@ pub struct GameScene {
     pub bad_notes: Vec<BadNote>,
 
     upload_fn: Option<UploadFn>,
+    refresh_task: Option<Task<()>>,
     update_fn: Option<UpdateFn>,
 
     pub touch_points: Vec<(f32, f32)>,
@@ -446,6 +448,7 @@ impl GameScene {
             bad_notes: Vec::new(),
 
             upload_fn,
+            refresh_task: None,
             update_fn,
 
             touch_points: Vec::new(),
@@ -1028,7 +1031,7 @@ impl Scene for GameScene {
         self.first_in = true;
         self.first_update_time = tm.real_time();
         if let Some(ref upload_fn) = self.upload_fn {
-            (upload_fn.refresh)();
+            self.refresh_task = Some((upload_fn.refresh)());
         }
         self.pause_rewind = PauseRewind {
             time: Some(tm.now()),
@@ -1098,7 +1101,8 @@ impl Scene for GameScene {
         }
         let time = match self.state {
             State::Starting => {
-                if time >= Self::BEFORE_DURATION || !self.res.config.enter_animation { // wait for animation
+                let refresh_done = self.refresh_task.as_ref().map_or(true, |t| t.ok());
+                if (time >= Self::BEFORE_DURATION || !self.res.config.enter_animation) && refresh_done {
                     self.res.alpha = 1.;
                     self.state = State::BeforeMusic;
                     tm.reset();

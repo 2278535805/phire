@@ -23,7 +23,7 @@ const WAIT_TIME: f64 = 0.;
 
 #[derive(Clone)]
 pub struct UploadFn {
-    pub refresh: Arc<dyn Fn() + Send + Sync>,
+    pub refresh: Arc<dyn Fn() -> Task<()> + Send + Sync>,
     pub upload: Arc<dyn Fn(Vec<u8>) -> Task<Result<RecordUpdateState>>>,
 }
 pub type UpdateFn = Box<dyn FnMut(f64, &mut Resource, &mut Judge)>;

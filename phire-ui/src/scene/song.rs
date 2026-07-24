@@ -976,16 +976,17 @@ impl SongScene {
                     .find(|it| it.local_path == local_path)
                     .and_then(|it| it.record.as_ref().map(|r| r.score))
                     .unwrap_or(0);
-                let session_task: Arc<Mutex<Option<Task<(Result<PlaySession, String>, SystemTime)>>>> = Arc::new(Mutex::new(None));
+                let session_task: Arc<Mutex<Option<(Result<PlaySession, String>, SystemTime)>>> = Arc::new(Mutex::new(None));
 
-                let refresh: Arc<dyn Fn() + Send + Sync> = {
+                let refresh: Arc<dyn Fn() -> Task<()> + Send + Sync> = {
                     let session_task = session_task.clone();
                     let chart_id = chart_id.clone();
                     Arc::new(move || {
                         let chart_id = chart_id.clone();
-                        *session_task.lock().unwrap() = Some(Task::new(async move {
-                            (start_play(chart_id).await.map_err(|e| e.to_string()), SystemTime::now())
-                        }));
+                        let session_task = session_task.clone();
+                        Task::new(async move {
+                            *session_task.lock().unwrap() = Some((start_play(chart_id).await.map_err(|e| e.to_string()), SystemTime::now()));
+                        })
                     })
                 };
 
@@ -995,18 +996,16 @@ impl SongScene {
                         let chart_id = chart_id.clone();
                         let session_task = session_task.clone();
                         Task::new(async move {
-                            let session_task = session_task
+                            let (session_result, session_time) = session_task
                                 .lock()
                                 .unwrap()
-                                .as_ref()
-                                .ok_or_else(|| anyhow!("no session"))?
-                                .clone_result()
-                                .ok_or_else(|| anyhow!("play session not ready"))?;
-                            let play_session = session_task.0.map_err(|e| anyhow!("{e}"))?;
+                                .clone()
+                                .ok_or_else(|| anyhow!("no session"))?;
+                            let play_session = session_result.map_err(|e| anyhow!("{e}"))?;
                             let record = decode_record(&data)?;
                             let improvement = record.score.saturating_sub(previous_best_score);
                             let best = improvement > 0;
-                            let result = upload_score(&play_session, &chart_id, &record, player_id, session_task.1).await;
+                            let result = upload_score(&play_session, &chart_id, &record, player_id, session_time).await;
                             let result = match result {
                                 Ok(result) => {
                                     debug!("upload result: {:?}", result);
