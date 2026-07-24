@@ -140,6 +140,7 @@ pub struct GameScene {
 
     state: State,
     pub last_update_time: f64,
+    pub first_update_time: f64,
     pause_rewind: PauseRewind,
     pause_first_time: f32,
 
@@ -434,6 +435,7 @@ impl GameScene {
 
             state: State::Starting,
             last_update_time: 0.,
+            first_update_time: 0.,
             pause_rewind: PauseRewind {
                 time: None,
                 duration: None,
@@ -1024,6 +1026,10 @@ impl Scene for GameScene {
         reset!(self, self.res, tm);
         set_camera(&self.res.camera);
         self.first_in = true;
+        self.first_update_time = tm.real_time();
+        if let Some(ref upload_fn) = self.upload_fn {
+            (upload_fn.refresh)();
+        }
         self.pause_rewind = PauseRewind {
             time: Some(tm.now()),
             duration: Some(0.1),
@@ -1149,7 +1155,7 @@ impl Scene for GameScene {
                     // TODO strengthen the protection
                     #[cfg(feature = "closed")]
                     if let Some(upload_fn) = &self.upload_fn {
-                        if !self.res.config.offline_mode && !self.res.config.autoplay() && (self.res.config.speed - 1.0).abs() < 1e-3 {
+                        if !self.res.config.offline_mode && !self.res.config.autoplay() && (self.res.config.speed - 1.0).abs() < 1e-3 && track_complete {
                             if let Some(player) = &self.player {
                                 if let Some(chart) = &self.res.info.guid {
                                     record_data = Some(encode_record(self));
@@ -1157,7 +1163,7 @@ impl Scene for GameScene {
                             }
                         }
                     }
-                    let record = if self.res.config.autoplay() || self.res.config.speed < 1.0 - 1e-3 {
+                    let record = if self.res.config.autoplay() || (self.res.config.speed - 1.0).abs() > 1e-3 {
                         None
                     } else {
                         Some(SimpleRecord {
@@ -1180,7 +1186,7 @@ impl Scene for GameScene {
                             self.res.challenge_icons[self.res.config.challenge_color.clone() as usize].clone(),
                             &self.res.config,
                             self.res.res_pack.endings.clone(),
-                            self.upload_fn.as_ref().map(Arc::clone),
+                            self.upload_fn.clone(),
                             self.player.as_ref().map(|it| it.rks),
                             record_data,
                             record,

@@ -93,7 +93,7 @@ impl EndingScene {
         )?;
         let upload_task = upload_fn
             .as_ref()
-            .and_then(|f| record_data.clone().map(|data| (f(data), show_message(tl!("uploading")).handle())));
+            .and_then(|f| record_data.clone().map(|data| ((f.upload)(data), show_message(tl!("uploading")).handle())));
         *LAST_RESULT.lock().unwrap() = Some(result.clone());
         Ok(Self {
             background,
@@ -196,7 +196,12 @@ impl Scene for EndingScene {
             self.upload_task = self
                 .record_data
                 .clone()
-                .map(|data| ((self.upload_fn.as_ref().unwrap())(data), show_message(tl!("uploading")).handle()));
+                .map(|data| {
+                    (
+                        (self.upload_fn.as_ref().unwrap().upload)(data),
+                        show_message(tl!("uploading")).handle()
+                    )
+                });
         }
         if let Some((task, handle)) = &mut self.upload_task {
             if let Some(result) = task.take() {

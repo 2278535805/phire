@@ -42,13 +42,16 @@ use serde_json::json;
 use std::{
     any::Any, borrow::Cow, collections::{HashMap, VecDeque, hash_map}, fs::File, io::{Cursor, Write}, path::Path, println, sync::{
         Arc, Mutex, Weak, atomic::{AtomicBool, AtomicI32, Ordering},
-    }, thread_local,
+    }, thread_local, time::SystemTime,
 };
 use tokio::net::TcpStream;
 use tracing::warn;
 use uuid::Uuid;
 use walkdir::WalkDir;
 use zip::{write::FileOptions, CompressionMethod, ZipWriter};
+
+#[cfg(feature = "closed")]
+use crate::inner::*;
 
 const FADE_IN_TIME: f32 = 0.3;
 const EDIT_TRANSIT: f32 = 0.32;
@@ -834,11 +837,11 @@ impl SongScene {
         #[cfg(feature = "closed")]
         let rated = {
             let config = &get_data().config;
-            !config.offline_mode && id.is_some() && !mods.contains(Mods::AUTOPLAY) && config.speed >= 1.0 - 1e-3
+            !config.offline_mode && chart_guid.is_some() && !mods.contains(Mods::AUTOPLAY) && (config.speed - 1.0).abs() <= 1e-3
         };
         #[cfg(not(feature = "closed"))]
         let rated = false;
-        if !rated && id.is_some() && mode == GameMode::Normal {
+        if !rated && chart_guid.is_some() && mode == GameMode::Normal {
             show_message(tl!("warn-unrated")).warn();
         }
         let update_fn = client.and_then(|mut client| {
@@ -963,48 +966,73 @@ impl SongScene {
                 id: it.id,
                 rks: it.rks,
             });
-            let upload_fn: Option<UploadFn> = if chart_guid.is_some() && get_data().tokens.is_some() {
+            #[cfg(feature = "closed")]
+            let upload_fn: Option<UploadFn> = if chart_guid.is_some() && get_data().tokens.is_some() && rated {
                 let chart_id = chart_guid.unwrap();
                 let player_id = get_data().me.as_ref().map(|it| it.id).unwrap();
-                let session_task = {
-                    let chart_id = chart_id.clone();
-                    Task::new(
-                        async move { crate::inner::start_play(chart_id).await.map_err(|e| e.to_string()) }
-                    )
-                };
-                let f: UploadFn = Arc::new(move |data| {
-                    let chart_id = chart_id.clone();
+                let previous_best_score = get_data()
+                    .charts
+                    .iter()
+                    .find(|it| it.local_path == local_path)
+                    .and_then(|it| it.record.as_ref().map(|r| r.score))
+                    .unwrap_or(0);
+                let session_task: Arc<Mutex<Option<Task<(Result<PlaySession, String>, SystemTime)>>>> = Arc::new(Mutex::new(None));
+
+                let refresh: Arc<dyn Fn() + Send + Sync> = {
                     let session_task = session_task.clone();
-                    Task::new(async move {
-                        let play_session = session_task
-                            .clone_result()
-                            .ok_or_else(|| anyhow!("play session not ready"))?
-                            .map_err(|e| anyhow!("{e}"))?;
-                        let record = crate::inner::decode_record(&data)?;
-                        let result = crate::inner::upload_score(&play_session, &chart_id, &record, player_id).await;
-                        let result = match result {
-                            Ok(result) => result,
-                            Err(err) => {
-                                warn!("failed to upload score: {:?}", err);
-                                return Err(err);
-                            }
-                        };
-                        RECORD_ID.store(
-                            result.get("id").and_then(|v| v.as_str()).and_then(|s| s.parse().ok()).unwrap_or(-1),
-                            Ordering::Relaxed,
-                        );
-                        Ok(RecordUpdateState {
-                            best: result["isFullCombo"].as_bool().unwrap_or(false),
-                            improvement: 0,
-                            gain_exp: result["experienceDelta"].as_f64().unwrap_or(0.) as f32,
-                            new_rks: 0.0,
+                    let chart_id = chart_id.clone();
+                    Arc::new(move || {
+                        let chart_id = chart_id.clone();
+                        *session_task.lock().unwrap() = Some(Task::new(async move {
+                            (start_play(chart_id).await.map_err(|e| e.to_string()), SystemTime::now())
+                        }));
+                    })
+                };
+
+                let upload: Arc<dyn Fn(Vec<u8>) -> Task<Result<RecordUpdateState>>> = {
+                    let session_task = session_task.clone();
+                    Arc::new(move |data| {
+                        let chart_id = chart_id.clone();
+                        let session_task = session_task.clone();
+                        Task::new(async move {
+                            let session_task = session_task
+                                .lock()
+                                .unwrap()
+                                .as_ref()
+                                .ok_or_else(|| anyhow!("no session"))?
+                                .clone_result()
+                                .ok_or_else(|| anyhow!("play session not ready"))?;
+                            let play_session = session_task.0.map_err(|e| anyhow!("{e}"))?;
+                            let record = decode_record(&data)?;
+                            let improvement = record.score.saturating_sub(previous_best_score);
+                            let best = improvement > 0;
+                            let result = upload_score(&play_session, &chart_id, &record, player_id, session_task.1).await;
+                            let result = match result {
+                                Ok(result) => {
+                                    debug!("upload result: {:?}", result);
+                                    result
+                                },
+                                Err(err) => {
+                                    error!("failed to upload score: {:?}", err);
+                                    return Err(err);
+                                }
+                            };
+                            RECORD_ID.store(1,Ordering::Relaxed);
+                            Ok(RecordUpdateState {
+                                best,
+                                improvement,
+                                gain_exp: result.experience_delta,
+                                new_rks: result.player.rks,
+                            })
                         })
                     })
-                });
-                Some(f)
+                };
+                Some(UploadFn { refresh, upload })
             } else {
                 None
             };
+            #[cfg(not(feature = "closed"))]
+            let upload_fn: Option<UploadFn> = None;
             if is_unlock {
                 let chart = get_data_mut().charts.iter_mut().find(|it| it.local_path == local_path).unwrap();
                 if !chart.played_unlock {

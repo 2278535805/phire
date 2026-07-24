@@ -244,7 +244,9 @@ impl JudgeInner {
         if self.counts[0] == self.num_of_notes {
             1_000_000.0
         } else {
-            (0.9 * self.accuracy() + self.max_combo as f64 / self.num_of_notes as f64 * 0.1) * 1_000_000.
+            ((
+                0.9 * self.accuracy() + self.max_combo as f64 / self.num_of_notes as f64 * 0.1
+            ) * 1_000_000.0).round()
         }
     }
 

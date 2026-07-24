@@ -21,7 +21,11 @@ const BEFORE_TIME: f64 = 1.;
 const TRANSITION_TIME: f64 = 1.4;
 const WAIT_TIME: f64 = 0.;
 
-pub type UploadFn = Arc<dyn Fn(Vec<u8>) -> Task<Result<RecordUpdateState>>>;
+#[derive(Clone)]
+pub struct UploadFn {
+    pub refresh: Arc<dyn Fn() + Send + Sync>,
+    pub upload: Arc<dyn Fn(Vec<u8>) -> Task<Result<RecordUpdateState>>>,
+}
 pub type UpdateFn = Box<dyn FnMut(f64, &mut Resource, &mut Judge)>;
 
 pub struct BasicPlayer {
