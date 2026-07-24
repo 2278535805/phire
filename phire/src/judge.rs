@@ -181,7 +181,9 @@ pub enum Judgement {
 // #[cfg(not(feature = "closed"))]
 #[derive(Default)]
 pub(crate) struct JudgeInner {
-    diffs: Vec<f64>,
+    perfect_diffs: Vec<f64>,
+    good_diffs: Vec<f64>,
+    bad_diffs: Vec<f64>,
 
     combo: u32,
     max_combo: u32,
@@ -193,7 +195,9 @@ pub(crate) struct JudgeInner {
 impl JudgeInner {
     pub fn new(num_of_notes: u32) -> Self {
         Self {
-            diffs: Vec::new(),
+            perfect_diffs: Vec::new(),
+            good_diffs: Vec::new(),
+            bad_diffs: Vec::new(),
 
             combo: 0,
             max_combo: 0,
@@ -204,8 +208,14 @@ impl JudgeInner {
 
     pub fn commit(&mut self, what: Judgement, diff: f64) {
         use Judgement::*;
+        if matches!(what, Judgement::Perfect) {
+            self.perfect_diffs.push(diff);
+        }
         if matches!(what, Judgement::Good) {
-            self.diffs.push(diff);
+            self.good_diffs.push(diff);
+        }
+        if matches!(what, Judgement::Bad) {
+            self.bad_diffs.push(diff);
         }
         self.counts[what as usize] += 1;
         match what {
@@ -225,7 +235,9 @@ impl JudgeInner {
         self.combo = 0;
         self.max_combo = 0;
         self.counts = [0; 4];
-        self.diffs.clear();
+        self.perfect_diffs.clear();
+        self.good_diffs.clear();
+        self.bad_diffs.clear();
     }
 
     pub fn accuracy(&self) -> f64 {
@@ -251,13 +263,15 @@ impl JudgeInner {
     }
 
     pub fn result(&self, track_complete: bool) -> PlayResult {
-        let early = self.diffs.iter().filter(|it| **it < 0.).count() as u32;
-        let std = if self.diffs.is_empty() {
+        let early = self.good_diffs.iter().chain(self.bad_diffs.iter()).filter(|it| **it < 0.).count() as u32;
+        let n = self.perfect_diffs.len() + self.good_diffs.len() + self.bad_diffs.len();
+        let std = if n == 0 {
             0.
         } else {
-            let n = self.diffs.len() as f64;
-            let mean = self.diffs.iter().sum::<f64>() / n;
-            let variance = self.diffs.iter().map(|d| (d - mean).powi(2)).sum::<f64>() / n;
+            let n = n as f64;
+            let all_diffs = self.perfect_diffs.iter().chain(self.good_diffs.iter()).chain(self.bad_diffs.iter());
+            let mean = all_diffs.clone().sum::<f64>() / n;
+            let variance = all_diffs.map(|d| (d - mean).powi(2)).sum::<f64>() / n;
             (variance.sqrt() * 1000.) as f32
         };
         PlayResult {
@@ -267,7 +281,7 @@ impl JudgeInner {
             num_of_notes: self.num_of_notes,
             counts: self.counts,
             early,
-            late: self.diffs.len() as u32 - early,
+            late: (self.good_diffs.len() + self.bad_diffs.len()) as u32 - early,
             std,
             track_complete,
         }
