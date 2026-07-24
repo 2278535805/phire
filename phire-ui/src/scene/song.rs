@@ -263,8 +263,8 @@ pub struct SongScene {
 
     should_update: Arc<AtomicBool>,
 
-    my_rating_task: Option<Task<Result<i16>>>,
-    my_rate_score: Option<i16>,
+    my_rating_task: Option<Task<Result<f32>>>,
+    my_rate_score: Option<f32>,
 
     stabilize_task: Option<Task<Result<()>>>,
     should_stabilize: Arc<AtomicBool>,
@@ -1356,7 +1356,7 @@ impl Scene for SongScene {
         let res = match res.downcast::<SimpleRecord>() {
             Err(res) => res,
             Ok(rec) => {
-                if self.my_rate_score == Some(0) && rng().random_ratio(2, 5) {
+                if self.my_rate_score == Some(0.) && rng().random_ratio(2, 5) {
                     self.rate_dialog.enter(tm.real_time() as _);
                 }
                 self.update_record(*rec)?;
