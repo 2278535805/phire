@@ -263,7 +263,7 @@ impl JudgeInner {
     }
 
     pub fn result(&self, track_complete: bool) -> PlayResult {
-        let early = self.good_diffs.iter().chain(self.bad_diffs.iter()).filter(|it| **it < 0.).count() as u32;
+        let early = self.good_diffs.iter().filter(|it| **it < 0.).count() as u32;
         let n = self.perfect_diffs.len() + self.good_diffs.len() + self.bad_diffs.len();
         let std = if n == 0 {
             0.
@@ -281,7 +281,7 @@ impl JudgeInner {
             num_of_notes: self.num_of_notes,
             counts: self.counts,
             early,
-            late: (self.good_diffs.len() + self.bad_diffs.len()) as u32 - early,
+            late: self.good_diffs.len() as u32 - early,
             std,
             track_complete,
         }
