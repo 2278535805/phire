@@ -252,6 +252,14 @@ impl JudgeInner {
 
     pub fn result(&self, track_complete: bool) -> PlayResult {
         let early = self.diffs.iter().filter(|it| **it < 0.).count() as u32;
+        let std = if self.diffs.is_empty() {
+            0.
+        } else {
+            let n = self.diffs.len() as f64;
+            let mean = self.diffs.iter().sum::<f64>() / n;
+            let variance = self.diffs.iter().map(|d| (d - mean).powi(2)).sum::<f64>() / n;
+            (variance.sqrt() * 1000.) as f32
+        };
         PlayResult {
             score: self.score(),
             accuracy: self.accuracy(),
@@ -260,7 +268,7 @@ impl JudgeInner {
             counts: self.counts,
             early,
             late: self.diffs.len() as u32 - early,
-            std: 0.,
+            std,
             track_complete,
         }
     }
