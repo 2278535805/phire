@@ -221,6 +221,11 @@ impl Default for Config {
 
 impl Config {
     pub fn init(&mut self) {
+        #[cfg(target_env = "ohos")]
+        {
+            // Due to the poor performance of the Mali GPU, the sample count must be set to 1.
+            self.sample_count = 1;
+        }
         if let Some(flag) = self.autoplay {
             self.mods.set(Mods::AUTOPLAY, flag);
         }

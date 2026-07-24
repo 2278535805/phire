@@ -23,6 +23,7 @@ inner.rs
 # Mac
 
 ._*
+.DS_Store
 /run_ios.sh
 /prebuild_ios.sh
 /build_ios.sh
@@ -36,6 +37,9 @@ inner.rs
 /project.yml
 /prpr.scent
 /.cargo
+
+# OHOS
+/phire_ui/dist/
 
 # Test
 

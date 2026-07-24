@@ -290,6 +290,10 @@ pub fn request_file(id: impl Into<String>) {
                     completion: 0 as ObjcId
                 ];
             }
+        } else if #[cfg(target_env = "ohos")] {
+            miniquad::native::call_request_callback(
+                r#"{"action":"chooseFile","isPhoto":false}"#.to_string(),
+            );
         } else { // desktop
             CHOSEN_FILE.lock().unwrap().1 = rfd::FileDialog::new().pick_file().map(|it| it.display().to_string());
         }

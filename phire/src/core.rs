@@ -51,11 +51,16 @@ pub use video::{Video, VideoAttach};
 pub use prpr_avc::demux_audio;
 
 pub fn init_assets() {
-    if let Ok(mut exe) = std::env::current_exe() {
-        while exe.pop() {
-            if exe.join("assets").exists() {
-                std::env::set_current_dir(exe).unwrap();
-                break;
+    #[cfg(target_env = "ohos")]
+    let _ = std::env::set_current_dir("/data/storage/el1/bundle/entry/resources/resfile/");
+    #[cfg(not(target_env = "ohos"))]
+    {
+        if let Ok(mut exe) = std::env::current_exe() {
+            while exe.pop() {
+                if exe.join("assets").exists() {
+                    std::env::set_current_dir(exe).unwrap();
+                    break;
+                }
             }
         }
     }

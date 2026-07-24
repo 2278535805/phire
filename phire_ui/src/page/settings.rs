@@ -5,9 +5,9 @@ use crate::{get_data, get_data_mut, popup::ChooseButton, save_data, scene::BGM_V
 use anyhow::Result;
 use macroquad::prelude::*;
 use phire::{
-    ext::{LocalTask, RectExt, SafeTexture, ScaleType, poll_future, semi_black, validate_combo},
+    ext::{poll_future, semi_black, validate_combo, LocalTask, RectExt, SafeTexture, ScaleType},
     health::{HealthConfig, HealthType},
-    l10n::{LANG_IDENTS, LANG_NAMES, LanguageIdentifier},
+    l10n::{LanguageIdentifier, LANG_IDENTS, LANG_NAMES},
     scene::{show_error, show_message},
     ui::{DRectButton, InlineInputBox, Scroll, Slider, Ui},
 };
@@ -282,7 +282,9 @@ struct GeneralList {
     mp_btn: DRectButton,
     mp_addr_btn: DRectButton,
     mp_addr_input: InlineInputBox,
+    #[cfg(not(target_env = "ohos"))]
     anti_aliasing_btn: DRectButton,
+    #[cfg(not(target_env = "ohos"))]
     low_resolution_btn: DRectButton,
     insecure_btn: DRectButton,
 }
@@ -308,7 +310,9 @@ impl GeneralList {
             mp_btn: DRectButton::new(),
             mp_addr_btn: DRectButton::new(),
             mp_addr_input: InlineInputBox::new(),
+            #[cfg(not(target_env = "ohos"))]
             anti_aliasing_btn: DRectButton::new(),
+            #[cfg(not(target_env = "ohos"))]
             low_resolution_btn: DRectButton::new(),
             insecure_btn: DRectButton::new(),
         }
@@ -357,10 +361,12 @@ impl GeneralList {
             self.mp_addr_input.activate(&config.mp_address, false, false);
             return Ok(Some(true));
         }
+        #[cfg(not(target_env = "ohos"))]
         if self.anti_aliasing_btn.touch(touch, t) {
             config.sample_count = if config.sample_count == 1 { 2 } else { 1 };
             return Ok(Some(true));
         }
+        #[cfg(not(target_env = "ohos"))]
         if self.low_resolution_btn.touch(touch, t) {
             config.low_resolution_mode ^= true;
             return Ok(Some(true));
@@ -428,10 +434,12 @@ impl GeneralList {
                 self.mp_addr_btn.render_text(ui, rr, t, c.a, &config.mp_address, 0.4, false);
             }
         }
+        #[cfg(not(target_env = "ohos"))]
         item! {
             render_title(ui, c, tl!("item-anti-aliasing"), None);
             render_switch(ui, rr, t, c, &mut self.anti_aliasing_btn, config.sample_count == 2);
         }
+        #[cfg(not(target_env = "ohos"))]
         item! {
             render_title(ui, c, tl!("item-low-resolution"), None);
             render_switch(ui, rr, t, c, &mut self.low_resolution_btn, config.low_resolution_mode);
@@ -453,6 +461,8 @@ struct AudioList {
     cali_btn: DRectButton,
     #[cfg(target_os = "android")]
     audio_compatibility_btn: DRectButton,
+    #[cfg(target_env = "ohos")]
+    audio_buffer_size_btn: DRectButton,
 
     cali_task: LocalTask<Result<OffsetPage>>,
     next_page: Option<NextPage>,
@@ -468,6 +478,8 @@ impl AudioList {
             cali_btn: DRectButton::new(),
             #[cfg(target_os = "android")]
             audio_compatibility_btn: DRectButton::new(),
+            #[cfg(target_env = "ohos")]
+            audio_buffer_size_btn: DRectButton::new(),
 
             cali_task: None,
             next_page: None,
@@ -505,6 +517,15 @@ impl AudioList {
         #[cfg(target_os = "android")]
         if self.audio_compatibility_btn.touch(touch, t) {
             config.audio_compatibility ^= true;
+            return Ok(Some(true));
+        }
+        #[cfg(target_env = "ohos")]
+        if self.audio_buffer_size_btn.touch(touch, t) {
+            config.audio_buffer_size = Some(match config.audio_buffer_size {
+                Some(128) => 256,
+                Some(256) => 512,
+                _ => 128,
+            });
             return Ok(Some(true));
         }
         Ok(None)

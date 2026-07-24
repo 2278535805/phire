@@ -19,6 +19,9 @@ mod scene;
 mod tags;
 mod uml;
 
+#[cfg(target_env = "ohos")]
+use napi_derive_ohos::napi;
+
 use anyhow::Result;
 use data::Data;
 use macroquad::prelude::*;
@@ -158,6 +161,13 @@ async fn the_main() -> Result<()> {
         let path = first.as_str().to_owned();
         *DATA_PATH.lock().unwrap() = Some(path);
         *CACHE_DIR.lock().unwrap() = Some("Caches".to_owned());
+    }
+
+    #[cfg(target_env = "ohos")]
+    {
+        *DATA_PATH.lock().unwrap() = Some("/data/storage/el2/base".to_owned());
+        *CACHE_DIR.lock().unwrap() = Some("/data/storage/el2/base/cache".to_owned());
+        phire::core::DPI_VALUE.store(250, std::sync::atomic::Ordering::Relaxed);
     }
 
     let dir = dir::root()?;
@@ -519,4 +529,25 @@ pub unsafe extern "C" fn Java_quad_1native_QuadNative_updateGravity(
     if let mut gyro_data = GYRO.lock().unwrap() {
         gyro_data.update_gravity(Vector3::new(roll, pitch, yaw));
     }
+}
+
+#[cfg(target_env = "ohos")]
+#[napi]
+pub fn set_input_text(text: String) {
+    use phire::scene::INPUT_TEXT;
+    INPUT_TEXT.lock().unwrap().1 = Some(text);
+}
+
+#[cfg(target_env = "ohos")]
+#[napi]
+pub fn set_chosen_file(file: String) {
+    use phire::scene::CHOSEN_FILE;
+    CHOSEN_FILE.lock().unwrap().1 = Some(file);
+}
+
+#[cfg(target_env = "ohos")]
+#[napi]
+pub fn mark_auto_import() {
+    use phire::scene::CHOSEN_FILE;
+    CHOSEN_FILE.lock().unwrap().0 = Some("_import_auto".to_owned());
 }
