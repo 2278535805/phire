@@ -1,7 +1,7 @@
 crate::tl_file!("scene" ttl);
 
 mod ending;
-pub use ending::{EndingScene, RecordUpdateState};
+pub use ending::{EndingScene, RecordUpdateState, LAST_RESULT};
 
 pub mod game;
 pub use game::{GameMode, GameScene, SimpleRecord};
@@ -36,7 +36,7 @@ pub enum NextScene {
 
 thread_local! {
     pub static BILLBOARD: RefCell<(BillBoard, TimeManager)> = RefCell::new((BillBoard::new(), TimeManager::default()));
-    pub static DIALOG: RefCell<Option<Dialog>> = RefCell::new(None);
+    pub static DIALOG: RefCell<Option<Dialog>> = const { RefCell::new(None) };
 }
 
 #[inline]
@@ -196,7 +196,7 @@ pub fn request_input_full(id: impl Into<String>, #[allow(unused_variables)] text
                 ];
             }
         } else {
-            INPUT_TEXT.lock().unwrap().1 = Some(unsafe { get_internal_gl() }.quad_context.clipboard_get().unwrap_or_default());
+            INPUT_TEXT.lock().unwrap().1 = Some(macroquad::miniquad::window::clipboard_get().unwrap_or_default());
             show_message(ttl!("pasted")).ok();
         }
     }
@@ -341,7 +341,7 @@ pub trait RenderTargetChooser {
 }
 impl RenderTargetChooser for Option<RenderTarget> {
     fn choose(&mut self) -> Option<RenderTarget> {
-        *self
+        self.clone()
     }
 }
 impl<F: FnMut() -> Option<RenderTarget>> RenderTargetChooser for F {
@@ -541,7 +541,7 @@ impl Main {
     }
 }
 
-fn draw_background(tex: Texture2D, dim: bool) {
+fn draw_background(tex: &Texture2D, dim: bool) {
     let asp = screen_aspect();
     let top = 1. / asp;
     draw_image(tex, Rect::new(-1., -top, 2., top * 2.), ScaleType::CropCenter);

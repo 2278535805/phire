@@ -49,7 +49,7 @@ impl Shading for TextureShading {
     }
 
     fn texture(&self) -> Option<Texture2D> {
-        Some(self.texture.0)
+        Some(self.texture.0.clone())
     }
 }
 

@@ -1,27 +1,21 @@
 phire::tl_file!("home");
 
-use std::{sync::Arc};
+use std::sync::Arc;
 
-use super::{LibraryPage, NextPage, Page, ResPackPage, SFader, SettingsPage, SharedState};
+use super::{CharacterPage, LibraryPage, NextPage, Page, ResPackPage, SFader, SettingsPage, SharedState};
 use crate::{
-    client::{recv_raw, Client, LoginParams, User, UserManager},
-    dir, get_data, get_data_mut,
-    icons::Icons,
-    login::Login,
-    save_data,
-    scene::ProfileScene,
-    sync_data,
+    client::{Client, LoginParams, User, UserManager, recv_raw}, dir, get_data, get_data_mut, icons::Icons, login::Login, save_data, scene::ProfileScene, sync_data
 };
 use ::rand::{random, rng, Rng};
 use anyhow::Result;
 use image::DynamicImage;
 use macroquad::prelude::*;
 use phire::{
-    ext::{semi_black, semi_white, RectExt, SafeTexture, ScaleType},
+    ext::{RectExt, SafeTexture, ScaleType, semi_black, semi_white},
     info::ChartInfo,
-    scene::{show_error, NextScene},
+    scene::{NextScene, show_error},
     task::Task,
-    ui::{button_hit_large, rounded_rect, DRectButton, Ui},
+    ui::{DRectButton, RectButton, Ui, button_hit_large},
 };
 use serde::Deserialize;
 use tracing::warn;
@@ -30,7 +24,8 @@ const BOARD_SWITCH_TIME: f32 = 4.;
 const BOARD_TRANSIT_TIME: f32 = 1.2;
 
 pub struct HomePage {
-    character: SafeTexture,
+    char_btn: RectButton,
+    
     icons: Arc<Icons>,
 
     btn_play: DRectButton,
@@ -61,7 +56,6 @@ pub struct HomePage {
 
 impl HomePage {
     pub async fn new() -> Result<Self> {
-        let character = SafeTexture::from(load_texture("char.png").await?).with_mipmap();
         let update_task = if get_data().config.offline_mode {
             None
         } else if let Some(u) = &get_data().me {
@@ -77,7 +71,8 @@ impl HomePage {
             None
         };
         Ok(Self {
-            character,
+            char_btn: RectButton::new(),
+
             icons: Arc::new(Icons::new().await?),
 
             btn_play: DRectButton::new().with_radius(0.00).with_delta(-0.006).with_elevation(0.000).no_sound(),
@@ -183,6 +178,11 @@ impl Page for HomePage {
             }
             return Ok(true);
         }
+        if self.char_btn.touch(touch) {
+            button_hit_large();
+            self.next_page = Some(NextPage::Overlay(Box::new(CharacterPage::new()?)));
+            return Ok(true);
+        }
         Ok(false)
     }
 
@@ -268,13 +268,30 @@ impl Page for HomePage {
 
     fn render(&mut self, ui: &mut Ui, s: &mut SharedState) -> Result<()> {
         let t = s.t;
+        let rt = s.rt;
         let pad = 0.04;
 
         let offset = s.gyro_offset;
 
+        let char_data = crate::character::CURRENT_CHARACTER.lock().unwrap();
+        let char_data = char_data.as_ref().map(|c| {
+            let form = c.current_form();
+            (&form.illu, form.position)
+        });
         s.render_fader(ui, |ui, c| {
-            let r = Rect::new(offset.x * 0.4 - 0.9, offset.y * 0.4 - ui.top + 0.1, 1.5, 1.5);
-            ui.fill_rect(r, (*self.character, r, ScaleType::CropCenter, c));
+            if let Some((Some(illu), pos)) = char_data {
+                let time_y = (t * 0.5).sin() * 0.02;
+                let r = Rect::new(
+                    -pos.2 * 0.5 + offset.x * 0.4 + pos.0 - 0.2,
+                    -pos.3 * 0.5 + offset.y * 0.4 + time_y + pos.1,
+                    pos.2,
+                    pos.3
+                );
+                ui.fill_rect(r, (Texture2D::clone(illu), r, ScaleType::Inside, c));
+                self.char_btn.set(ui, r);
+            } else {
+                self.char_btn.set(ui, ui.screen_rect());
+            }
         });
 
         // play button
@@ -329,7 +346,7 @@ impl Page for HomePage {
 
         let r = s.render_fader(ui, |ui, c| {
             let r = Rect::new(offset.x * 0.6 + 0.70, offset.y * 0.6 - 0.30, 1.3, 0.2);
-            text_and_icon(ui, r, &mut self.btn_play, tl!("play"), *self.icons.play, c);
+            text_and_icon(ui, r, &mut self.btn_play, tl!("play"), Texture2D::clone(&self.icons.play), c);
             r
         });
 
@@ -341,7 +358,7 @@ impl Page for HomePage {
 
         let r = s.render_fader(ui, |ui, c| {
             let r = Rect::new(r.left(), r.bottom() + 0.02, 1.3, 0.2);
-            text_and_icon(ui, r, &mut self.btn_respack, tl!("respack"), *self.icons.respack, c);
+            text_and_icon(ui, r, &mut self.btn_respack, tl!("respack"), Texture2D::clone(&self.icons.respack), c);
             r
         });
 
@@ -359,7 +376,7 @@ impl Page for HomePage {
             // let (r, _) = self.btn_settings.render_shadow(ui, r, t, c.a, |_| semi_black(0.4 * c.a));
             // let r = r.feather(0.004);
             // ui.fill_rect(r, (*self.icons.settings, r, ScaleType::Fit, c));
-            text_and_icon(ui, r, &mut self.btn_settings, tl!("settings"), *self.icons.settings, c);
+            text_and_icon(ui, r, &mut self.btn_settings, tl!("settings"), Texture2D::clone(&self.icons.settings), c);
         });
 
         s.fader.roll_back();

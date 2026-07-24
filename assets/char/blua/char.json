@@ -1,0 +1,40 @@
+{
+  "id": "blua",
+  "forms": [
+    {
+      "id": "default",
+      "visible": true,
+      "healthMode": {
+        "mode": {
+          "comboHeal": {
+            "comboForHeal": 5
+          }
+        },
+        "maxHealth": 100.0,
+        "initialHealth": 0.0,
+        "completeHealth": 100.0,
+        "perfectHeal": true,
+        "goodHeal": false,
+        "badHeal": false,
+        "perfectFactor": 1.0,
+        "goodFactor": 0.0,
+        "badFactor": -5.0
+      },
+      "name": {
+        "en-US": "Blua",
+        "zh-CN": "蓝梦"
+      },
+      "intro": {
+        "en-US": "Intro",
+        "zh-CN": "简介"
+      },
+      "skill": {
+        "en-US": "Remembrance - Only by retrieving everything can we move forward",
+        "zh-CN": "回忆 - 唯有找回一切，才能继续前行"
+      },
+      "illust": "char/blua/blua.png",
+      "illustrator": "NekoFTR from Twirdora ©CalitrE Studio",
+      "position": [0.0, 0.2, 1.3, 1.3]
+    }
+  ]
+}

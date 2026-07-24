@@ -18,7 +18,7 @@ use anyhow::Result;
 use macroquad::prelude::*;
 use sasa::{AudioClip, AudioManager, Music, MusicParams};
 use serde::Deserialize;
-use std::{cell::RefCell, ops::DerefMut};
+use std::{cell::RefCell, ops::DerefMut, sync::Mutex};
 
 #[derive(Deserialize)]
 pub struct RecordUpdateState {
@@ -81,7 +81,7 @@ impl EndingScene {
         record_data: Option<Vec<u8>>,
         record: Option<SimpleRecord>,
     ) -> Result<Self> {
-        let index = icon_index(result.score.round() as u32, result.num_of_notes == result.max_combo);
+        let index = icon_index(result.score.round() as u32, result.num_of_notes == result.max_combo, result.track_complete);
         let mut audio = create_audio_manger(config)?;
         let bgm = audio.create_music(
             endings[index].clone(),
@@ -94,6 +94,7 @@ impl EndingScene {
         let upload_task = upload_fn
             .as_ref()
             .and_then(|f| record_data.clone().map(|data| (f(data), show_message(tl!("uploading")).handle())));
+        *LAST_RESULT.lock().unwrap() = Some(result.clone());
         Ok(Self {
             background,
             illustration,
@@ -143,6 +144,8 @@ thread_local! {
     static RE_UPLOAD: RefCell<bool> = RefCell::default();
 }
 
+pub static LAST_RESULT: Mutex<Option<PlayResult>> = Mutex::new(None);
+
 impl Scene for EndingScene {
     fn enter(&mut self, tm: &mut TimeManager, target: Option<RenderTarget>) -> Result<()> {
         tm.reset();
@@ -185,7 +188,7 @@ impl Scene for EndingScene {
 
     fn update(&mut self, tm: &mut TimeManager) -> Result<()> {
         self.audio.recover_if_needed()?;
-        if !self.bgm_already_played && tm.now() >= EndingScene::BPM_WAIT_TIME - self.config.offset as f64 && self.target.is_none() && self.bgm.paused() {
+        if !self.bgm_already_played && tm.now() >= EndingScene::BPM_WAIT_TIME - self.config.offset && self.target.is_none() && self.bgm.paused() {
             self.bgm.play()?;
             self.bgm_already_played = true;
         }
@@ -286,15 +289,15 @@ impl Scene for EndingScene {
             
 
         let mut cam = ui.camera();
-        let asp = -cam.zoom.y;
+        let asp = cam.zoom.y;
         let top = 1. / asp;
         let t = tm.now() as f32;
         let gl = unsafe { get_internal_gl() }.quad_gl;
         let res = &self.result;
-        cam.render_target = self.target;
+        cam.render_target = self.target.clone();
         set_camera(&cam);
         if self.config.render_bg {
-            draw_background(*self.background, self.config.render_bg_dim);
+            draw_background(&self.background, self.config.render_bg_dim);
         }
 
         fn ran(t: f32, l: f32, r: f32) -> f32 {
@@ -306,7 +309,7 @@ impl Scene for EndingScene {
 
         let p_main = (1. - ran(t, MAIN_POS_START, MAIN_POS_END) + 0.15).powi(10);
         tran(gl, p_main);
-        let r = draw_illustration(*self.illustration, -0.372, -0.002, 1.052, 1.22, WHITE, true); // 曲绘
+        let r = draw_illustration(&self.illustration, -0.372, -0.002, 1.052, 1.22, WHITE, true); // 曲绘
         let main = Rect::new(r.right() - 0.053, r.y, r.w * 0.782, r.h / 2.); // 右边的矩形
         let slope = PARALLELOGRAM_SLOPE; // 斜率
         let ratio = 0.2;
@@ -331,14 +334,14 @@ impl Scene for EndingScene {
         draw_parallelogram(main, None, c2, true);
         {
             let spd = if (self.speed - 1.).abs() <= 1e-4 {
-                format!("")//String::new()
+                String::new()//String::new()
             } else {
                 format!("{:.2}x", self.speed)
             };
             let full_screen_judge = if self.config.full_scrrn_judge() {
-                format!("FULL SCREEN JUDGE")
+                "FULL SCREEN JUDGE".to_string()
             } else {
-                format!("")
+                String::new()
             };
             let text = if self.autoplay {
                 format!("{text_autoplay} {spd}")
@@ -350,7 +353,7 @@ impl Scene for EndingScene {
                     if state.best {
                         format!("{text_new_best} +{:07}", state.improvement)
                     } else {
-                        format!(" ")//String::new()
+                        " ".to_string()//String::new()
                     }
                 )
             } else {
@@ -373,7 +376,7 @@ impl Scene for EndingScene {
             let ct = (main.right() + 0.015 - main.h * slope - s / 2., r.bottom() + 0.033 - s / 2.);
             let s = s + s * (1. - ps) * 0.3;
             draw_texture_ex( // 成绩等级图标
-                *self.icon,
+                &self.icon,
                 ct.0 - s * 0.99 / 2.,
                 ct.1 - s * 1.05 / 2.,
                 Color::new(1., 1., 1., pa),
@@ -454,7 +457,7 @@ impl Scene for EndingScene {
         draw_parallelogram(r, None, c, true);
         draw_parallelogram(Rect::new(r.x + r.w * (1. - s), r.y, r.w * s, r.h), None, WHITE, false);
         let ct = r.center();
-        draw_texture_ex(*self.icon_retry, ct.x - hs * 0.9, ct.y - hs, WHITE, params.clone());
+        draw_texture_ex(&self.icon_retry, ct.x - hs * 0.9, ct.y - hs, WHITE, params.clone());
         gl.pop_model_matrix();
         if p <= 0. {
             self.btn_retry.set(ui, r);
@@ -465,7 +468,7 @@ impl Scene for EndingScene {
         draw_parallelogram(r, None, c, true);
         draw_parallelogram(Rect::new(r.x, r.y, r.w * s, r.h), None, WHITE, false);
         let ct = r.center();
-        draw_texture_ex(*self.icon_proceed, ct.x - hs * 0.8 - r.w * s / 2., ct.y - hs, WHITE, params);
+        draw_texture_ex(&self.icon_proceed, ct.x - hs * 0.8 - r.w * s / 2., ct.y - hs, WHITE, params);
         gl.pop_model_matrix();
         if p <= 0. {
             self.btn_proceed.set(ui, r);
@@ -488,9 +491,9 @@ impl Scene for EndingScene {
             }*/
             &if let Some(rks) = &self.player_rks {
                 if self.config.roman {
-                    GameScene::int_to_roman(rks.clone() as u32)
+                    GameScene::int_to_roman(*rks as u32)
                 } else if self.config.chinese {
-                    GameScene::float_to_chinese(rks.clone())
+                    GameScene::float_to_chinese(*rks)
                 } 
                 else {
                     format!("{rks:.2}")
@@ -506,7 +509,7 @@ impl Scene for EndingScene {
             Color::new(0., 0., 0., alpha),
             0.10
         );
-        let r = draw_illustration(*self.player, 1. - 0.21, main.center().y, 0.12 / (0.076 * 7.), 0.12 / (0.076 * 7.), color, true);
+        let r = draw_illustration(&self.player, 1. - 0.21, main.center().y, 0.12 / (0.076 * 7.), 0.12 / (0.076 * 7.), color, true);
         let mut text = ui.text(&self.player_name).pos(r.x - 0.015, r.center().y - 0.002).anchor(1., 0.5).size(0.54).color(color);
         let text_rect = text.measure();
         draw_parallelogram(
@@ -520,7 +523,7 @@ impl Scene for EndingScene {
         let ct = (1. - 0.1 + 0.043, main.center().y - 0.034 + 0.02);
         let (w, h) = (0.09 * self.challenge_texture.width() / 78., 0.04 * self.challenge_texture.height() / 38.);
         let r = Rect::new(ct.0 - w / 2., ct.1 - h / 2., w, h);
-        ui.fill_rect(r, (*self.challenge_texture, r, ScaleType::Fit, color));
+        ui.fill_rect(r, (Texture2D::clone(&self.challenge_texture), r, ScaleType::Fit, color));
         let ct = r.center();
         let challenge_rank = if self.config.roman {GameScene::int_to_roman(self.challenge_rank)} else if self.config.chinese {GameScene::int_to_chinese(self.challenge_rank)} else {self.challenge_rank.to_string()};
         let mut text_size = 0.46;

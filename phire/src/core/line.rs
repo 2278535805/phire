@@ -1,13 +1,14 @@
 use super::{chart::ChartSettings, object::CtrlObject, Anim, AnimFloat, BpmList, Matrix, Note, Object, Point, RenderConfig, Resource, Vector};
 use crate::{
     config::Mods,
-    core::{NoteKind, anim::AnimFloatF64},
-    ext::{NotNanExt, SafeTexture, get_viewport, parse_alpha},
+    core::{anim::AnimFloatF64, NoteKind},
+    ext::{get_viewport, parse_alpha, NotNanExt, SafeTexture},
     judge::{JudgeStatus, LIMIT_BAD},
     ui::Ui,
 };
+use macroquad::miniquad::RenderPass as MiniquadRenderPass;
+use macroquad::miniquad::{TextureParams, TextureWrap};
 use macroquad::prelude::*;
-use miniquad::{RenderPass, Texture, TextureParams, TextureWrap};
 use nalgebra::Rotation2;
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
@@ -74,19 +75,10 @@ impl GifFrames {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct TextData {
     pub text: String,
     pub font_id: Option<usize>,
-}
-
-impl Default for TextData {
-    fn default() -> Self {
-        Self {
-            text: String::new(),
-            font_id: None,
-        }
-    }
 }
 
 #[derive(Default)]
@@ -96,7 +88,7 @@ pub enum JudgeLineKind {
     Texture(SafeTexture, String),
     TextureGif(Anim<f32>, GifFrames, String),
     Text(Anim<TextData>),
-    Paint(Anim<f32>, RefCell<(Option<RenderPass>, bool)>),
+    Paint(Anim<f32>, RefCell<(Option<MiniquadRenderPass>, bool)>),
 }
 
 #[derive(Clone)]
@@ -112,15 +104,13 @@ impl JudgeLineCache {
             (
                 !it.above,
                 it.speed.not_nan(),
-                (
-                    match it.kind {
-                        NoteKind::Hold { end_height, .. } => { it.height.min(end_height) },
-                        _ => { it.height },
-                    } + it.object.translation.1.now() as f64 * it.speed
-                ).not_nan(),
+                (match it.kind {
+                    NoteKind::Hold { end_height, .. } => it.height.min(end_height),
+                    _ => it.height,
+                } + it.object.translation.1.now() as f64 * it.speed).not_nan(),
             )
         });
-        
+
         let mut res = Self {
             update_order: Vec::with_capacity(notes.len()),
             above_indices: Vec::new(),
@@ -132,16 +122,16 @@ impl JudgeLineCache {
 
     pub(crate) fn reset(&mut self, notes: &mut Vec<Note>) {
         self.update_order.clear();
-        self.update_order.extend(0..notes.len() as u32);        
+        self.update_order.extend(0..notes.len() as u32);
         self.above_indices.clear();
         self.below_indices.clear();
         let mut index = 0;
-        while notes.get(index).map_or(false, |it| it.above) {
+        while notes.get(index).is_some_and(|it| it.above) {
             self.above_indices.push(index);
             let speed = notes[index].speed;
             loop {
                 index += 1;
-                if !notes.get(index).map_or(false, |it| it.above && it.speed == speed) {
+                if !notes.get(index).is_some_and(|it| it.above && it.speed == speed) {
                     break;
                 }
             }
@@ -151,7 +141,7 @@ impl JudgeLineCache {
             let speed = notes[index].speed;
             loop {
                 index += 1;
-                if !notes.get(index).map_or(false, |it| it.speed == speed) {
+                if !notes.get(index).is_some_and(|it| it.speed == speed) {
                     break;
                 }
             }
@@ -172,6 +162,7 @@ pub struct JudgeLine {
     pub z_index: i32,
     pub show_below: bool,
     pub attach_ui: Option<UIElement>,
+    pub scale_on_notes: u8,
 
     pub cache: JudgeLineCache,
     pub anchor: [f32; 2],
@@ -221,14 +212,10 @@ impl JudgeLine {
         }
         self.color.set_time(res.time);
 
-        let not_judge = |index: usize| {
-            match self.notes[index].kind {
-                NoteKind::Hold { end_time, .. } => {
-                    matches!(self.notes[index].judge, JudgeStatus::Judged) && res.time > end_time
-                },
-                _ => {
-                    matches!(self.notes[index].judge, JudgeStatus::Judged)
-                },
+        let not_judge = |index: usize| match self.notes[index].kind {
+            NoteKind::Hold { end_time, .. } => matches!(self.notes[index].judge, JudgeStatus::Judged) && res.time > end_time,
+            _ => {
+                matches!(self.notes[index].judge, JudgeStatus::Judged)
             }
         };
 
@@ -245,7 +232,7 @@ impl JudgeLine {
                 if self
                     .notes
                     .get(index + 1)
-                    .map_or(false, |it| it.above && it.speed == self.notes[index].speed)
+                    .is_some_and(|it| it.above && it.speed == self.notes[index].speed)
                 {
                     index += 1;
                 } else {
@@ -264,11 +251,7 @@ impl JudgeLine {
         for i in 0..self.cache.below_indices.len() {
             let mut index = self.cache.below_indices[i];
             while not_judge(index) {
-                if self
-                    .notes
-                    .get(index + 1)
-                    .map_or(false, |it| it.speed == self.notes[index].speed)
-                {
+                if self.notes.get(index + 1).is_some_and(|it| it.speed == self.notes[index].speed) {
                     index += 1;
                 } else {
                     index = usize::MAX;
@@ -344,7 +327,7 @@ impl JudgeLine {
                             // let hf = vec2(texture.width() / res.aspect_ratio, texture.height() / res.aspect_ratio);
                             let hf = vec2(texture.width(), texture.height()); // Sync RPE
                             draw_texture_ex(
-                                **texture,
+                                texture,
                                 -hf.x * self.anchor[0],
                                 -hf.y * self.anchor[1],
                                 color,
@@ -367,7 +350,7 @@ impl JudgeLine {
                             }
                             let hf = vec2(frame.width(), frame.height());
                             draw_texture_ex(
-                                **frame,
+                                frame,
                                 -hf.x * self.anchor[0],
                                 -hf.y * self.anchor[1],
                                 color,
@@ -389,7 +372,13 @@ impl JudgeLine {
                             res.apply_model_of(&Matrix::identity().append_nonuniform_scaling(&Vector::new(1., -1.)), |res| {
                                 let now = anim.now();
                                 let mut painter = now.font_id.and_then(|id| res.fonts.get(id)).map(|cell| cell.borrow_mut());
-                                ui.text(&now.text).pos(0., 0.).anchor(self.anchor[0], -self.anchor[1] + 1.).size(1.).color(color).multiline().draw_with_font(painter.as_deref_mut());
+                                ui.text(&now.text)
+                                    .pos(0., 0.)
+                                    .anchor(self.anchor[0], -self.anchor[1] + 1.)
+                                    .size(1.)
+                                    .color(color)
+                                    .multiline()
+                                    .draw_with_font(painter.as_deref_mut());
                             });
                         }
                     }
@@ -402,17 +391,19 @@ impl JudgeLine {
                             let vp = get_viewport();
                             let pass = *guard.0.get_or_insert_with(|| {
                                 let ctx = &mut gl.quad_context;
-                                let tex = Texture::new_render_texture(
-                                    ctx,
-                                    TextureParams {
-                                        width: vp.2 as _,
-                                        height: vp.3 as _,
-                                        format: miniquad::TextureFormat::RGBA8,
-                                        filter: FilterMode::Linear,
-                                        wrap: TextureWrap::Clamp,
-                                    },
-                                );
-                                RenderPass::new(ctx, tex, None)
+                                let tex = ctx.new_render_texture(TextureParams {
+                                    width: vp.2 as _,
+                                    height: vp.3 as _,
+                                    format: miniquad::TextureFormat::RGBA8,
+                                    kind: miniquad::TextureKind::Texture2D,
+                                    min_filter: FilterMode::Linear,
+                                    mag_filter: FilterMode::Linear,
+                                    mipmap_filter: miniquad::MipmapFilterMode::None,
+                                    allocate_mipmaps: false,
+                                    sample_count: 1,
+                                    wrap: TextureWrap::Clamp,
+                                });
+                                ctx.new_render_pass(tex, None)
                             });
                             gl.flush();
                             let old_pass = gl.quad_gl.get_active_render_pass();
@@ -438,11 +429,12 @@ impl JudgeLine {
             if let JudgeLineKind::Paint(_, state) = &self.kind {
                 let guard = state.borrow_mut();
                 if guard.1 && res.config.render_line_extra {
-                    let ctx = unsafe { get_internal_gl() }.quad_context;
-                    let tex = guard.0.as_ref().unwrap().texture(ctx);
+                    let mut gl = unsafe { get_internal_gl() };
+                    let ctx = &mut gl.quad_context;
+                    let tex = ctx.render_pass_texture(*guard.0.as_ref().unwrap());
                     let top = 1. / res.aspect_ratio;
                     draw_texture_ex(
-                        Texture2D::from_miniquad_texture(tex),
+                        &Texture2D::from_miniquad_texture(tex),
                         -1.,
                         -top,
                         WHITE,
@@ -461,6 +453,8 @@ impl JudgeLine {
                 invisible_time: f64::INFINITY,
                 draw_below: self.show_below,
                 incline_sin: self.incline.now_opt().map(|it| it.to_radians().sin()).unwrap_or_default(),
+                clip_x_range: None,
+                clip_y_range: None,
             };
             if res.config.has_mod(Mods::FADE_OUT) {
                 config.invisible_time = LIMIT_BAD;
@@ -513,60 +507,11 @@ impl JudgeLine {
             let mut height = self.height.clone();
             let aspect_ratio = res.aspect_ratio as f64;
             if res.config.note_scale > 0. && res.config.render_note {
-                for index in &self.cache.above_indices {
-                    let speed = self.notes[*index].speed;
-                    for note in self.notes[*index..].iter() {
-                        if !note.above || speed != note.speed {
-                            break;
-                        }
-                        if matches!(note.judge, JudgeStatus::Judged) && !matches!(note.kind, NoteKind::Hold { .. }) {
-                            continue;
-                        }
-                        if agg {
-                            let line_height = match note.kind {
-                                NoteKind::Hold { end_time, .. } => {
-                                    let time = if res.time < end_time {
-                                        res.time.min(note.time)
-                                    } else {
-                                        res.time
-                                    };
-                                    height.set_time(time);
-                                    height.now()
-                                }
-                                _ => {
-                                    config.line_height
-                                }
-                            };
-                            let note_height = ((note.height - line_height) * speed + note.object.translation.1.now() as f64) / aspect_ratio;
-                            match note.kind {   
-                                NoteKind::Hold { end_height, .. } => {
-                                    let end_height = ((end_height - line_height) * speed + note.object.translation.1.now() as f64) / aspect_ratio;
-                                    if note_height < height_below && end_height < height_below {
-                                        continue;
-                                    }
-                                    if note_height > height_above && end_height > height_above {
-                                        break;
-                                    }
-                                },
-                                _ => {
-                                    if note_height < height_below {
-                                        continue;
-                                    }
-                                    if note_height > height_above {
-                                        break;
-                                    }
-                                }
-                            }
-                        }
-                        note.render(ui, res, &mut config, bpm_list, line_set_debug_alpha, id, height_above, height_below);
-                    }
-                }
-
-                res.with_model(Matrix::identity().append_nonuniform_scaling(&Vector::new(1.0, -1.0)), |res| {
-                    for index in &self.cache.below_indices {
+                let mut render_notes_side = |res: &mut Resource, config: &mut RenderConfig<'_>, indices: &[usize], min_y: f64, max_y: f64, above: bool| {
+                    for index in indices {
                         let speed = self.notes[*index].speed;
                         for note in self.notes[*index..].iter() {
-                            if speed != note.speed {
+                            if note.above != above || speed != note.speed {
                                 break;
                             }
                             if matches!(note.judge, JudgeStatus::Judged) && !matches!(note.kind, NoteKind::Hold { .. }) {
@@ -575,68 +520,93 @@ impl JudgeLine {
                             if agg {
                                 let line_height = match note.kind {
                                     NoteKind::Hold { end_time, .. } => {
-                                        let time = if res.time < end_time {
-                                            res.time.min(note.time)
-                                        } else {
-                                            res.time
-                                        };
+                                        let time = if res.time < end_time { res.time.min(note.time) } else { res.time };
                                         height.set_time(time);
                                         height.now()
                                     }
-                                    _ => {
-                                        config.line_height
-                                    }
+                                    _ => config.line_height,
                                 };
                                 let note_height = ((note.height - line_height) * speed + note.object.translation.1.now() as f64) / aspect_ratio;
-                                match note.kind {   
+                                match note.kind {
                                     NoteKind::Hold { end_height, .. } => {
                                         let end_height = ((end_height - line_height) * speed + note.object.translation.1.now() as f64) / aspect_ratio;
-                                        if note_height < -height_above && end_height < -height_above {
+                                        if note_height < min_y && end_height < min_y {
                                             continue;
                                         }
-                                        if note_height > -height_below && end_height > -height_below {
+                                        if note_height > max_y && end_height > max_y {
                                             break;
                                         }
-                                    },
+                                    }
                                     _ => {
-                                        if note_height < -height_above {
+                                        if note_height < min_y {
                                             continue;
                                         }
-                                        if note_height > -height_below {
+                                        if note_height > max_y {
                                             break;
                                         }
                                     }
                                 }
                             }
-                            note.render(ui, res, &mut config, bpm_list, line_set_debug_alpha, id, -height_below, -height_above);
+                            note.render(ui, res, config, bpm_list, line_set_debug_alpha, id, height_above, height_below);
                         }
                     }
-                });
+                };
+                let mut render_notes = |res: &mut Resource, config: &mut RenderConfig<'_>| {
+                    render_notes_side(res, config, &self.cache.above_indices, height_below, height_above, true);
+                    res.with_model(Matrix::identity().append_nonuniform_scaling(&Vector::new(1.0, -1.0)), |res| {
+                        render_notes_side(res, config, &self.cache.below_indices, -height_above, -height_below, false);
+                    });
+                };
+                if self.scale_on_notes == 1 {
+                    res.with_model(self.object.now_scale(), |res| {
+                        render_notes(res, &mut config);
+                    });
+                } else if self.scale_on_notes == 2 {
+                    let scale = self.object.scale.now_with_def(1.0, 1.0);
+                    let clip_x = scale.x.abs().min(1.0);
+                    let clip_y = scale.y.abs().min(1.0);
+                    let top = 1.0 / res.aspect_ratio;
+                    config.clip_x_range = if clip_x < 1.0 { Some((-clip_x, clip_x)) } else { None };
+                    config.clip_y_range = if clip_y < 1.0 { Some((-top * clip_y, top * clip_y)) } else { None };
+                    render_notes(res, &mut config);
+                } else {
+                    render_notes(res, &mut config);
+                }
             }
             if res.config.chart_debug_line > 0. {
                 res.with_model(Matrix::identity().append_nonuniform_scaling(&Vector::new(1.0, -1.0)), |res| {
                     res.apply_model(|res| {
                         let kind = match &self.kind {
                             JudgeLineKind::Normal => {
-                                if !res.config.render_line { return };
+                                if !res.config.render_line {
+                                    return;
+                                };
                                 String::new()
-                            },
+                            }
                             JudgeLineKind::Text(text) => {
-                                if !res.config.render_line_extra { return };
+                                if !res.config.render_line_extra {
+                                    return;
+                                };
                                 format!(" text:{}", text.now().text)
-                            },
+                            }
                             JudgeLineKind::Texture(_, name) => {
-                                if !res.config.render_line_extra { return };
+                                if !res.config.render_line_extra {
+                                    return;
+                                };
                                 format!(" img:{}", name)
-                            },
+                            }
                             JudgeLineKind::TextureGif(_, frames, name) => {
-                                if !res.config.render_line_extra { return };
+                                if !res.config.render_line_extra {
+                                    return;
+                                };
                                 format!(" gif:{}/{}", name, frames.total_time())
-                            },
+                            }
                             JudgeLineKind::Paint(_, _) => {
-                                if !res.config.render_line_extra { return };
-                                format!(" paint")
-                            },
+                                if !res.config.render_line_extra {
+                                    return;
+                                };
+                                " paint".to_string()
+                            }
                         };
 
                         let parent = if let Some(parent) = self.parent {
@@ -652,11 +622,11 @@ impl JudgeLine {
                             }
                         };
                         let line_height_ulp_string = {
-                                if line_height_ulp_in_f32 > 0.0018518519 {
-                                    format!("(Speed too high! ULP: {:.4})", line_height_ulp_in_f32)
-                                } else {
-                                    String::new()
-                                }
+                            if line_height_ulp_in_f32 > 0.0018518519 {
+                                format!("(Speed too high! ULP: {:.4})", line_height_ulp_in_f32)
+                            } else {
+                                String::new()
+                            }
                         };
                         let z_index = {
                             if self.z_index == 0 {
@@ -678,14 +648,19 @@ impl JudgeLine {
                         } else {
                             format!(" anc:{} {}", self.anchor[0], self.anchor[1])
                         };
-                        let color = if line_height_ulp_in_f32 > 0.018518519 { // 10px error in 1080P
+                        let color = if line_height_ulp_in_f32 > 0.018518519 {
+                            // 10px error in 1080P
                             Color::new(1., 0., 0., parse_alpha(alpha, res.alpha, 0.15, res.config.chart_debug_line > 0.))
-                        } else if line_height_ulp_in_f32 > 0.0018518519 { // 1px error in 1080P
+                        } else if line_height_ulp_in_f32 > 0.0018518519 {
+                            // 1px error in 1080P
                             Color::new(1., 1., 0., parse_alpha(alpha, res.alpha, 0.15, res.config.chart_debug_line > 0.))
                         } else {
                             Color::new(1., 1., 1., parse_alpha(alpha, res.alpha, 0.15, res.config.chart_debug_line > 0.))
                         };
-                        ui.text(format!("[{}]{} h:{:.2}{}{}{}{}{}", id, parent, config.line_height, line_height_ulp_string, z_index, attach_ui, anchor, kind))
+                        ui.text(format!(
+                            "[{}]{} h:{:.2}{}{}{}{}{}",
+                            id, parent, config.line_height, line_height_ulp_string, z_index, attach_ui, anchor, kind
+                        ))
                         .pos(0., -res.config.chart_debug_line * 0.1)
                         .anchor(0.5, 1.)
                         .size(res.config.chart_debug_line)

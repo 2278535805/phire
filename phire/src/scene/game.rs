@@ -51,6 +51,8 @@ pub struct SimpleRecord {
     pub score: u32,
     pub accuracy: f32,
     pub full_combo: bool,
+    #[serde(default)]
+    pub track_complete: bool,
 }
 
 impl SimpleRecord {
@@ -66,6 +68,10 @@ impl SimpleRecord {
         }
         if other.full_combo & !self.full_combo {
             self.full_combo = other.full_combo;
+            changed = true;
+        }
+        if other.track_complete & !self.track_complete {
+            self.track_complete = other.track_complete;
             changed = true;
         }
         changed
@@ -274,10 +280,8 @@ impl GameScene {
                     }
                     result.insert_str(0, chinese_units[unit_index]);
                     result.insert_str(0, chinese_digits[digit]);
-                } else {
-                    if !result.starts_with("零") {
-                        need_zero = true;
-                    }
+                } else if !result.starts_with("零") {
+                    need_zero = true;
                 }
                 n /= 10;
                 unit_index += 1;
@@ -335,9 +339,9 @@ impl GameScene {
             }
         });
         let mut chart = match format {
-            ChartFormat::Rpe => parse_rpe(&text?, fs, extra).await,
-            ChartFormat::Pgr => parse_phigros(&text?, extra),
-            ChartFormat::Pec => parse_pec(&text?, extra),
+            ChartFormat::Rpe => parse_rpe(text?, fs, extra).await,
+            ChartFormat::Pgr => parse_phigros(text?, extra),
+            ChartFormat::Pec => parse_pec(text?, extra),
             ChartFormat::Pbc => {
                 let mut r = BinaryReader::new(Cursor::new(bytes));
                 r.read()
@@ -359,13 +363,10 @@ impl GameScene {
         upload_fn: Option<UploadFn>,
         update_fn: Option<UpdateFn>,
     ) -> Result<Self> {
-        match mode {
-            GameMode::TweakOffset => {
-                config.mods.insert(Mods::AUTOPLAY);
-                config.volume_music = config.volume_music.max(0.5);
-                config.volume_sfx = config.volume_sfx.max(0.5);
-            }
-            _ => {}
+        if mode == GameMode::TweakOffset {
+            config.mods.insert(Mods::AUTOPLAY);
+            config.volume_music = config.volume_music.max(0.5);
+            config.volume_sfx = config.volume_sfx.max(0.5);
         }
         let (mut chart, format) = if let Some((chart, format)) = preload_chart {
             (chart, format)
@@ -531,7 +532,6 @@ impl GameScene {
         };
         let score_top = top + eps * 2.8125 - (1. - p) * 0.4;
         let score_right = aspect_ratio - margin + 0.001;
-        ui.text("AA").color(Color::new(0., 0., 0., 0.)).draw(); //Fix first text disappear
         let mut text_size = 0.71 * scale_ratio;
         let mut text = ui.text(&score).size(text_size);
         let max_width = 0.55 * aspect_ratio;
@@ -580,33 +580,29 @@ impl GameScene {
             };
             let mut text_size = 0.98 * scale_ratio;
             let max_width = 0.55 * aspect_ratio;
-            let mut text = ui.text(&combo)
-                .size(text_size)
-                .color(Color::new(0., 0., 0., 0.));
-            let ct = text.measure().center();
-            let text_width = text.measure().w;
+            let text = ui.text(&combo).size(text_size).measure();
+            let text_width = text.w;
             if text_width > max_width {
                 text_size *= max_width / text_width
             }
-            let combo_y = top + eps * 1.55 - (1. - p) * 0.4 + ct.y;
-            let btm = text.anchor(0.5, 0.5).pos(0., combo_y).draw().bottom() + 0.015;
-            self.chart.with_element(ui, res, UIElement::ComboNumber, Some((0., combo_y)), Some((0., combo_y)), |ui, color| {
-                ui.text(&combo)
-                    .pos(0., combo_y)
-                    .anchor(0.5, 0.5)
-                    .color(Color { a: color.a * c.a, ..color })
-                    .size(text_size)
-                    .multiline()
-                    .draw();
+            let combo_y = top + eps * 1.55 - (1. - p) * 0.4 + 0.055;
+            let btm = self.chart.with_element(ui, res, UIElement::ComboNumber, Some((0., combo_y)), Some((0., combo_y)), |ui, color| {
+                draw_text_aligned_opt_width(
+                    ui,
+                    &combo,
+                    0., combo_y,
+                    (0.5, 0.5),
+                    text_size,
+                    Color { a: color.a * c.a, ..color },
+                    0.55 * aspect_ratio
+                ).bottom() + 0.03 + 0.005
             });
-            let mut text = ui.text(&res.config.combo).size(0.34 * scale_ratio);
-            let ct = text.measure().center();
-            self.chart.with_element(ui, res, UIElement::Combo, Some((0., btm + ct.y)), Some((0., btm + ct.y)), |ui, color| {
+            self.chart.with_element(ui, res, UIElement::Combo, Some((0., btm)), Some((0., btm)), |ui, color| {
                 if (cfg!(feature = "play") && res.config.autoplay()) || validate_combo(&res.config.combo) || res.config.combo.len() > 50 {
-                    draw_text_aligned(ui, "AUTOPLAY", 0., btm + ct.y, (0.5, 0.5), 0.34 * scale_ratio, Color { a: color.a * c.a, ..color });
+                    draw_text_aligned(ui, "AUTOPLAY", 0., btm, (0.5, 0.5), 0.34 * scale_ratio, Color { a: color.a * c.a, ..color });
                     return;
                 }
-                draw_text_aligned_opt_width(ui, &res.config.combo, 0., btm + ct.y, (0.5, 0.5), 0.34 * scale_ratio, Color { a: color.a * c.a, ..color }, 0.55 * aspect_ratio);
+                draw_text_aligned_opt_width(ui, &res.config.combo, 0., btm, (0.5, 0.5), 0.34 * scale_ratio, Color { a: color.a * c.a, ..color }, 0.55 * aspect_ratio);
             });
         }
         let lf = -aspect_ratio + margin;
@@ -702,7 +698,7 @@ impl GameScene {
             let w = 0.05;
             let no_retry = self.mode == GameMode::NoRetry;
             draw_texture_ex(
-                *res.icon_back,
+                &res.icon_back,
                 -s * 3. - w,
                 -s + o,
                 c,
@@ -712,7 +708,7 @@ impl GameScene {
                 },
             );
             draw_texture_ex(
-                *res.icon_retry,
+                &res.icon_retry,
                 -s,
                 -s + o,
                 if no_retry { semi_white(res.alpha * 0.6) } else { c },
@@ -722,7 +718,7 @@ impl GameScene {
                 },
             );
             draw_texture_ex(
-                *res.icon_resume,
+                &res.icon_resume,
                 s + w,
                 -s + o,
                 c,
@@ -751,7 +747,7 @@ impl GameScene {
                 if no_retry && clicked == Some(0) {
                     clicked = None;
                 }
-                if clicked.map_or(false, |it| it != -1) && (tm.speed - res.config.speed as f64).abs() > 1e-3 {
+                if clicked.is_some_and(|it| it != -1) && (tm.speed - res.config.speed as f64).abs() > 1e-3 {
                     reset_music_speed!(self, res, tm);
                 }
                 match clicked {
@@ -768,9 +764,9 @@ impl GameScene {
                         res.disable_hit_fx = true;
                     }
                     Some(1) => {
-                        if self.mode == GameMode::Exercise && tm.now() > self.exercise_range.end as f64 && self.exercise_range.end - 0.1 < res.track_length {
-                            tm.seek_to(self.exercise_range.start as f64);
-                            self.music.seek_to(self.exercise_range.start as f64)?;
+                        if self.mode == GameMode::Exercise && tm.now() > self.exercise_range.end && self.exercise_range.end - 0.1 < res.track_length {
+                            tm.seek_to(self.exercise_range.start);
+                            self.music.seek_to(self.exercise_range.start)?;
                         }
                         self.music.play()?;
                         let now = tm.now();
@@ -1081,13 +1077,13 @@ impl Scene for GameScene {
         let time = tm.now();
         self.res.audio.recover_if_needed()?;
         if matches!(self.state, State::Playing) && time < self.res.track_length {
-            tm.update(self.music.position() as f64);
+            tm.update(self.music.position());
         }
-        if self.mode == GameMode::Exercise && tm.now() > self.exercise_range.end as f64 && self.exercise_range.end < self.res.track_length - 0.1 && !tm.paused() {
+        if self.mode == GameMode::Exercise && tm.now() > self.exercise_range.end && self.exercise_range.end < self.res.track_length - 0.1 && !tm.paused() {
             let state = self.state.clone();
             reset!(self, self.res, tm);
             self.state = state;
-            tm.seek_to(self.exercise_range.start as f64);
+            tm.seek_to(self.exercise_range.start);
             tm.pause();
             self.music.pause()?;
         }
@@ -1096,23 +1092,11 @@ impl Scene for GameScene {
         }
         let time = match self.state {
             State::Starting => {
-                #[cfg(target_os = "windows")]
-                { // wtf bro. why must particles exist on Windows?
-                    let emitter_config = self.res.emitter.emitter.config.clone();
-                    let emitter_square_config = self.res.emitter.emitter_square.config.clone();
-                    self.res.emitter.emitter_square.config.rng = None;
-                    self.res.emitter.emitter.config.size = 0.0;
-                    self.res.emitter.emitter_square.config.size = 0.0;
-                    self.res.emitter.emitter.emit(vec2(0.0, 0.0), 1);
-                    self.res.emitter.emitter_square.emit(vec2(0.0, 0.0), 1);
-                    self.res.emitter.emitter.config = emitter_config;
-                    self.res.emitter.emitter_square.config = emitter_square_config;
-                }
                 if time >= Self::BEFORE_DURATION || !self.res.config.enter_animation { // wait for animation
                     self.res.alpha = 1.;
                     self.state = State::BeforeMusic;
                     tm.reset();
-                    tm.seek_to(self.exercise_range.start as f64);
+                    tm.seek_to(self.exercise_range.start);
                     self.last_update_time = tm.real_time();
                     if self.first_in && self.mode == GameMode::Exercise {
                         //tm.pause();
@@ -1134,7 +1118,7 @@ impl Scene for GameScene {
             }
             State::BeforeMusic => {
                 if time >= 0.0 {
-                    self.music.seek_to(time as f64)?;
+                    self.music.seek_to(time)?;
                     self.music.play()?;
                     self.state = State::Playing;
                 }
@@ -1156,6 +1140,15 @@ impl Scene for GameScene {
                 #[cfg(feature = "play")]
                 let is_ending = is_ending || self.res.health.state.track_failed;
                 if is_ending {
+                    #[cfg(feature = "play")]
+                    let track_complete = self.res.health.state.now_health >= self.res.health.config.complete_health && !self.res.health.state.track_failed;
+                    #[cfg(not(feature = "play"))]
+                    let track_complete = true;
+                    #[cfg(feature = "play")]
+                    if self.res.config.autoplay() && !self.res.health.state.track_failed {
+                        self.judge.commit_all(&mut self.chart);
+                    }
+                    #[cfg(not(feature = "play"))]
                     if self.res.config.autoplay() {
                         self.judge.commit_all(&mut self.chart);
                     }
@@ -1171,7 +1164,7 @@ impl Scene for GameScene {
                             }
                         }
                     }
-                    let result = self.judge.result();
+                    let result = self.judge.result(track_complete);
                     let record = if self.res.config.autoplay() || self.res.config.speed < 1.0 - 1e-3 {
                         None
                     } else {
@@ -1179,6 +1172,7 @@ impl Scene for GameScene {
                             score: result.score as _,
                             accuracy: result.accuracy as _,
                             full_combo: result.max_combo == result.num_of_notes,
+                            track_complete,
                         })
                     };
                     self.next_scene = match self.mode {
@@ -1190,7 +1184,7 @@ impl Scene for GameScene {
                             self.res.icon_retry.clone(),
                             self.res.icon_proceed.clone(),
                             self.res.info.clone(),
-                            self.judge.result(),
+                            self.judge.result(track_complete),
                             self.res.challenge_icons[self.res.config.challenge_color.clone() as usize].clone(),
                             &self.res.config,
                             self.res.res_pack.endings.clone(),
@@ -1281,13 +1275,13 @@ impl Scene for GameScene {
                 res.time -= 2.;
                 let dst = (self.music.position() - 2.).max(0.);
                 self.music.seek_to(dst)?;
-                tm.seek_to(dst as f64);
+                tm.seek_to(dst);
             }
             if is_key_pressed(KeyCode::Right) {
                 res.time += 5.;
-                let dst = (self.music.position() + 5.).min(res.track_length as f64);
+                let dst = (self.music.position() + 5.).min(res.track_length);
                 self.music.seek_to(dst)?;
-                tm.seek_to(dst as f64);
+                tm.seek_to(dst);
 
                 self.pause_rewind = PauseRewind {
                     time: Some(tm.now()),
@@ -1407,20 +1401,20 @@ impl Scene for GameScene {
             .chart_target
             .as_ref()
             .map(|it| if msaa { it.input() } else { it.output() })
-            .or(res.camera.render_target);
+            .or(res.camera.render_target.clone());
 
         let h = 1. / res.aspect_ratio;
         set_camera(&Camera2D {
-            zoom: vec2(1., -asp2_window),
+            zoom: vec2(1., asp2_window),
             viewport: if res.chart_target.is_some() { None } else { viewport_window },
-            render_target: chart_onto,
+            render_target: chart_onto.clone(),
             ..Default::default()
         });
         if !res.config.preserve_framebuffer {
             clear_background(BLACK);
         }
         if res.config.render_bg {
-            draw_background(*res.background, res.config.render_bg_dim);
+            draw_background(&res.background, res.config.render_bg_dim);
         }
 
         if res.config.render_bg_dim && res.config.chart_ratio >= 1. {
@@ -1436,16 +1430,17 @@ impl Scene for GameScene {
             draw_rectangle(x_range * 2. - 1., -h, (1. - x_range * 2.) * 2., h * 2., Color::new(0., 0., 0., res.alpha * res.info.background_dim));
         }
 
-        let chart_zoom = if res.config.chart_ratio < 1. { vec2(asp2_chart / asp2_window * ratio, -asp2_chart * ratio) } else { vec2(1. * ratio, -asp2_chart * ratio) };
+        let chart_zoom = if res.config.chart_ratio < 1. { vec2(asp2_chart / asp2_window * ratio, asp2_chart * ratio) } else { vec2(1. * ratio, asp2_chart * ratio) };
         let chart_viewport = if res.config.chart_ratio < 1. { viewport_window } else { viewport_chart };
 
         if res.config.render_bg_dim && res.config.chart_ratio < 1. {
-            set_camera( &Camera2D {
+            set_camera(&Camera2D {
                 zoom: chart_zoom,
                 viewport: chart_viewport,
+                render_target: chart_onto.clone(),
                 ..Default::default()
             });
-            self.gl.quad_gl.render_pass(chart_onto.map(|it| it.render_pass));
+            self.gl.quad_gl.render_pass(chart_onto.as_ref().map(|it| it.render_pass.raw_miniquad_id()));
             draw_rectangle(-1., -h, 2., h * 2., Color::new(0., 0., 0., res.alpha * res.info.background_dim));
         }
 
@@ -1454,7 +1449,7 @@ impl Scene for GameScene {
         } else {
             0.
         };
-        set_camera( &Camera2D {
+        set_camera(&Camera2D {
             zoom: chart_zoom,
             viewport: chart_viewport.map(|(x, y, w, h)| {
                 if res.info.fold_animation && matches!(self.state, State::Starting) {
@@ -1473,16 +1468,17 @@ impl Scene for GameScene {
                 }
             }),
             rotation: angle.to_degrees(),
+            render_target: chart_onto.clone(),
             ..Default::default()
         });
-        self.gl.quad_gl.render_pass(chart_onto.map(|it| it.render_pass));
+        self.gl.quad_gl.render_pass(chart_onto.as_ref().map(|it| it.render_pass.raw_miniquad_id()));
         self.chart.render(ui, res);
 
         self.gl.quad_gl.render_pass(
             res.chart_target
                 .as_ref()
-                .map(|it| it.output().render_pass)
-                .or_else(|| res.camera.render_pass()),
+                .map(|it| it.output().render_pass.raw_miniquad_id())
+                .or_else(|| Some(res.camera.render_pass()?.raw_miniquad_id())),
         );
 
         self.bad_notes.retain(|dummy| dummy.render(res));
@@ -1495,6 +1491,8 @@ impl Scene for GameScene {
         if !res.no_effect {
             set_camera(&Camera2D {
                 zoom: vec2(1., asp2_chart),
+                render_target: chart_onto.clone(),
+                viewport: Some(ui_viewport),
                 ..Default::default()
             });
             for effect in &self.chart.extra.effects {
@@ -1504,9 +1502,9 @@ impl Scene for GameScene {
         
         {
             set_camera(&Camera2D {
-                zoom: if res.config.chart_ratio < 1. { vec2(asp2_ui_window * ratio, -1. * ratio) } else { vec2(asp2_ui * ratio, -1. * ratio) },
+                zoom: if res.config.chart_ratio < 1. { vec2(asp2_ui_window * ratio, 1. * ratio) } else { vec2(asp2_ui * ratio, 1. * ratio) },
                 viewport: chart_viewport,
-                render_target: self.res.chart_target.as_ref().map(|it| it.output()).or(self.res.camera.render_target),
+                render_target: self.res.chart_target.as_ref().map(|it| it.output()).or(self.res.camera.render_target.clone()),
                 ..Default::default()
             });
             self.ui(ui, tm)?;
@@ -1515,6 +1513,8 @@ impl Scene for GameScene {
         if !self.res.no_effect && !self.effects.is_empty() {
             set_camera(&Camera2D {
                 zoom: vec2(1., asp2_window),
+                render_target: chart_onto.clone(),
+                viewport: Some(ui_viewport),
                 ..Default::default()
             });
             for effect in &self.effects {
@@ -1526,7 +1526,7 @@ impl Scene for GameScene {
             set_camera(&Camera2D {
                 zoom: vec2(1., 1.),
                 viewport: viewport_window,
-                render_target: self.res.chart_target.as_ref().map(|it| it.output()).or(self.res.camera.render_target),
+                render_target: self.res.chart_target.as_ref().map(|it| it.output()).or(self.res.camera.render_target.clone()),
                 ..Default::default()
             });
             if tm.paused() {
@@ -1536,9 +1536,9 @@ impl Scene for GameScene {
 
         {
             set_camera(&Camera2D {
-                zoom: vec2(1., -asp2_window),
+                zoom: vec2(1., asp2_window),
                 viewport: viewport_window,
-                render_target: self.res.chart_target.as_ref().map(|it| it.output()).or(self.res.camera.render_target),
+                render_target: self.res.chart_target.as_ref().map(|it| it.output()).or(self.res.camera.render_target.clone()),
                 ..Default::default()
             });
             if self.mode == GameMode::TweakOffset {
@@ -1553,9 +1553,9 @@ impl Scene for GameScene {
         
         {
             set_camera(&Camera2D {
-                zoom: vec2(1., -asp2_chart),
+                zoom: vec2(1., asp2_chart),
                 viewport: viewport_chart,
-                render_target: self.res.chart_target.as_ref().map(|it| it.output()).or(self.res.camera.render_target),
+                render_target: self.res.chart_target.as_ref().map(|it| it.output()).or(self.res.camera.render_target.clone()),
                 ..Default::default()
             });
             self.overlay_ui(ui, tm)?;
@@ -1568,12 +1568,12 @@ impl Scene for GameScene {
                 self.gl.quad_gl.viewport(None);
                 set_camera(&Camera2D {
                     zoom: vec2(1., asp2_window),
-                    render_target: self.res.camera.render_target,
+                    render_target: self.res.camera.render_target.clone(),
                     viewport: Some(ui.viewport),
                     ..Default::default()
                 });
                 draw_texture_ex(
-                    target.output().texture,
+                    &target.output().texture,
                     -1.,
                     -ui.top,
                     WHITE,

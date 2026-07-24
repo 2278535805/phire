@@ -2,7 +2,7 @@ use super::{Anim, Resource, Tweenable};
 use crate::ext::{get_viewport, screen_aspect};
 use anyhow::{anyhow, bail, Result};
 use macroquad::prelude::*;
-use miniquad::UniformType;
+use macroquad::miniquad::UniformType;
 use once_cell::sync::Lazy;
 use phf::phf_map;
 use regex::Regex;
@@ -166,10 +166,9 @@ impl Effect {
             t: f64::NEG_INFINITY,
             defaults,
             material: load_material(
-                VERTEX_SHADER,
-                shader,
+                ShaderSource::Glsl { vertex: VERTEX_SHADER, fragment: shader },
                 MaterialParams {
-                    uniforms: new_uniforms,
+                    uniforms: new_uniforms.into_iter().map(|(name, ty)| UniformDesc { name, uniform_type: ty, array_count: 1 }).collect(),
                     textures: vec!["screenTexture".to_owned()],
                     ..Default::default()
                 },
@@ -206,15 +205,15 @@ impl Effect {
         let target = res.chart_target.as_mut().unwrap();
         target.swap();
         let tex = target.old().texture;
-        self.material.set_texture("screenTexture", tex);
+        self.material.set_texture("screenTexture", tex.clone());
         let screen_dim = vec2(tex.width(), tex.height());
         self.material.set_uniform("screenSize", screen_dim);
-        gl.quad_gl.render_pass(Some(target.output().render_pass));
+        gl.quad_gl.render_pass(Some(target.output().render_pass.raw_miniquad_id()));
 
         let vp = get_viewport();
         self.material.set_uniform("UVScale", vec2(vp.2 as _, vp.3 as _) / screen_dim);
 
-        gl_use_material(self.material);
+        gl_use_material(&self.material);
         let top = 1. / if self.global { screen_aspect() } else { res.aspect_ratio };
         draw_rectangle(-1., -top, 2., top * 2., WHITE);
         gl_use_default_material();
@@ -222,9 +221,7 @@ impl Effect {
 }
 
 impl Drop for Effect {
-    fn drop(&mut self) {
-        self.material.delete();
-    }
+    fn drop(&mut self) {}
 }
 
 const VERTEX_SHADER: &str = r#"#version 100

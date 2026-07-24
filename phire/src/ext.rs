@@ -10,7 +10,7 @@ use lyon::{
     path::{builder::BorderRadii, Path, Winding},
 };
 use macroquad::prelude::*;
-use miniquad::{gl::GLenum, BlendFactor, BlendState, BlendValue, CompareFunc, Equation, PrimitiveType, StencilFaceState, StencilOp, StencilState};
+use macroquad::miniquad::{gl::GLenum, BlendFactor, BlendState, BlendValue, CompareFunc, Equation, PrimitiveType, StencilFaceState, StencilOp, StencilState};
 use once_cell::sync::Lazy;
 use ordered_float::{Float, NotNan};
 use regex::Regex;
@@ -80,25 +80,20 @@ impl RectExt for Rect {
 }
 
 struct SafeTextureInner(Texture2D);
-impl Drop for SafeTextureInner {
-    fn drop(&mut self) {
-        self.0.delete()
-    }
-}
 
 pub struct SafeTexture(Arc<SafeTextureInner>);
 impl SafeTexture {
     pub fn into_inner(self) -> Texture2D {
         let arc = self.0;
-        let res = arc.0;
+        let res = arc.0.clone();
         std::mem::forget(arc);
         res
     }
 
     pub fn with_mipmap(self) -> Self {
-        let id = self.0 .0.raw_miniquad_texture_handle().gl_internal_id();
+        let macroquad::miniquad::RawId::OpenGl(id) = unsafe { get_internal_gl().quad_context.texture_raw_id(self.0 .0.raw_miniquad_id()) };
         unsafe {
-            use miniquad::gl::*;
+            use macroquad::miniquad::gl::*;
             glBindTexture(GL_TEXTURE_2D, id);
             glGenerateMipmap(GL_TEXTURE_2D);
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR as _);
@@ -107,9 +102,9 @@ impl SafeTexture {
     }
 
     pub fn with_filter(self, filter: GLenum) -> Self{
-        let id = self.0 .0.raw_miniquad_texture_handle().gl_internal_id();
+        let macroquad::miniquad::RawId::OpenGl(id) = unsafe { get_internal_gl().quad_context.texture_raw_id(self.0 .0.raw_miniquad_id()) };
         unsafe {
-            use miniquad::gl::*;
+            use macroquad::miniquad::gl::*;
             glBindTexture(GL_TEXTURE_2D, id);
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filter as _);
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filter as _);
@@ -168,29 +163,26 @@ pub fn nalgebra_to_glm(mat: &Matrix) -> Mat4 {
 
 pub fn get_viewport() -> (i32, i32, i32, i32) {
     let gl = unsafe { get_internal_gl() };
-    gl.quad_gl.get_viewport().unwrap_or_else(|| {
-        let (w, h) = gl
-            .quad_gl
-            .get_active_render_pass()
-            .map(|it| {
-                let tex = it.texture(gl.quad_context);
-                (tex.width as i32, tex.height as i32)
-            })
-            .unwrap_or_else(|| (screen_width() as _, screen_height() as _));
-        (0, 0, w, h)
-    })
+    let vp = gl.quad_gl.get_viewport();
+    if vp.2 == 0 || vp.3 == 0 {
+        (0, 0, screen_width() as _, screen_height() as _)
+    } else {
+        vp
+    }
 }
 
 #[inline]
 pub fn draw_text_aligned(ui: &mut Ui, text: &str, x: f32, y: f32, anchor: (f32, f32), scale: f32, color: Color) -> Rect {
     ui.text(text).pos(x, y).anchor(anchor.0, anchor.1).size(scale).color(color).multiline().draw()
 }
+
 pub fn draw_text_aligned_opt_width(ui: &mut Ui, text: &str, x: f32, y: f32, anchor: (f32, f32), mut scale: f32, color: Color, max_width: f32) -> Rect {
-    let text_width = ui.text(text).size(scale).multiline().measure().w;
+    let mut text = ui.text(text).size(scale).pos(x, y).anchor(anchor.0, anchor.1).color(color).multiline();
+    let text_width = text.measure().w;
     if text_width > max_width {
         scale *= max_width / text_width
     }
-    ui.text(text).pos(x, y).anchor(anchor.0, anchor.1).size(scale).color(color).multiline().draw()
+    text.size(scale).draw()
 }
 
 pub fn draw_text_aligned_opt(ui: &mut Ui, text: &str, x: f32, y: f32, anchor: (f32, f32), mut scale: f32, color: Color, max_width: f32, max_height: f32) -> Rect {
@@ -242,8 +234,8 @@ pub fn source_of_image(tex: &Texture2D, rect: Rect, scale_type: ScaleType) -> Op
     }
 }
 
-pub fn draw_image(tex: Texture2D, rect: Rect, scale_type: ScaleType) {
-    let source = source_of_image(&tex, rect, scale_type);
+pub fn draw_image(tex: &Texture2D, rect: Rect, scale_type: ScaleType) {
+    let source = source_of_image(tex, rect, scale_type);
     let (w, h) = (tex.width(), tex.height());
     draw_texture_ex(
         tex,
@@ -260,11 +252,11 @@ pub fn draw_image(tex: Texture2D, rect: Rect, scale_type: ScaleType) {
 
 pub const PARALLELOGRAM_SLOPE: f32 = 15.0 * std::f32::consts::PI / 180.0;
 
-pub fn draw_parallelogram(rect: Rect, texture: Option<(Texture2D, Rect)>, color: Color, shadow: bool) {
+pub fn draw_parallelogram(rect: Rect, texture: Option<(&Texture2D, Rect)>, color: Color, shadow: bool) {
     draw_parallelogram_ex(rect, texture, color, color, shadow);
 }
 
-pub fn draw_parallelogram_ex(rect: Rect, texture: Option<(Texture2D, Rect)>, top: Color, bottom: Color, shadow: bool) {
+pub fn draw_parallelogram_ex(rect: Rect, texture: Option<(&Texture2D, Rect)>, top: Color, bottom: Color, shadow: bool) {
     let l = rect.h * PARALLELOGRAM_SLOPE;
     let gl = unsafe { get_internal_gl() }.quad_gl;
     let p = [
@@ -299,7 +291,7 @@ pub fn draw_parallelogram_ex(rect: Rect, texture: Option<(Texture2D, Rect)>, top
     }
 }
 
-pub fn draw_illustration(tex: Texture2D, x: f32, y: f32, w: f32, h: f32, color: Color, shadow: bool) -> Rect {
+pub fn draw_illustration(tex: &Texture2D, x: f32, y: f32, w: f32, h: f32, color: Color, shadow: bool) -> Rect {
     let scale = 0.076;
     let w = scale * 13. * w;
     let h = scale * 7. * h;
@@ -457,8 +449,7 @@ pub fn make_pipeline(write_color: bool, pass_op: StencilOp, test_func: CompareFu
     } = unsafe { get_internal_gl() };
     gl.make_pipeline(
         context,
-        shader::VERTEX,
-        shader::FRAGMENT,
+        ShaderSource::Glsl { vertex: shader::VERTEX, fragment: shader::FRAGMENT },
         PipelineParams {
             color_write: (write_color, write_color, write_color, write_color),
             color_blend: Some(BlendState::new(
@@ -501,7 +492,7 @@ pub fn open_url(url: &str) -> Result<()> {
     cfg_if::cfg_if! {
         if #[cfg(target_os = "android")] {
             unsafe {
-                let env = miniquad::native::attach_jni_env();
+                let env = macroquad::miniquad::native::attach_jni_env();
                 let ctx = ndk_context::android_context().context();
                 let class = (**env).GetObjectClass.unwrap()(env, ctx);
                 let method =
@@ -643,7 +634,7 @@ pub fn validate_combo(value: &String) -> bool {
     }
 
     let filtered_value = RE_FILTER.replace_all(value, "").trim().to_string();
-    return RE_VALIDATE.is_match(&filtered_value);
+    RE_VALIDATE.is_match(&filtered_value)
 }
 
 pub fn get_latency(audio: &AudioManager, frame_times: &VecDeque<f64>) -> f64 {

@@ -59,7 +59,7 @@ impl Dialog {
             buttons: vec![tl!("info-copy").to_string(), tl!("ok").to_string()],
             listener: Some(Box::new(move |pos| {
                 if pos == 0 {
-                    unsafe { get_internal_gl() }.quad_context.clipboard_set(&message);
+                    macroquad::miniquad::window::clipboard_set(&message);
                     show_message(tl!("copied")).ok();
                 }
             })),
@@ -77,7 +77,7 @@ impl Dialog {
             buttons: vec![tl!("error-copy").to_string(), tl!("ok").to_string()],
             listener: Some(Box::new(move |pos| {
                 if pos == 0 {
-                    unsafe { get_internal_gl() }.quad_context.clipboard_set(&error);
+                    macroquad::miniquad::window::clipboard_set(&error);
                     show_message(tl!("copied")).ok();
                 }
             })),
@@ -128,7 +128,7 @@ impl Dialog {
         }
         if self
             .window_rect
-            .map_or(true, |rect| rect.contains(touch.position) || touch.phase != TouchPhase::Started)
+            .is_none_or(|rect| rect.contains(touch.position) || touch.phase != TouchPhase::Started)
         {
             true
         } else {

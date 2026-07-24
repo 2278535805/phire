@@ -205,12 +205,20 @@ impl Page for EventPage {
                 self.btn_down.set(ui, Rect::new(0., d, 0., 0.).feather(s));
                 self.index = (self.scroll.y_scroller.offset / (ui.top * 2.)).round() as usize;
                 ui.with(Rotation2::new(std::f32::consts::FRAC_PI_2).into(), |ui| {
-                    ui.fill_rect(r, (*self.icons.back, r, ScaleType::CropCenter, if self.index == 0 { semi_white(c.a * 0.3) } else { c }));
+                    ui.fill_rect(
+                        r,
+                        (Texture2D::clone(&self.icons.back), r, ScaleType::CropCenter, if self.index == 0 { semi_white(c.a * 0.3) } else { c }),
+                    );
                 });
                 ui.with(Rotation2::new(-std::f32::consts::FRAC_PI_2).into(), |ui| {
                     ui.fill_rect(
                         r,
-                        (*self.icons.back, r, ScaleType::CropCenter, if self.index + 1 >= events.len() { semi_white(c.a * 0.3) } else { c }),
+                        (
+                            Texture2D::clone(&self.icons.back),
+                            r,
+                            ScaleType::CropCenter,
+                            if self.index + 1 >= events.len() { semi_white(c.a * 0.3) } else { c },
+                        ),
                     );
                 });
                 if events.is_empty() {

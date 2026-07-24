@@ -62,9 +62,11 @@ pub struct RenderConfig<'a> {
     pub invisible_time: f64,
     pub draw_below: bool,
     pub incline_sin: f32,
+    pub clip_x_range: Option<(f32, f32)>,
+    pub clip_y_range: Option<(f32, f32)>,
 }
 
-fn draw_tex(res: &Resource, texture: Texture2D, order: i8, x: f32, y: f32, color: Color, mut params: DrawTextureParams, clip: bool) {
+fn draw_tex(res: &Resource, texture: &Texture2D, order: i8, x: f32, y: f32, color: Color, mut params: DrawTextureParams, clip: bool, clip_x_range: Option<(f32, f32)>, clip_y_range: Option<(f32, f32)>) {
     let Vec2 { x: w, y: h } = params.dest_size.unwrap();
     if h < 0. {
         return;
@@ -84,10 +86,10 @@ fn draw_tex(res: &Resource, texture: Texture2D, order: i8, x: f32, y: f32, color
         }
     }
     params.flip_y ^= true;
-    draw_tex_pts(res, texture, order, p, color, params);
+    draw_tex_pts(res, texture, order, p, color, params, clip_x_range, clip_y_range);
 }
-fn draw_tex_pts(res: &Resource, texture: Texture2D, order: i8, p: [Point; 4], color: Color, params: DrawTextureParams) {
-    let mut p = p.map(|it| res.world_to_screen(it));
+fn draw_tex_pts(res: &Resource, texture: &Texture2D, order: i8, mut p: [Point; 4], color: Color, params: DrawTextureParams, clip_x_range: Option<(f32, f32)>, clip_y_range: Option<(f32, f32)>) {
+    p = p.map(|it| res.world_to_screen(it));
     if p[0].x.min(p[1].x.min(p[2].x.min(p[3].x))) > 1. / res.config.chart_ratio
         || p[0].x.max(p[1].x.max(p[2].x.max(p[3].x))) < -1. / res.config.chart_ratio
         || p[0].y.min(p[1].y.min(p[2].y.min(p[3].y))) > 1. / res.config.chart_ratio
@@ -96,6 +98,10 @@ fn draw_tex_pts(res: &Resource, texture: Texture2D, order: i8, p: [Point; 4], co
         return;
     }
     let Rect { x: sx, y: sy, w: sw, h: sh } = params.source.unwrap_or(Rect { x: 0., y: 0., w: 1., h: 1. });
+    let mut sx = sx;
+    let mut sy = sy;
+    let mut sw = sw;
+    let mut sh = sh;
 
     if params.flip_x {
         p.swap(0, 1);
@@ -104,6 +110,40 @@ fn draw_tex_pts(res: &Resource, texture: Texture2D, order: i8, p: [Point; 4], co
     if params.flip_y {
         p.swap(0, 3);
         p.swap(1, 2);
+    }
+
+    if let Some((min_x, max_x)) = clip_x_range {
+        let p_min = p[0].x.min(p[1].x.min(p[2].x.min(p[3].x)));
+        let p_max = p[0].x.max(p[1].x.max(p[2].x.max(p[3].x)));
+        if p_max <= min_x || p_min >= max_x { return; }
+        if p_min < min_x {
+            let r = (min_x - p_min) / (p_max - p_min);
+            for pt in &mut p { if pt.x < min_x { pt.x = min_x; } }
+            sx += sw * r;
+            sw *= 1.0 - r;
+        }
+        if p_max > max_x {
+            let r = (p_max - max_x) / (p_max - p_min);
+            for pt in &mut p { if pt.x > max_x { pt.x = max_x; } }
+            sw *= 1.0 - r;
+        }
+    }
+
+    if let Some((min_y, max_y)) = clip_y_range {
+        let p_min = p[0].y.min(p[1].y.min(p[2].y.min(p[3].y)));
+        let p_max = p[0].y.max(p[1].y.max(p[2].y.max(p[3].y)));
+        if p_max <= min_y || p_min >= max_y { return; }
+        if p_min < min_y {
+            let r = (min_y - p_min) / (p_max - p_min);
+            for pt in &mut p { if pt.y < min_y { pt.y = min_y; } }
+            sy += sh * r;
+            sh *= 1.0 - r;
+        }
+        if p_max > max_y {
+            let r = (p_max - max_y) / (p_max - p_min);
+            for pt in &mut p { if pt.y > max_y { pt.y = max_y; } }
+            sh *= 1.0 - r;
+        }
     }
 
     #[rustfmt::skip]
@@ -115,10 +155,21 @@ fn draw_tex_pts(res: &Resource, texture: Texture2D, order: i8, p: [Point; 4], co
     ];
     res.note_buffer
         .borrow_mut()
-        .push((order, texture.raw_miniquad_texture_handle().gl_internal_id()), vertices);
+        .push(
+            (
+                order,
+                { let gl = unsafe { get_internal_gl() };
+                    match unsafe { gl.quad_context.texture_raw_id(texture.raw_miniquad_id()) }
+                    {
+                        miniquad::RawId::OpenGl(id) => id,
+                    }
+                }
+            ),
+            vertices
+        );
 }
 
-fn draw_center(res: &Resource, tex: Texture2D, order: i8, scale: f32, color: Color) {
+fn draw_center(res: &Resource, tex: &Texture2D, order: i8, scale: f32, color: Color, clip_x_range: Option<(f32, f32)>, clip_y_range: Option<(f32, f32)>) {
     let hf = vec2(scale, tex.height() * scale / tex.width());
     draw_tex(
         res,
@@ -132,6 +183,8 @@ fn draw_center(res: &Resource, tex: Texture2D, order: i8, scale: f32, color: Col
             ..Default::default()
         },
         false,
+        clip_x_range,
+        clip_y_range,
     );
 }
 
@@ -325,13 +378,13 @@ impl Note {
                         return;
                     }
                 }
-                draw_center(res, tex, order, scale, color);
+                draw_center(res, &tex, order, scale, color, config.clip_x_range, config.clip_y_range);
             });
         };
         match self.kind {
             NoteKind::Click => {
                 if self.fake && res.time >= self.time { return };
-                draw(res, *style.click);
+                draw(res, Texture2D::clone(&style.click));
             }
             NoteKind::Hold { end_time, end_height, end_speed } => {
                 if self.fake && res.time >= end_time { return };
@@ -384,11 +437,11 @@ impl Note {
                     // body
                     draw_tex(
                         res,
-                        **(if res.res_pack.info.hold_repeat {
+                        if res.res_pack.info.hold_repeat {
                             style.hold_body.as_ref().unwrap()
                         } else {
                             tex
-                        }),
+                        },
                         order,
                         -scale,
                         body_y,
@@ -409,6 +462,8 @@ impl Note {
                             ..Default::default()
                         },
                         clip,
+                        config.clip_x_range,
+                        config.clip_y_range,
                     );
                     // head
                     if res.time < self.time || res.res_pack.info.hold_keep_head {
@@ -417,7 +472,7 @@ impl Note {
                         let head_y = if flip_y { bottom as f32 + hf.y * 2. } else { bottom as f32 };
                         draw_tex(
                             res,
-                            **tex,
+                            tex,
                             order,
                             -scale,
                             head_y - if res.res_pack.info.hold_compact { hf.y } else { hf.y * 2. },
@@ -429,6 +484,8 @@ impl Note {
                                 ..Default::default()
                             },
                             clip,
+                            config.clip_x_range,
+                            config.clip_y_range,
                         );
                     }
                     // tail
@@ -440,7 +497,7 @@ impl Note {
                     let tail_y = if flip_y { top as f32 - hf.y * 2. } else { top as f32 };
                     draw_tex(
                         res,
-                        **tex,
+                        tex,
                         order,
                         -scale,
                         tail_y - if res.res_pack.info.hold_compact { hf.y } else { 0. },
@@ -452,16 +509,18 @@ impl Note {
                             ..Default::default()
                         },
                         clip,
+                        config.clip_x_range,
+                        config.clip_y_range,
                     );
                 });
             }
             NoteKind::Flick => {
                 if self.fake && res.time >= self.time { return };
-                draw(res, *style.flick);
+                draw(res, Texture2D::clone(&style.flick));
             }
             NoteKind::Drag => {
                 if self.fake && res.time >= self.time { return };
-                draw(res, *style.drag);
+                draw(res, Texture2D::clone(&style.drag));
             }
         }
         if res.config.chart_debug_note > 0. {
@@ -542,14 +601,16 @@ impl BadNote {
             draw_center(
                 res,
                 match &self.kind {
-                    NoteKind::Click => *style.click,
-                    NoteKind::Drag => *style.drag,
-                    NoteKind::Flick => *style.flick,
+                    NoteKind::Click => &style.click,
+                    NoteKind::Drag => &style.drag,
+                    NoteKind::Flick => &style.flick,
                     _ => unreachable!(),
                 },
                 self.kind.order(),
                 res.note_width,
                 Color::new(0.423529, 0.262745, 0.262745, ((self.time - res.time).max(-1.) / BAD_TIME + 1.) as f32),
+                None,
+                None,
             );
         });
         true

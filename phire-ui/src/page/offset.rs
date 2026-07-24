@@ -1,6 +1,5 @@
 phire::tl_file!("offset");
 
-use std::collections::VecDeque;
 use super::{Page, SharedState};
 use crate::{get_data, get_data_mut, save_data};
 use anyhow::{Context, Result};
@@ -9,9 +8,10 @@ use phire::{
     core::ResourcePack,
     ext::{create_audio_manger, get_latency, push_frame_time, screen_aspect, semi_black, RectExt},
     time::TimeManager,
-    ui::{Slider, Ui}
+    ui::{Slider, Ui},
 };
 use sasa::{AudioClip, AudioManager, Music, MusicParams, PlaySfxParams, Sfx};
+use std::collections::VecDeque;
 
 pub struct OffsetPage {
     audio: AudioManager,
@@ -118,10 +118,7 @@ impl Page for OffsetPage {
         }
         let x = touch.position.x;
         let y = touch.position.y * screen_aspect();
-        if touch.phase == TouchPhase::Started
-            && (-0.97..0.97).contains(&x)
-            && (-0.60..0.00).contains(&y)
-        {
+        if touch.phase == TouchPhase::Started && (-0.97..0.97).contains(&x) && (-0.60..0.00).contains(&y) {
             self.touched = true;
         }
         Ok(false)
@@ -200,9 +197,11 @@ impl Page for OffsetPage {
                     }
                 }
                 self.touched = false;
-                self.cali_hit.play(PlaySfxParams {
-                    amplifier: config.volume_sfx,
-                }).unwrap();
+                self.cali_hit
+                    .play(PlaySfxParams {
+                        amplifier: config.volume_sfx,
+                    })
+                    .unwrap();
             }
 
             if let Some((latency, time)) = self.touch {

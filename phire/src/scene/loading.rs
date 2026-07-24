@@ -93,7 +93,7 @@ impl LoadingScene {
             .map(|(ill, back)| (ill.into(), back.into()))
             .unwrap_or_else(|| (BLACK_TEXTURE.clone(), BLACK_TEXTURE.clone()));
         if info.tip.is_none() {
-            let tips_file = load_file(format!("tips.txt").as_str()).await?;
+            let tips_file = load_file("tips.txt".to_string().as_str()).await?;
             let tips = String::from_utf8_lossy(&tips_file)
                 .lines()
                 .map(|line| line.to_string())
@@ -149,18 +149,18 @@ impl Scene for LoadingScene {
 
     fn render(&mut self, tm: &mut TimeManager, ui: &mut Ui) -> Result<()> {
         let cam = ui.camera();
-        let asp = -cam.zoom.y;
+        let asp = cam.zoom.y;
         let top = 1. / asp;
         let now = tm.now();
         let intern = unsafe { get_internal_gl() };
         let gl = intern.quad_gl;
         set_camera(&Camera2D {
-            zoom: vec2(1., -asp),
-            render_target: self.target,
+            zoom: vec2(1., asp),
+            render_target: self.target.clone(),
             ..Default::default()
         });
         if self.config.render_bg {
-            draw_background(*self.background, self.config.render_bg_dim);
+            draw_background(&self.background, self.config.render_bg_dim);
         }
         let dx = if now > self.finish_time {
             let p = ((now - self.finish_time) / TRANSITION_TIME).min(1.);
@@ -173,7 +173,7 @@ impl Scene for LoadingScene {
         }
         let vo = -top / 10.;
         let voi = -top / 8.5;
-        let r = draw_illustration(*self.illustration, 0.380, voi, 1.03, 1.0, WHITE, false);
+        let r = draw_illustration(&self.illustration, 0.380, voi, 1.03, 1.0, WHITE, false);
         let h = r.h / 3.55;
         let main: Rect = Rect::new(-0.87, vo - h / 2. - top / 10., 0.768, h);
         draw_parallelogram(main, None, Color::new(0., 0., 0., 0.6), false);
@@ -190,7 +190,7 @@ impl Scene for LoadingScene {
         ct.y += sub.h * 0.05;
         draw_parallelogram(sub, None, WHITE, true);
         //draw_text_aligned(ui, &(self.info.difficulty as u32).to_string(), ct.x, ct.y + sub.h * 0.05, (0.5, 1.), 0.88, BLACK);
-        if self.config.difficulty.len() > 0 {
+        if !self.config.difficulty.is_empty() {
             draw_text_aligned_opt(ui, &self.config.difficulty, ct.x, ct.y + sub.h * 0.05, (0.5, 1.), 0.90, BLACK, main.w * 0.18, main.h * 0.6);
         } else {
             let first_str = Regex::new(r"[0-9?]+").unwrap();
@@ -225,9 +225,9 @@ impl Scene for LoadingScene {
         let t = draw_text_aligned(ui, text_illustration, t.x - w, t.y + t.h + h, (0., 0.), 0.253, WHITE);
         draw_text_aligned_opt_width(ui, &self.info.illustrator, t.x - 0.002, t.y + top / 22., (0., 0.), 0.415, WHITE, 0.58);
         let text_tip = self.info.tip.as_ref().unwrap();
-        draw_text_aligned_opt_width(ui, &text_tip, -0.895, top * 0.88, (0., 1.), 0.47, WHITE, 1.55);
+        draw_text_aligned_opt_width(ui, text_tip, -0.895, top * 0.88, (0., 1.), 0.47, WHITE, 1.55);
         let text_loading = if self.config.chinese {"加载中..."} else {"Loading..."};
-        let t = draw_text_aligned(ui, &text_loading, 0.865, top * 0.865, (1., 1.), 0.41, WHITE);
+        let t = draw_text_aligned(ui, text_loading, 0.865, top * 0.865, (1., 1.), 0.41, WHITE);
         let we = 0.19;
         let he = 0.35;
         let r = Rect::new(t.x - t.w * we, t.y - t.h * he, t.w * (1. + we * 2.2), t.h * (1. + he * 2.2));
@@ -241,9 +241,9 @@ impl Scene for LoadingScene {
         let mut r = Rect::new(r.x + r.w * st, r.y, r.w * (en - st), r.h);
         ui.fill_rect(r, WHITE);
         r.x += dx as f32;
-        ui.scissor(Some(r));
-        draw_text_aligned(ui, text_loading, 0.865, top * 0.865, (1., 1.), 0.41, BLACK);
-        ui.scissor(None);
+        ui.scissor(r, |ui| {
+            draw_text_aligned(ui, text_loading, 0.865, top * 0.865, (1., 1.), 0.41, BLACK);
+        });
 
         if dx != 0. {
             gl.pop_model_matrix();
