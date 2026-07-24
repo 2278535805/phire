@@ -564,9 +564,9 @@ pub fn update_gravity(x: f64, y: f64, z: f64) {
 
 #[cfg(target_env = "ohos")]
 #[napi]
-pub fn update_gyroscope(x: f64, y: f64, z: f64, timestamp: u32) {
+pub fn update_gyroscope(x: f64, y: f64, z: f64, timestamp: i64) {
     GYRO.lock().unwrap().update_gyroscope(GyroData {
         angular_velocity: Vector3::new(x as f32, y as f32, z as f32),
-        timestamp: Duration::from_micros(timestamp as u64),
+        timestamp: Duration::from_nanos(timestamp as u64),
     });
 }

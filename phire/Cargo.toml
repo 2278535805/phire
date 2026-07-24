@@ -84,6 +84,7 @@ sasa = { workspace = true, default-features = false, features = ["oboe"] }
 
 [target.'cfg(target_env = "ohos")'.dependencies]
 sasa = { workspace = true, default-features = false, features = ["ohos"] }
+inputbox = { workspace = true }
 
 [target.'cfg(not(any(target_os = "android", target_env = "ohos")))'.dependencies]
 sasa = { workspace = true, default-features = false, features = ["cpal"] }

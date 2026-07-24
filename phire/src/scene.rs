@@ -195,6 +195,17 @@ pub fn request_input_full(id: impl Into<String>, #[allow(unused_variables)] text
                     completion: 0 as ObjcId
                 ];
             }
+        } else if #[cfg(target_env = "ohos")] {
+            use inputbox::{InputBox, InputMode};
+            let input = InputBox::new()
+                .title(title)
+                .default_text(text)
+                .mode(if is_password { InputMode::Password } else { InputMode::Text });
+            input.show_async(|result| {
+                if let Ok(Some(text)) = result {
+                    INPUT_TEXT.lock().unwrap().1 = Some(text);
+                }
+            }).ok();
         } else {
             INPUT_TEXT.lock().unwrap().1 = Some(macroquad::miniquad::window::clipboard_get().unwrap_or_default());
             show_message(ttl!("pasted")).ok();
