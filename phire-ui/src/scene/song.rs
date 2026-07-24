@@ -963,20 +963,25 @@ impl SongScene {
                 id: it.id,
                 rks: it.rks,
             });
-            let play_session = if chart_guid.is_some() && get_data().tokens.is_some() {
-                Some(crate::inner::start_play(chart_guid.as_ref().unwrap()).await?)
-            } else {
-                None
-            };
-            let upload_fn: Option<UploadFn> = if let Some(session) = play_session {
+            let upload_fn: Option<UploadFn> = if chart_guid.is_some() && get_data().tokens.is_some() {
                 let chart_id = chart_guid.unwrap();
                 let player_id = get_data().me.as_ref().map(|it| it.id).unwrap();
+                let session_task = {
+                    let chart_id = chart_id.clone();
+                    Task::new(
+                        async move { crate::inner::start_play(chart_id).await.map_err(|e| e.to_string()) }
+                    )
+                };
                 let f: UploadFn = Arc::new(move |data| {
                     let chart_id = chart_id.clone();
-                    let session = session.clone();
+                    let session_task = session_task.clone();
                     Task::new(async move {
+                        let play_session = session_task
+                            .clone_result()
+                            .ok_or_else(|| anyhow!("play session not ready"))?
+                            .map_err(|e| anyhow!("{e}"))?;
                         let record = crate::inner::decode_record(&data)?;
-                        let result = crate::inner::upload_score(&session, &chart_id, &record, player_id).await;
+                        let result = crate::inner::upload_score(&play_session, &chart_id, &record, player_id).await;
                         let result = match result {
                             Ok(result) => result,
                             Err(err) => {
