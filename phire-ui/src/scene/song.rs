@@ -693,7 +693,7 @@ impl SongScene {
         self.ldb = None;
         self.ldb_task = Some(Task::new(async move {
             let resp: ResponseDto<Vec<Record>> = recv_raw(
-                Client::get(format!("/charts/{chart_id}/leaderboard")).query(&[("topRange", "15"), ("neighborhoodRange", "1")]),
+                Client::get(format!("/charts/{chart_id}/leaderboard")).query(&[("topRange", "25"), ("neighborhoodRange", "3")]),
             )
             .await?
             .json()
@@ -701,17 +701,17 @@ impl SongScene {
             let mut records = resp.data.unwrap_or_default();
             if ldb_std {
                 records.sort_by(|a, b| {
-                    a.std_deviation
-                        .partial_cmp(&b.std_deviation)
-                        .unwrap_or(std::cmp::Ordering::Equal)
-                        .then_with(|| b.accuracy.partial_cmp(&a.accuracy).unwrap_or(std::cmp::Ordering::Equal))
+                    a.std_deviation.total_cmp(&b.std_deviation)
+                        .then_with(|| b.accuracy.total_cmp(&a.accuracy))
+                        .then_with(|| b.score.cmp(&a.score))
                         .then_with(|| a.date_created.cmp(&b.date_created))
                 });
             } else {
                 records.sort_by(|a, b| {
-                    b.score
-                        .cmp(&a.score)
-                        .then_with(|| b.accuracy.partial_cmp(&a.accuracy).unwrap_or(std::cmp::Ordering::Equal))
+                    b.rks.total_cmp(&a.rks)
+                        .then_with(|| b.accuracy.total_cmp(&a.accuracy))
+                        .then_with(|| b.score.cmp(&a.score))
+                        .then_with(|| a.std_deviation.total_cmp(&b.std_deviation))
                         .then_with(|| a.date_created.cmp(&b.date_created))
                 });
             }
@@ -1152,7 +1152,7 @@ impl SongScene {
                     alt: Some(if self.ldb_std {
                         format!("{:.2}%", it.inner.accuracy * 100.)
                     } else {
-                        format!("{:.2}%", it.inner.accuracy * 100.)
+                        format!("{:.2}%", it.inner.rks)
                     }),
                     btn: &mut it.btn,
                 })
