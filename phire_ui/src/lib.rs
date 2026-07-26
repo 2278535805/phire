@@ -570,3 +570,27 @@ pub fn update_gyroscope(x: f64, y: f64, z: f64, timestamp: i64) {
         timestamp: Duration::from_nanos(timestamp as u64),
     });
 }
+
+#[cfg(target_env = "ohos")]
+#[napi]
+pub fn on_foreground() {
+    if let Some(tx) = ACTIVITY_LIFECYCLE.lock().unwrap().as_mut() {
+        let _ = tx.send(false);
+    }
+}
+
+#[cfg(target_env = "ohos")]
+#[napi]
+pub fn on_background() {
+    if let Some(tx) = ACTIVITY_LIFECYCLE.lock().unwrap().as_mut() {
+        let _ = tx.send(true);
+    }
+}
+
+#[cfg(target_env = "ohos")]
+#[napi]
+pub fn set_window_focus(has_focus: bool) {
+    if let Some(tx) = ACTIVITY_FOUCUS.lock().unwrap().as_mut() {
+        let _ = tx.send(!has_focus);
+    }
+}

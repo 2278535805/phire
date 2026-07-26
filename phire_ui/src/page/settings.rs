@@ -343,7 +343,7 @@ impl GeneralList {
             config.offline_mode ^= true;
             return Ok(Some(true));
         }
-        #[cfg(any(target_os = "windows", target_os = "linux"))]
+        #[cfg(all(any(target_os = "windows", target_os = "linux"), not(target_env = "ohos")))]
         if self.fullscreen_btn.touch(touch, t) {
             config.fullscreen_mode ^= true;
             macroquad::window::set_fullscreen(config.fullscreen_mode);
@@ -362,7 +362,6 @@ impl GeneralList {
             config.sample_count = if config.sample_count == 1 { 2 } else { 1 };
             return Ok(Some(true));
         }
-        #[cfg(not(target_env = "ohos"))]
         if self.low_resolution_btn.touch(touch, t) {
             config.low_resolution_mode ^= true;
             return Ok(Some(true));
@@ -413,7 +412,7 @@ impl GeneralList {
             render_title(ui, c, tl!("item-offline"), Some(tl!("item-offline-sub")));
             render_switch(ui, rr, t, c, &mut self.offline_btn, config.offline_mode);
         }
-        #[cfg(any(target_os = "windows", target_os = "linux"))]
+        #[cfg(all(any(target_os = "windows", target_os = "linux"), not(target_env = "ohos")))]
         item! {
             render_title(ui, c, tl!("item-fullscreen"), None);
             render_switch(ui, rr, t, c, &mut self.fullscreen_btn, config.fullscreen_mode);
@@ -435,7 +434,6 @@ impl GeneralList {
             render_title(ui, c, tl!("item-anti-aliasing"), None);
             render_switch(ui, rr, t, c, &mut self.anti_aliasing_btn, config.sample_count == 2);
         }
-        #[cfg(not(target_env = "ohos"))]
         item! {
             render_title(ui, c, tl!("item-low-resolution"), None);
             render_switch(ui, rr, t, c, &mut self.low_resolution_btn, config.low_resolution_mode);
