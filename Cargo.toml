@@ -17,10 +17,10 @@ opt-level = 2
 
 [workspace.dependencies]
 phire = { path = "phire" }
-macroquad = { path = "../macroquad" }
+macroquad = { git = "https://github.com/2278535805/macroquad" }
 phira-mp-client = { git = "https://github.com/TeamFlos/phira-mp" }
 phira-mp-common = { git = "https://github.com/TeamFlos/phira-mp" }
-sasa = { path = "../sasa", default-features = false }
+sasa = { git = "https://github.com/2278535805/sasa", default-features = false }
 
 anyhow = "1.0.78"
 arc-swap = "1.6.0"
