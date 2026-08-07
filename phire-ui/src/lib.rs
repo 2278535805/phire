@@ -220,6 +220,16 @@ async fn the_main() -> Result<()> {
     let mut exit_time = f64::INFINITY;
 
     'app: loop {
+        if main.paused() {
+            match activity_lifecycle.recv() {
+                Ok(false) => {
+                    main.resume()?;
+                }
+                _ => break 'app,
+            }
+            continue;
+        }
+
         let frame_start = tm.real_time();
         let res = || -> Result<()> {
             main.update()?;
