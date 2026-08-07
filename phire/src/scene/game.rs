@@ -13,7 +13,7 @@ use crate::{
     bin::BinaryReader,
     config::{Config, Mods},
     core::{BUFFER_SIZE, BadNote, Chart, ChartExtra, Effect, Point, Resource, UIElement},
-    ext::{RectExt, SafeTexture, draw_text_aligned, draw_text_aligned_opt_width, ease_in_out_quartic, get_latency, parse_time, push_frame_time, screen_aspect, semi_white, validate_combo},
+    ext::{RectExt, SafeTexture, draw_text_aligned, draw_text_aligned_opt_width, ease_in_out_quartic, get_audio_latency, parse_time, push_frame_time, screen_aspect, semi_white, validate_combo},
     fs::FileSystem,
     gyro::GYRO,
     info::{ChartFormat, ChartInfo},
@@ -403,7 +403,7 @@ impl GameScene {
             res.info.line_length *= 4000. / RPE_WIDTH / 6.;
         }
 
-        let offset = chart.offset + info_offset + res.config.offset;
+        let offset = chart.offset + info_offset;
         let exercise_range = offset + res.config.play_start_time..res.track_length;
         
         // Prepare extra sfx from chart.hitsounds
@@ -646,7 +646,7 @@ impl GameScene {
         };
         let hw = 0.003;
         let height = eps * 1.0;
-        let offset = self.chart.offset + self.info_offset + res.config.offset;
+        let offset = self.chart.offset + self.info_offset + res.config.audio_offset;
         let dest = (res.time - self.exercise_range.start + offset) / (self.exercise_range.end - self.exercise_range.start);
         let dest = (aspect_ratio * 2. * dest as f32).max(0.).min(aspect_ratio * 2.);
         if res.config.render_ui_bar {
@@ -807,7 +807,7 @@ impl GameScene {
                 let h = 0.06;
                 let eh = 0.12;
                 let rad = 0.03;
-                let sp = self.offset().min(0.);
+                let sp = self.offset_chart().min(0.);
                 ui.fill_rect(Rect::new(-hw, -h, hw * 2., h * 2.), Color::new(0.4, 0.4, 0.4, 1.));
                 let st = -hw + (self.exercise_range.start - sp) as f32 / (self.res.track_length - sp) as f32 * hw * 2.;
                 let en = -hw + (self.exercise_range.end - sp) as f32 / (self.res.track_length - sp) as f32 * hw * 2.;
@@ -933,8 +933,15 @@ impl GameScene {
         res.config.interactive && matches!(state, State::Playing)
     }
 
-    fn offset(&self) -> f64 {
-        self.chart.offset + self.info_offset + self.res.config.offset
+    fn offset(&self, speed: f64) -> f64 {
+        self.chart.offset +
+        self.info_offset +
+        (self.res.config.audio_offset +
+        if self.res.config.auto_tweak_offset {
+            get_audio_latency(&self.res.audio)
+        } else {
+            0.
+        }) * speed
     }
 
     fn offset_chart(&self) -> f64 {
@@ -1204,11 +1211,9 @@ impl Scene for GameScene {
         };
 
         let time = if self.mode == GameMode::TweakOffset {
-            time.max(0.) - self.offset_chart()
-        } else if self.res.config.auto_tweak_offset {
-            (time - self.offset() - get_latency(&self.res.audio, &self.res.frame_times)).max(0.)
+            (time - self.offset_chart()).max(0.)
         } else {
-            (time - self.offset()).max(0.)
+            (time - self.offset(self.res.config.speed as f64)).max(0.)
         };
         self.res.time = time;
         if !tm.paused() && (self.res.config.autoplay() || self.pause_rewind.time.is_none()) && self.mode != GameMode::View {
@@ -1300,7 +1305,7 @@ impl Scene for GameScene {
             effect.update(&self.res);
         }
         if let Some((id, text)) = take_input() {
-            let offset = self.offset().min(0.);
+            let offset = self.offset_chart().min(0.);
             match id.as_str() {
                 "exercise_start" => {
                     if let Some(t) = parse_time(&text) {

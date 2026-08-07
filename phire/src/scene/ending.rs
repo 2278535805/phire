@@ -188,7 +188,7 @@ impl Scene for EndingScene {
 
     fn update(&mut self, tm: &mut TimeManager) -> Result<()> {
         self.audio.recover_if_needed()?;
-        if !self.bgm_already_played && tm.now() >= EndingScene::BPM_WAIT_TIME - self.config.offset && self.target.is_none() && self.bgm.paused() {
+        if !self.bgm_already_played && tm.now() >= EndingScene::BPM_WAIT_TIME - self.config.audio_offset && self.target.is_none() && self.bgm.paused() {
             self.bgm.play()?;
             self.bgm_already_played = true;
         }

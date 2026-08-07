@@ -72,7 +72,8 @@ pub struct Config {
     pub offline_mode: bool,
     #[cfg(any(target_os = "windows", target_os = "linux"))]
     pub fullscreen_mode: bool,
-    pub offset: f64,
+    pub audio_offset: f64,
+    pub judge_offset: f64,
     pub particle: bool,
     pub player_name: String,
     pub player_rks: f32,
@@ -94,8 +95,7 @@ pub struct Config {
 
     // for compatibility
     pub autoplay: Option<bool>,
-
-    pub judge_offset: f64,
+    pub autoplay_judge_offset: f64,
 
     pub render_line: bool,
     pub render_line_extra: bool,
@@ -162,7 +162,8 @@ impl Default for Config {
             offline_mode: false,
             #[cfg(any(target_os = "windows", target_os = "linux"))]
             fullscreen_mode: false,
-            offset: 0.0,
+            audio_offset: 0.0,
+            judge_offset: 0.0,
             particle: true,
             player_name: "Guest".to_string(),
             player_rks: 15.,
@@ -183,8 +184,7 @@ impl Default for Config {
             enter_animation: true,
 
             autoplay: None,
-
-            judge_offset: 0.,
+            autoplay_judge_offset: 0.,
 
             render_line: true,
             render_line_extra: true,

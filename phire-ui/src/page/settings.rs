@@ -1,7 +1,7 @@
 phire::tl_file!("settings");
 
 use super::{NextPage, OffsetPage, Page, SharedState};
-use crate::{get_data, get_data_mut, popup::ChooseButton, save_data, scene::BGM_VOLUME_UPDATED, sync_data};
+use crate::{get_data, get_data_mut, page::offset::OffsetMode, popup::ChooseButton, save_data, scene::BGM_VOLUME_UPDATED, sync_data};
 use anyhow::Result;
 use macroquad::prelude::*;
 use phire::{
@@ -450,7 +450,8 @@ struct AudioList {
     music_slider: Slider,
     sfx_slider: Slider,
     bgm_slider: Slider,
-    cali_btn: DRectButton,
+    audio_offset_btn: DRectButton,
+    judge_offset_btn: DRectButton,
     #[cfg(target_os = "android")]
     audio_compatibility_btn: DRectButton,
 
@@ -465,7 +466,8 @@ impl AudioList {
             music_slider: Slider::new(0.0..2.0, 0.05),
             sfx_slider: Slider::new(0.0..2.0, 0.05),
             bgm_slider: Slider::new(0.0..2.0, 0.05),
-            cali_btn: DRectButton::new(),
+            judge_offset_btn: DRectButton::new(),
+            audio_offset_btn: DRectButton::new(),
             #[cfg(target_os = "android")]
             audio_compatibility_btn: DRectButton::new(),
 
@@ -498,8 +500,12 @@ impl AudioList {
             }
             return Ok(wt);
         }
-        if self.cali_btn.touch(touch, t) {
-            self.cali_task = Some(Box::pin(OffsetPage::new()));
+        if self.judge_offset_btn.touch(touch, t) {
+            self.cali_task = Some(Box::pin(OffsetPage::new(OffsetMode::Judge)));
+            return Ok(Some(false));
+        }
+        if self.audio_offset_btn.touch(touch, t) {
+            self.cali_task = Some(Box::pin(OffsetPage::new(OffsetMode::Audio)));
             return Ok(Some(false));
         }
         #[cfg(target_os = "android")]
@@ -556,8 +562,12 @@ impl AudioList {
             self.bgm_slider.render(ui, rr, t, c, config.volume_bgm, format!("{:.2}", config.volume_bgm));
         }
         item! {
-            render_title(ui, c, tl!("item-cali"), None);
-            self.cali_btn.render_text(ui, rr, t, c.a, format!("{:.0}ms", config.offset * 1000.), 0.5, true);
+            render_title(ui, c, tl!("item-judge-offset"), None);
+            self.judge_offset_btn.render_text(ui, rr, t, c.a, format!("{:.0}ms", config.judge_offset * 1000.), 0.5, true);
+        }
+        item! {
+            render_title(ui, c, tl!("item-audio-offset"), None);
+            self.audio_offset_btn.render_text(ui, rr, t, c.a, format!("{:.0}ms", config.audio_offset * 1000.), 0.5, true);
         }
         #[cfg(target_os = "android")]
         item! {

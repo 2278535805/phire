@@ -1,7 +1,5 @@
 use crate::{
-    config::Config,
-    core::{BadNote, Chart, NOTE_WIDTH_RATIO_BASE, Note, NoteKind, Point, Resource, Vector},
-    ext::{NotNanExt, get_viewport},
+    config::Config, core::{BadNote, Chart, NOTE_WIDTH_RATIO_BASE, Note, NoteKind, Point, Resource, Vector}, ext::{NotNanExt, get_frame_latency, get_viewport},
 };
 use macroquad::prelude::{
     utils::{register_input_subscriber, repeat_all_miniquad_input},
@@ -449,7 +447,11 @@ impl Judge {
 
         let uptime = get_uptime();
 
-        let t = res.time;
+        let t = if res.config.auto_tweak_offset {
+            res.time - (res.config.judge_offset + get_frame_latency(&res.frame_times)) * res.config.speed as f64
+        } else {
+            res.time - res.config.judge_offset * res.config.speed as f64
+        };
         // TODO optimize
         let mut touches: HashMap<u64, Touch> = {
             let mut touches: Vec<Touch> = touches().into_iter().map(|t| Touch { id: t.id, phase: t.phase, position: t.position, time: f64::NEG_INFINITY }).collect();
@@ -962,7 +964,7 @@ impl Judge {
     }
 
     fn auto_play_update(&mut self, res: &mut Resource, chart: &mut Chart) {
-        let t = res.time - res.config.judge_offset;
+        let t = res.time - res.config.autoplay_judge_offset;
         let (judge_type, judge_type_hold, judge_time, fx_color) = if res.config.all_bad {
             (Judgement::Bad, Judgement::Good, LIMIT_BAD, Color::new(0., 0., 0., 0.))
         } else if res.config.all_good {
