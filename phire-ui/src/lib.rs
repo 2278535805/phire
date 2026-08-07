@@ -225,9 +225,9 @@ async fn the_main() -> Result<()> {
                 Ok(false) => {
                     main.resume()?;
                 }
-                _ => break 'app,
+                Ok(true) => {}
+                Err(_) => break 'app,
             }
-            continue;
         }
 
         let frame_start = tm.real_time();
