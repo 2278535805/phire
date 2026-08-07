@@ -151,6 +151,16 @@ impl Scene for LoadingScene {
         Ok(())
     }
 
+    fn pause(&mut self, tm: &mut TimeManager) -> Result<()> {
+        tm.pause();
+        Ok(())
+    }
+
+    fn resume(&mut self, tm: &mut TimeManager) -> Result<()> {
+        tm.resume();
+        Ok(())
+    }
+
     fn render(&mut self, tm: &mut TimeManager, ui: &mut Ui) -> Result<()> {
         let cam = ui.camera();
         let asp = cam.zoom.y;
