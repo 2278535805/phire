@@ -232,6 +232,13 @@ async fn the_main() -> Result<()> {
 
         let frame_start = tm.real_time();
         let res = || -> Result<()> {
+            if let Ok(paused) = activity_foucus.try_recv() {
+                if paused {
+                    main.foucus_pause()?;
+                } else {
+                    main.foucus_resume()?;
+                }
+            }
             main.update()?;
             main.render(&mut painter)?;
             if let Ok(paused) = activity_lifecycle.try_recv() {
@@ -239,12 +246,6 @@ async fn the_main() -> Result<()> {
                     main.pause()?;
                 } else {
                     main.resume()?;
-                }
-            } else if let Ok(paused) = activity_foucus.try_recv() {
-                if paused {
-                    main.foucus_pause()?;
-                } else {
-                    main.foucus_resume()?;
                 }
             }
             Ok(())
