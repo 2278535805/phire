@@ -41,6 +41,7 @@ inner.rs
 # OHOS
 /phire_ui/dist/
 /*/target
+/build_ohos.sh
 
 # Test
 
