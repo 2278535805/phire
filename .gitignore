@@ -40,7 +40,7 @@ inner.rs
 
 # OHOS
 /phire_ui/dist/
-/phire_ui/target/ohrs/cmake/
+/phire_ui/target/ohrs/cmake/ohos-aarch64-unknown-linux-ohos.toolchain.cmake
 
 # Test
 
