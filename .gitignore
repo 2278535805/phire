@@ -40,7 +40,7 @@ inner.rs
 
 # OHOS
 /phire_ui/dist/
-/phire_ui/target/
+/phire_ui/target/ohrs/cmake/
 
 # Test
 
