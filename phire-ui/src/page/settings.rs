@@ -1,6 +1,6 @@
 phire::tl_file!("settings");
 
-use super::{NextPage, OffsetPage, Page, SharedState};
+use super::{LatencyPage, NextPage, OffsetPage, Page, SharedState};
 use crate::{get_data, get_data_mut, page::offset::OffsetMode, popup::ChooseButton, save_data, scene::BGM_VOLUME_UPDATED, sync_data};
 use anyhow::Result;
 use macroquad::prelude::*;
@@ -455,7 +455,10 @@ struct AudioList {
     #[cfg(target_os = "android")]
     audio_compatibility_btn: DRectButton,
 
+    latency_btn: DRectButton,
+
     cali_task: LocalTask<Result<OffsetPage>>,
+    latency_task: LocalTask<Result<LatencyPage>>,
     next_page: Option<NextPage>,
 }
 
@@ -468,10 +471,12 @@ impl AudioList {
             bgm_slider: Slider::new(0.0..2.0, 0.05),
             judge_offset_btn: DRectButton::new(),
             audio_offset_btn: DRectButton::new(),
+            latency_btn: DRectButton::new(),
             #[cfg(target_os = "android")]
             audio_compatibility_btn: DRectButton::new(),
 
             cali_task: None,
+            latency_task: None,
             next_page: None,
         }
     }
@@ -508,6 +513,10 @@ impl AudioList {
             self.cali_task = Some(Box::pin(OffsetPage::new(OffsetMode::Audio)));
             return Ok(Some(false));
         }
+        if self.latency_btn.touch(touch, t) {
+            self.latency_task = Some(Box::pin(LatencyPage::new()));
+            return Ok(Some(false));
+        }
         #[cfg(target_os = "android")]
         if self.audio_compatibility_btn.touch(touch, t) {
             config.audio_compatibility ^= true;
@@ -526,6 +535,17 @@ impl AudioList {
                     }
                 }
                 self.cali_task = None;
+            }
+        }
+        if let Some(task) = &mut self.latency_task {
+            if let Some(res) = poll_future(task.as_mut()) {
+                match res {
+                    Err(err) => show_error(err.context(tl!("load-latency-failed"))),
+                    Ok(page) => {
+                        self.next_page = Some(NextPage::Overlay(Box::new(page)));
+                    }
+                }
+                self.latency_task = None;
             }
         }
         Ok(false)
@@ -568,6 +588,10 @@ impl AudioList {
         item! {
             render_title(ui, c, tl!("item-audio-offset"), None);
             self.audio_offset_btn.render_text(ui, rr, t, c.a, format!("{:.0}ms", config.audio_offset * 1000.), 0.5, true);
+        }
+        item! {
+            render_title(ui, c, tl!("item-latency-test"), None);
+            self.latency_btn.render_text(ui, rr, t, c.a, ">", 0.5, true);
         }
         #[cfg(target_os = "android")]
         item! {

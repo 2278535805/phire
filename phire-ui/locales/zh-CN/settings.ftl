@@ -76,7 +76,9 @@ item-health-mode-example = 生存模式示例
 item-max-health = 最大血量
 item-initial-health = 初始血量
 
+item-latency-test = 延迟测试
 load-cali-failed = 加载音频失败
+load-latency-failed = 加载延迟测试失败
 not-combo = 不能是 COMBO
 illegal-input = 非法输入
 

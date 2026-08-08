@@ -2541,6 +2541,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "parking_lot"
+version = "0.12.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "93857453250e3077bd71ff98b6a65ea6621a19bb0f559a85248955ac12c45a1a"
+dependencies = [
+ "lock_api",
+ "parking_lot_core",
+]
+
+[[package]]
 name = "parking_lot_core"
 version = "0.9.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3292,12 +3302,13 @@ dependencies = [
 [[package]]
 name = "sasa"
 version = "0.1.0"
-source = "git+https://github.com/2278535805/sasa#95f14a9853278c6acd69422db2eb546763422575"
+source = "git+https://github.com/2278535805/sasa#44f375e95305a1bee5a57d0ebc900292550e6e1c"
 dependencies = [
  "anyhow",
  "atomic_float",
  "cpal",
  "oboe",
+ "parking_lot",
  "ringbuf",
  "symphonia",
  "thiserror 2.0.18",

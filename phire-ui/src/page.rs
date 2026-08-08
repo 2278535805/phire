@@ -12,6 +12,9 @@ pub use library::LibraryPage;
 
 mod message;
 
+mod latency;
+pub use latency::LatencyPage;
+
 mod offset;
 pub use offset::OffsetPage;
 

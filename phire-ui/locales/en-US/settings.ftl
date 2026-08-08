@@ -77,7 +77,9 @@ item-health-mode-sub = classic | comboHeal | speedBased
 item-max-health = Max Health
 item-initial-health = Initial Health
 
+item-latency-test = Tap to Tone Latency
 load-cali-failed = Failed to load audio
+load-latency-failed = Failed to load latency test
 not-combo = Cannot be COMBO
 illegal-input = Illegal input
 
