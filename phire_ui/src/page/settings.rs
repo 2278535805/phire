@@ -357,7 +357,6 @@ impl GeneralList {
             self.mp_addr_input.activate(&config.mp_address, false, false);
             return Ok(Some(true));
         }
-        #[cfg(not(target_env = "ohos"))]
         if self.anti_aliasing_btn.touch(touch, t) {
             config.sample_count = if config.sample_count == 1 { 2 } else { 1 };
             return Ok(Some(true));
