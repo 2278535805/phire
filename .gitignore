@@ -4,7 +4,7 @@ inner.rs
 /.idea
 /http-cacache
 /prpr/build.rs
-/target/*
+/target
 /assets/charts
 /assets/texture
 /wbindgen
@@ -40,6 +40,7 @@ inner.rs
 
 # OHOS
 /phire_ui/dist/
+/phire_ui/target/
 
 # Test
 
