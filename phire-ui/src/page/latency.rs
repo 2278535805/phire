@@ -570,16 +570,16 @@ impl Page for LatencyPage {
                                 .pos(ct.x, y)
                                 .anchor(0.5, 0.)
                                 .size(0.35)
-                                .color(Color::new(0.10, 0.50, 0.10, c.a))
+                                .color(Color::new(0.3, 1., 0.4, c.a))
                                 .draw();
-                        } else if avg < 70. && diff < 20. {
+                        } else if avg < 80. && diff < 20. {
                             ui.text(tl!("level-2"))
                                 .pos(ct.x, y)
                                 .anchor(0.5, 0.)
                                 .size(0.35)
-                                .color(Color::new(0.3, 1., 0.4, c.a))
+                                .color(Color::new(0.5, 0.9, 0.3, c.a))
                                 .draw();
-                        } else if avg < 120. && diff < 30. {
+                        } else if avg < 150. && diff < 30. {
                             ui.text(tl!("level-3"))
                                 .pos(ct.x, y)
                                 .anchor(0.5, 0.)
