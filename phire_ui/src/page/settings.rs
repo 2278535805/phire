@@ -428,7 +428,6 @@ impl GeneralList {
                 self.mp_addr_btn.render_text(ui, rr, t, c.a, &config.mp_address, 0.4, false);
             }
         }
-        #[cfg(not(target_env = "ohos"))]
         item! {
             render_title(ui, c, tl!("item-anti-aliasing"), None);
             render_switch(ui, rr, t, c, &mut self.anti_aliasing_btn, config.sample_count == 2);
@@ -454,8 +453,6 @@ struct AudioList {
     cali_btn: DRectButton,
     #[cfg(target_os = "android")]
     audio_compatibility_btn: DRectButton,
-    #[cfg(target_env = "ohos")]
-    audio_buffer_size_btn: DRectButton,
 
     cali_task: LocalTask<Result<OffsetPage>>,
     next_page: Option<NextPage>,
@@ -471,8 +468,6 @@ impl AudioList {
             cali_btn: DRectButton::new(),
             #[cfg(target_os = "android")]
             audio_compatibility_btn: DRectButton::new(),
-            #[cfg(target_env = "ohos")]
-            audio_buffer_size_btn: DRectButton::new(),
 
             cali_task: None,
             next_page: None,
@@ -510,15 +505,6 @@ impl AudioList {
         #[cfg(target_os = "android")]
         if self.audio_compatibility_btn.touch(touch, t) {
             config.audio_compatibility ^= true;
-            return Ok(Some(true));
-        }
-        #[cfg(target_env = "ohos")]
-        if self.audio_buffer_size_btn.touch(touch, t) {
-            config.audio_buffer_size = Some(match config.audio_buffer_size {
-                Some(128) => 256,
-                Some(256) => 512,
-                _ => 128,
-            });
             return Ok(Some(true));
         }
         Ok(None)
