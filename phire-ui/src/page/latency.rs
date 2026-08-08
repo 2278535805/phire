@@ -9,7 +9,7 @@ use phire::{
     time::TimeManager,
     ui::Ui,
 };
-use sasa::{AudioClip, AudioManager, AudioRecorder, PlaySfxParams, Recorder, Renderer, Sfx};
+use sasa::{AudioManager, AudioRecorder, Recorder, Renderer};
 use std::{
     collections::VecDeque,
     sync::{Arc, Mutex, atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering}},
@@ -160,7 +160,6 @@ enum AnalysisPhase {
 
 pub struct LatencyPage {
     audio: AudioManager,
-    cali_hit: Sfx,
 
     recorder: Option<AudioRecorder>,
     trigger: Arc<AtomicBool>,
@@ -191,7 +190,6 @@ pub struct LatencyPage {
     latency_values: Vec<f64>,
     unreliable: bool,
 
-    touched: bool,
     frame_times: VecDeque<f64>,
 }
 
@@ -199,7 +197,6 @@ impl LatencyPage {
     pub async fn new() -> Result<Self> {
         let config = &get_data().config;
         let mut audio = create_audio_manger(config)?;
-        let cali_hit = audio.create_sfx(AudioClip::new(load_file("cali_hit.ogg").await?)?, None)?;
 
         let trigger = Arc::new(AtomicBool::new(false));
         let sample_count = Arc::new(AtomicU64::new(0));
@@ -208,7 +205,6 @@ impl LatencyPage {
 
         let beep = BeepRenderer::new(trigger.clone(), sample_count.clone(), 1000.0);
         audio.add_renderer(beep)?;
-        audio.start()?;
 
         let buffer = Arc::new(Mutex::new(RingBuffer::new(48000 * 5)));
 
@@ -219,7 +215,6 @@ impl LatencyPage {
 
         Ok(Self {
             audio,
-            cali_hit,
             recorder,
             trigger,
             sample_count,
@@ -244,7 +239,6 @@ impl LatencyPage {
             latency_max: 0.0,
             latency_values: Vec::new(),
             unreliable: false,
-            touched: false,
             frame_times: VecDeque::new(),
         })
     }
@@ -386,7 +380,7 @@ impl Page for LatencyPage {
         let y = touch.position.y * screen_aspect();
         if touch.phase == TouchPhase::Started && (-0.95..0.95).contains(&x) && (-0.50..0.95).contains(&y)
         {
-            self.touched = true;
+            self.trigger_measurement();
         }
         Ok(false)
     }
@@ -414,17 +408,6 @@ impl Page for LatencyPage {
                     self.analyze();
                 }
             }
-        }
-
-        if self.touched {
-            self.touched = false;
-            let config = &get_data().config;
-            self.cali_hit
-                .play(PlaySfxParams {
-                    amplifier: config.volume_sfx,
-                })
-                .ok();
-            self.trigger_measurement();
         }
 
         if is_key_pressed(KeyCode::Space) {
@@ -736,7 +719,6 @@ fn create_recorder(
         let mut recorder = AudioRecorder::new(OboeRecorderBackend::new(OboeSettings::default()))?;
         let tap_rec = TapRecorder::new(buffer, position, sample_rate);
         recorder.add_recorder(tap_rec)?;
-        recorder.start()?;
         Ok(recorder)
     }
     #[cfg(not(target_os = "android"))]
@@ -745,7 +727,6 @@ fn create_recorder(
         let mut recorder = AudioRecorder::new(CpalRecorderBackend::new(CpalSettings::default()))?;
         let tap_rec = TapRecorder::new(buffer, position, sample_rate);
         recorder.add_recorder(tap_rec)?;
-        recorder.start()?;
         Ok(recorder)
     }
 }
