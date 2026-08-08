@@ -470,6 +470,36 @@ pub unsafe extern "C" fn Java_quad_1native_QuadNative_setInputText(_: *mut std::
     INPUT_TEXT.lock().unwrap().1 = Some(string_from_java(env, text));
 }
 
+#[cfg(target_os = "android")]
+pub fn check_record_audio_permission() -> bool {
+    unsafe {
+        let env = miniquad::native::attach_jni_env();
+        let ctx = ndk_context::android_context().context();
+        let class = (**env).GetObjectClass.unwrap()(env, ctx);
+        let method =
+            (**env).GetMethodID.unwrap()(env, class, b"checkRecordAudioPermission\0".as_ptr() as _, b"()Z\0".as_ptr() as _);
+        (**env).CallBooleanMethod.unwrap()(env, ctx, method) != 0
+    }
+}
+
+#[cfg(target_os = "android")]
+pub fn request_record_audio_permission() {
+    unsafe {
+        let env = miniquad::native::attach_jni_env();
+        let ctx = ndk_context::android_context().context();
+        let class = (**env).GetObjectClass.unwrap()(env, ctx);
+        let method =
+            (**env).GetMethodID.unwrap()(env, class, b"requestRecordAudioPermission\0".as_ptr() as _, b"()V\0".as_ptr() as _);
+        (**env).CallVoidMethod.unwrap()(env, ctx, method);
+    }
+}
+
+#[cfg(not(target_os = "android"))]
+pub fn check_record_audio_permission() -> bool { true }
+
+#[cfg(not(target_os = "android"))]
+pub fn request_record_audio_permission() {}
+
 #[cfg(not(all(target_os = "android", feature = "aa")))]
 pub fn anti_addiction_action(_action: &str, _arg: Option<String>) {}
 

@@ -1,7 +1,7 @@
 phire::tl_file!("settings");
 
 use super::{LatencyPage, NextPage, OffsetPage, Page, SharedState};
-use crate::{get_data, get_data_mut, page::offset::OffsetMode, popup::ChooseButton, save_data, scene::BGM_VOLUME_UPDATED, sync_data};
+use crate::{get_data, get_data_mut, page::offset::OffsetMode, popup::ChooseButton, save_data, scene::BGM_VOLUME_UPDATED, sync_data, check_record_audio_permission, request_record_audio_permission};
 use anyhow::Result;
 use macroquad::prelude::*;
 use phire::{
@@ -514,6 +514,12 @@ impl AudioList {
             return Ok(Some(false));
         }
         if self.latency_btn.touch(touch, t) {
+            #[cfg(target_os = "android")]
+            if !check_record_audio_permission() {
+                request_record_audio_permission();
+                show_message(tl!("permission-required")).error();
+                return Ok(Some(false));
+            }
             self.latency_task = Some(Box::pin(LatencyPage::new()));
             return Ok(Some(false));
         }

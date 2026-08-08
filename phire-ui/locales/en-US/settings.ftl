@@ -80,6 +80,7 @@ item-initial-health = Initial Health
 item-latency-test = Tap to Tone Latency
 load-cali-failed = Failed to load audio
 load-latency-failed = Failed to load latency test
+permission-required = Permissions denied
 not-combo = Cannot be COMBO
 illegal-input = Illegal input
 
