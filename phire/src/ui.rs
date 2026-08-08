@@ -1205,11 +1205,7 @@ fn build_audio() -> AudioManager {
     #[cfg(target_env = "ohos")]
     {
         use sasa::backend::ohos::*;
-        AudioManager::new(OhosBackend::new(OhosSettings {
-            buffer_size: Some(512),
-            sample_rate: Some(48000),
-            channels: 2,
-        }))
+        AudioManager::new(OhosBackend::new(OhosSettings::default()))
         .unwrap()
     }
     #[cfg(not(any(target_os = "android", target_env = "ohos")))]

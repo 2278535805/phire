@@ -454,11 +454,7 @@ pub fn create_audio_manger(config: &Config) -> Result<AudioManager> {
     #[cfg(target_os = "android")]
     {
         use sasa::backend::oboe::*;
-        let sharing_mode = if config.audio_compatibility {
-            SharingMode::Shared
-        } else {
-            SharingMode::Exclusive
-        };
+        let sharing_mode = if config.audio_compatibility { SharingMode::Shared } else { SharingMode::Exclusive };
         let usage = if config.audio_compatibility { Usage::Media } else { Usage::Game };
         AudioManager::new(OboeBackend::new(OboeSettings {
             buffer_size: config.audio_buffer_size,
@@ -472,9 +468,8 @@ pub fn create_audio_manger(config: &Config) -> Result<AudioManager> {
     {
         use sasa::backend::ohos::*;
         AudioManager::new(OhosBackend::new(OhosSettings {
-            sample_rate: Some(44100),
-            buffer_size: config.audio_buffer_size.or(Some(256)),
-            channels: 2,
+            buffer_size: config.audio_buffer_size,
+            ..Default::default()
         }))
     }
     #[cfg(not(any(target_os = "android", target_env = "ohos")))]
