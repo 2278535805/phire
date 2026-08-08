@@ -158,13 +158,8 @@ fn draw_tex_pts(res: &Resource, texture: &Texture2D, order: i8, mut p: [Point; 4
         .push(
             (
                 order,
-                { let gl = unsafe { get_internal_gl() };
-                    match unsafe { gl.quad_context.texture_raw_id(texture.raw_miniquad_id()) }
-                    {
-                        miniquad::RawId::OpenGl(id) => id,
-                        _ => todo!(),
-                    }
-                }
+                match unsafe { get_internal_gl().quad_context.texture_raw_id(texture.raw_miniquad_id()) }
+                { macroquad::miniquad::RawId::OpenGl(id) => id }
             ),
             vertices
         );

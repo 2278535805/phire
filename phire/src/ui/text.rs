@@ -283,7 +283,7 @@ impl TextPainter {
                         flushed = true;
                     }
                     use miniquad::gl::*;
-                    let miniquad::RawId::OpenGl(raw_id) = get_internal_gl().quad_context.texture_raw_id(self.cache_texture.raw_miniquad_id()) else { todo!() };
+                    let miniquad::RawId::OpenGl(raw_id) = get_internal_gl().quad_context.texture_raw_id(self.cache_texture.raw_miniquad_id());
                     glBindTexture(GL_TEXTURE_2D, raw_id);
                     self.data_buffer.clear();
                     self.data_buffer.reserve(tex_data.len() * 4);
