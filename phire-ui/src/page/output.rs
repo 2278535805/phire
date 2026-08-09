@@ -330,7 +330,9 @@ impl Page for OutputPage {
                 match audio.stream_info() { // TODO: clone()
                     #[cfg(target_os = "android")]
                     Oboe(info) => {
-                        self.base_buffer_size = Some(info.frames_per_burst as u32);
+                        if let Some(frames_per_burst) = info.frames_per_burst {
+                            self.base_buffer_size = Some(frames_per_burst as u32);
+                        }
                     },
                     #[allow(unreachable_patterns)] _ => {}, // TODO: OHOS
                 }
@@ -542,6 +544,7 @@ impl Page for OutputPage {
                                 .draw();
                         }
                     },
+                    #[cfg(not(target_os = "android"))]
                     Cpal(info) => {
                         let mut warn_str = Vec::new();
                         if let Some(settings_buffer_size) = info.settings.buffer_size {
