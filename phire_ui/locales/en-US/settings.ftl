@@ -35,6 +35,8 @@ item-cali = Adjust offset
 item-exclusive-audio = Exclusive Audio
 item-exclusive-audio-sub = Use exclusive access to reduce latency, but may prevent the sound from being recorded
 item-audio-compatibility = Audio Compatibility Mode
+item-audio-buffer-size = Audio Buffer Size
+auto = Auto
 
 item-show-acc = Show real-time accuracy
 item-dc-pause = Double tap to pause
