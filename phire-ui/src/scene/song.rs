@@ -2295,7 +2295,7 @@ impl Scene for SongScene {
     fn next_scene(&mut self, tm: &mut TimeManager) -> NextScene {
         if let Some(scene) = self.next_scene.take().or_else(|| self.sf.next_scene(tm.now() as _)) {
             if let Some(music) = &mut self.preview {
-                let _ = music.pause();
+                let _ = music.fade_out(0.5);
             }
             scene
         } else {
