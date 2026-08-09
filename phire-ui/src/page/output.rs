@@ -2,7 +2,6 @@ phire::tl_file!("output");
 
 use super::{Page, SharedState};
 use crate::get_data;
-#[cfg(target_os = "android")]
 use crate::{get_data_mut, save_data};
 use anyhow::Result;
 use macroquad::prelude::*;
@@ -13,6 +12,8 @@ use phire::{
     ui::{DRectButton, Slider, Ui},
 };
 use sasa::{AudioManager, Renderer};
+#[cfg(not(target_os = "android"))]
+use sasa::BackendStreamInfo::Cpal;
 #[cfg(target_os = "android")]
 use sasa::{BackendStreamInfo::Oboe, backend::oboe::{PerformanceMode, SharingMode}};
 use std::{
@@ -150,6 +151,8 @@ pub struct OutputPage {
     compat_btn: DRectButton,
     #[cfg(target_os = "android")]
     compat: bool,
+    audio_buffer_size_btn: DRectButton,
+    base_buffer_size: Option<u32>,
     rebuild_needed: bool,
 
     frame_times: VecDeque<f64>,
@@ -192,6 +195,11 @@ impl OutputPage {
             compat_btn: DRectButton::new(),
             #[cfg(target_os = "android")]
             compat: config.audio_compatibility,
+            audio_buffer_size_btn: DRectButton::new(),
+            #[cfg(not(target_os = "android"))]
+            base_buffer_size: Some(64),
+            #[cfg(target_os = "android")]
+            base_buffer_size: None,
             rebuild_needed: false,
 
             frame_times: VecDeque::new(),
@@ -267,8 +275,27 @@ impl Page for OutputPage {
             config.audio_compatibility ^= true;
             self.compat = config.audio_compatibility;
             self.rebuild_needed = true;
-            let _ = save_data();
+            save_data()?;
             return Ok(true);
+        }
+        if let Some(base_buffer) = self.base_buffer_size {
+            if self.audio_buffer_size_btn.touch(touch, t) {
+                let config = &mut get_data_mut().config;
+                config.audio_buffer_size = match config.audio_buffer_size {
+                    None => Some(base_buffer),
+                    Some(n) if n == base_buffer => Some(base_buffer * 2),
+                    Some(n) if n == base_buffer * 2 => Some(base_buffer * 3),
+                    Some(n) if n == base_buffer * 3 => Some(base_buffer * 4),
+                    #[cfg(not(target_os = "android"))]
+                    Some(n) if n == base_buffer * 4 => Some(base_buffer * 8),
+                    #[cfg(not(target_os = "android"))]
+                    Some(n) if n == base_buffer * 8 => Some(base_buffer * 16),
+                    _ => None,
+                };
+                self.rebuild_needed = true;
+                save_data()?;
+                return Ok(true);
+            }
         }
 
         Ok(false)
@@ -300,6 +327,13 @@ impl Page for OutputPage {
             ui.fill_rect(r, semi_black(c.a * 0.4));
 
             if let Some(audio) = self.audio.as_mut() {
+                match audio.stream_info() { // TODO: clone()
+                    #[cfg(target_os = "android")]
+                    Oboe(info) => {
+                        self.base_buffer_size = Some(info.frames_per_burst as u32);
+                    },
+                    #[allow(unreachable_patterns)] _ => {}, // TODO: OHOS
+                }
                 let y = r.y + aspect * 0.05;
                 #[cfg(target_os = "android")]
                 let left_x = r.x + 0.06 * aspect;
@@ -327,9 +361,9 @@ impl Page for OutputPage {
 
             let right_center = r.right() * 0.5  - 0.1;
             #[cfg(not(target_os = "android"))]
-            let mut y = r.center().y - aspect * 0.65;
+            let mut y = r.center().y - aspect * 0.70;
             #[cfg(target_os = "android")]
-            let mut y = r.center().y - aspect * 0.70; // compat_btn
+            let mut y = r.center().y - aspect * 0.75; // compat_btn
 
             ui.text(tl!("title"))
                 .pos(right_center, y)
@@ -356,6 +390,23 @@ impl Page for OutputPage {
                 self.compat_btn
                     .render_text(ui, compat_rect, t, c.a, compat_label, 0.35, self.compat);
                 ui.text(tl!("compatibility"))
+                    .pos(right_center + 0.25, y + 0.04)
+                    .anchor(0., 0.5)
+                    .size(0.32)
+                    .color(Color::new(1., 1., 1., 0.7 * c.a))
+                    .draw();
+            }
+            if self.base_buffer_size.is_some() {
+                y += 0.10;
+                let config = &get_data().config;
+                let text = match config.audio_buffer_size {
+                    None => tl!("auto").to_string(),
+                    Some(n) => format!("{}", n),
+                };
+                let buf_rect = Rect::new(right_center - 0.22, y, 0.44, 0.08);
+                self.audio_buffer_size_btn
+                    .render_text(ui, buf_rect, t, c.a, &text, 0.45, config.audio_buffer_size.is_some());
+                ui.text(tl!("buffer-size"))
                     .pos(right_center + 0.25, y + 0.04)
                     .anchor(0., 0.5)
                     .size(0.32)
@@ -491,7 +542,36 @@ impl Page for OutputPage {
                                 .draw();
                         }
                     },
-                    _ => {},
+                    Cpal(info) => {
+                        let mut warn_str = Vec::new();
+                        if let Some(settings_buffer_size) = info.settings.buffer_size {
+                            if let Some(actual_frames_per_callback) = info.actual_frames_per_callback {
+                                if settings_buffer_size != actual_frames_per_callback {
+                                    warn_str.push(tl!("failed-buffer-size"));
+                                }
+                            }
+                        }
+                        if !warn_str.is_empty() {
+                            let mut warn_str_merge = String::new();
+                            for (i, s) in warn_str.iter().enumerate() {
+                                warn_str_merge.push_str(s);
+                                if i > 0 && (i + 1) % 3 == 0 {
+                                    warn_str_merge.push_str("\n");
+                                } else {
+                                    warn_str_merge.push_str(" ");
+                                }
+                            }
+                            y += 0.06;
+                            ui.text(warn_str_merge)
+                                .pos(right_center, y)
+                                .anchor(0.0, 0.0)
+                                .size(0.4)
+                                .color(Color::new(1., 1., 1., 0.7 * c.a))
+                                .centered_multiline()
+                                .draw();
+                        }
+                    }
+                    #[allow(unreachable_patterns)] _ => {}, // TODO: OHOS
                 }
             }
             if get_data().config.auto_tweak_offset {
