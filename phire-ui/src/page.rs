@@ -18,6 +18,9 @@ pub use latency::LatencyPage;
 mod offset;
 pub use offset::OffsetPage;
 
+mod output;
+pub use output::OutputPage;
+
 mod respack;
 pub use respack::{ResPackItem, ResPackPage};
 

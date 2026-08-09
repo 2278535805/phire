@@ -1,0 +1,14 @@
+title = Output Test
+start = Start
+stop = Stop
+freq = Frequency
+volume = Volume
+waveform = Waveform
+est-latency = Est. Latency
+compatibility = Audio Compatibility
+audio-error = Audio device unavailable
+failed-exclusive = Failed to acquire exclusive mode
+failed-low-latency = Failed to set low latency
+unexpected-buffer-size = Unexpected buffer size
+failed-buffer-size = Failed to set buffer size
+found-xrun = Audio stuttering detected

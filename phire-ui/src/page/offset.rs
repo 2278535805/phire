@@ -226,7 +226,7 @@ impl Page for OffsetPage {
                     .draw();
                 ui.text(format!("{} {:.0}ms", tl!("total"), (config.audio_offset + config.judge_offset + audio_latency + frame_latency) * 1000.))
                     .pos(0.0, ct.y + aspect * 0.6)
-                    .anchor(0.5, 0.)
+                    .anchor(0.5, 1.)
                     .size(0.5)
                     .color(Color::new(1., 1., 1., 0.8 * c.a))
                     .draw();

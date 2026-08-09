@@ -78,8 +78,10 @@ item-max-health = Max Health
 item-initial-health = Initial Health
 
 item-latency-test = Tap to Tone Latency
+item-output-test = Audio Output Test
 load-cali-failed = Failed to load audio
 load-latency-failed = Failed to load latency test
+load-output-failed = Failed to load output test
 permission-required = Permissions denied
 not-combo = Cannot be COMBO
 illegal-input = Illegal input

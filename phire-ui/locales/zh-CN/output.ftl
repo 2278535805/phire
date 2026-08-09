@@ -1,0 +1,14 @@
+title = 输出测试
+start = 开始
+stop = 停止
+freq = 频率
+volume = 音量
+waveform = 波形
+est-latency = 预估延迟
+compatibility = 音频兼容模式
+audio-error = 音频设备不可用
+failed-exclusive = 独占模式设置失败
+failed-low-latency = 低延迟模式设置失败
+unexpected-buffer-size = 缓冲区大小过大
+failed-buffer-size = 无法设置缓冲区大小
+found-xrun = 检测到音频卡顿
