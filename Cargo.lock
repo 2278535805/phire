@@ -3302,7 +3302,7 @@ dependencies = [
 [[package]]
 name = "sasa"
 version = "0.1.0"
-source = "git+https://github.com/2278535805/sasa#20e3ad3b9c6ca1a0e665e64251b048667f5522f9"
+source = "git+https://github.com/2278535805/sasa#1b6140ab92f1761b017de94d2bc5faac34a83a14"
 dependencies = [
  "anyhow",
  "atomic_float",
