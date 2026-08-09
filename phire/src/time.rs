@@ -30,7 +30,7 @@ impl TimeManager {
             pause_time: None,
             speed: 1.0,
             wait: f64::NEG_INFINITY,
-            force: 1e-2,
+            force: 0.1,
 
             get_time_fn,
         }
@@ -56,7 +56,7 @@ impl TimeManager {
             pause_time: None,
             speed,
             wait: f64::NEG_INFINITY,
-            force: 1e-2,
+            force: 0.1,
 
             get_time_fn: Box::new(get_time_fn),
         }

@@ -516,7 +516,7 @@ impl GameScene {
             } else {
                 self.pause_first_time = f32::NEG_INFINITY;
                 if !self.music.paused() {
-                    self.music.pause()?;
+                    self.music.fade_out(0.3)?;
                 }
                 tm.pause();
             }
@@ -773,7 +773,7 @@ impl GameScene {
                             tm.seek_to(self.exercise_range.start);
                             self.music.seek_to(self.exercise_range.start)?;
                         }
-                        self.music.play()?;
+                        self.music.fade_in(0.5)?;
                         let now = tm.now();
                         tm.speed = res.config.speed as _;
                         tm.resume();
@@ -863,7 +863,8 @@ impl GameScene {
                         };
                         if *ctrl == 0 {
                             tm.seek_to(p as f64);
-                            self.music.seek_to(p as f64)?;
+                            self.music.pause()?;
+                            self.music.seek_to(p as f64);
                         } else {
                             *(if *ctrl == -1 {
                                 &mut self.exercise_range.start
@@ -920,10 +921,10 @@ impl GameScene {
                 };
                 self.res.disable_hit_fx = false;
             } else if dim {
-                let a = (t / duration).clamp(0.0, 1.0) * PAUSE_BACKGROUND_ALPHA as f64;
+                let a = (t / duration).clamp(0.0, 1.0) as f32 * PAUSE_BACKGROUND_ALPHA;
                 let h = 1. / self.res.aspect_ratio;
-                draw_rectangle(-1., -h, 2., h * 2., Color::new(0., 0., 0., a as f32));
-                ui.text((t.ceil() as i32).to_string()).anchor(0.5, 0.5).size(1.).color(c).draw();
+                draw_rectangle(-1., -h, 2., h * 2., Color::new(0., 0., 0., a));
+                ui.text((t.ceil() as i32).to_string()).anchor(0.5, 0.5).size(1.).color(c.with_alpha(a)).draw();
             }
         }
         Ok(())
@@ -1050,6 +1051,7 @@ impl Scene for GameScene {
     }
 
     fn pause(&mut self, tm: &mut TimeManager) -> Result<()> {
+        self.res.audio.close()?;
         if !tm.paused() {
             self.pause_rewind = PauseRewind {
                 time: None,
@@ -1063,6 +1065,7 @@ impl Scene for GameScene {
     }
 
     fn resume(&mut self, tm: &mut TimeManager) -> Result<()> {
+        self.res.audio.start()?;
         if tm.paused() && !matches!(self.state, State::Playing) {
             tm.resume();
         }
@@ -1070,13 +1073,13 @@ impl Scene for GameScene {
     }
 
     fn foucus_pause(&mut self, tm: &mut TimeManager) -> Result<()> {
-        if !tm.paused() {
+        if !self.res.config.autoplay() && !tm.paused() {
             self.pause_rewind = PauseRewind {
                 time: None,
                 duration: None,
                 dim: false
             };
-            self.music.pause()?;
+            self.music.fade_out(0.3)?;
             tm.pause();
         }
         Ok(())
@@ -1101,7 +1104,7 @@ impl Scene for GameScene {
             self.state = state;
             tm.seek_to(self.exercise_range.start);
             tm.pause();
-            self.music.pause()?;
+            self.music.fade_out(0.3)?;
         }
         if tm.paused() && self.res.config.rotation_mode {
             GYRO.lock().unwrap().reset_gyroscope();
@@ -1255,7 +1258,7 @@ impl Scene for GameScene {
                         reset_music_speed!(self, res, tm);
                     }
                     self.music.seek_to(now)?;
-                    self.music.play()?;
+                    self.music.fade_in(0.5)?;
                     tm.seek_to(now);
                     tm.resume();
                     self.pause_rewind = PauseRewind {
@@ -1267,7 +1270,7 @@ impl Scene for GameScene {
                 }
             } else if matches!(self.state, State::Playing) && !self.pause_rewind.dim { // State::BeforeMusic
                 if !self.music.paused() {
-                    self.music.pause()?;
+                    self.music.fade_out(0.3)?;
                 }
                 self.pause_rewind = PauseRewind {
                     time: None,
@@ -1603,6 +1606,7 @@ impl Scene for GameScene {
 
     fn next_scene(&mut self, tm: &mut TimeManager) -> NextScene {
         if self.should_exit {
+            let _ = self.music.pause();
             if tm.paused() {
                 tm.resume();
             }

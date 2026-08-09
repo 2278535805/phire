@@ -210,8 +210,7 @@ impl LatencyPage {
 
         let recorder = create_recorder(buffer.clone(), position.clone(), sample_rate.clone()).ok();
 
-        let mut tm = TimeManager::new(1., true);
-        tm.force = 3e-2;
+        let tm = TimeManager::new(1., false);
 
         Ok(Self {
             audio,
@@ -386,19 +385,9 @@ impl Page for LatencyPage {
     }
 
     fn update(&mut self, _s: &mut SharedState) -> Result<()> {
-        let now = self.tm.now();
-        if now > 2. {
-            self.tm.seek_to(now - 2.);
-            self.tm.dont_wait();
-        }
-
-        if self.audio.consume_broken() {
-            self.audio.recover_if_needed().ok();
-        }
+        self.audio.recover_if_needed()?;
         if let Some(ref mut rec) = self.recorder {
-            if rec.consume_broken() {
-                rec.recover_if_needed().ok();
-            }
+            rec.recover_if_needed()?;
         }
 
         if self.phase == AnalysisPhase::WaitingForBeep {

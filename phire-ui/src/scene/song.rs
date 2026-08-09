@@ -1392,6 +1392,7 @@ impl Scene for SongScene {
     }
 
     fn pause(&mut self, _tm: &mut TimeManager) -> Result<()> {
+        UI_AUDIO.with(|it| it.borrow_mut().close())?;
         if let Some(preview) = &mut self.preview {
             preview.pause()?;
         }
@@ -1399,8 +1400,9 @@ impl Scene for SongScene {
     }
 
     fn resume(&mut self, _tm: &mut TimeManager) -> Result<()> {
+        UI_AUDIO.with(|it| it.borrow_mut().start())?;
         if let Some(preview) = &mut self.preview {
-            preview.play()?;
+            preview.fade_in(0.5)?;
         }
         Ok(())
     }
@@ -1414,7 +1416,7 @@ impl Scene for SongScene {
         }
         if let Some(music) = &mut self.preview {
             music.seek_to(0.)?;
-            music.play()?;
+            music.fade_in(0.5)?;
         }
         self.update_menu();
         Ok(())
@@ -1578,6 +1580,7 @@ impl Scene for SongScene {
     }
 
     fn update(&mut self, tm: &mut TimeManager) -> Result<()> {
+        UI_AUDIO.with(|it| it.borrow_mut().recover_if_needed())?;
         let t = tm.now() as f32;
         self.menu.update(t);
         self.illu.settle(t);

@@ -174,7 +174,7 @@ impl Scene for MainScene {
     fn enter(&mut self, tm: &mut TimeManager, _target: Option<RenderTarget>) -> Result<()> {
         crate::character::check_erosion_trigger();
         if let Some(bgm) = &mut self.bgm {
-            let _ = bgm.fade_in(1.3);
+            bgm.fade_in(1.3)?;
         }
         self.state.update(tm);
         self.pages.last_mut().unwrap().enter(&mut self.state)?;
@@ -187,9 +187,12 @@ impl Scene for MainScene {
     }
 
     fn resume(&mut self, tm: &mut TimeManager) -> Result<()> {
+        UI_AUDIO.with(|it| it.borrow_mut().start())?;
         tm.resume();
-        if let Some(bgm) = &mut self.bgm {
-            bgm.play()?;
+        if self.pages.last().unwrap().can_play_bgm() {
+            if let Some(bgm) = &mut self.bgm {
+                bgm.fade_in(0.5)?;
+            }
         }
         self.state.update(tm);
         self.pages.last_mut().unwrap().resume()?;
@@ -197,6 +200,7 @@ impl Scene for MainScene {
     }
 
     fn pause(&mut self, tm: &mut TimeManager) -> Result<()> {
+        UI_AUDIO.with(|it| it.borrow_mut().close())?;
         tm.pause();
         if let Some(bgm) = &mut self.bgm {
             bgm.pause()?;
