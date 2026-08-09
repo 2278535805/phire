@@ -520,7 +520,7 @@ impl Page for OutputPage {
                             }
                         }
                         if let Some(xrun_count) = info.xrun_count {
-                            if xrun_count > 0 {
+                            if xrun_count > 8 {
                                 warn_str.push(tl!("found-xrun"));
                             }
                         }
