@@ -44,7 +44,7 @@ use std::time::Duration;
 use nalgebra::Vector3;
 
 static ACTIVITY_LIFECYCLE: Mutex<Option<mpsc::Sender<bool>>> = Mutex::new(None);
-static ACTIVITY_FOUCUS: Mutex<Option<mpsc::Sender<bool>>> = Mutex::new(None);
+static ACTIVITY_FOCUS: Mutex<Option<mpsc::Sender<bool>>> = Mutex::new(None);
 static ANTI_ADDICTION_CALLBACK: Mutex<Option<mpsc::Sender<i32>>> = Mutex::new(None);
 static DATA_PATH: Mutex<Option<String>> = Mutex::new(None);
 static CACHE_DIR: Mutex<Option<String>> = Mutex::new(None);
@@ -171,15 +171,17 @@ async fn the_main() -> Result<()> {
     character::init_characters().await?;
     miniquad::window::set_ime_enabled(false);
 
+    let window_subscriber = macroquad::input::utils::register_input_subscriber();
+
     let activity_lifecycle = {
         let (tx, rx) = mpsc::channel();
         *ACTIVITY_LIFECYCLE.lock().unwrap() = Some(tx);
         rx
     };
 
-    let activity_foucus = {
+    let activity_focus = {
         let (tx, rx) = mpsc::channel();
-        *ACTIVITY_FOUCUS.lock().unwrap() = Some(tx);
+        *ACTIVITY_FOCUS.lock().unwrap() = Some(tx);
         rx
     };
 
@@ -220,6 +222,10 @@ async fn the_main() -> Result<()> {
     let mut exit_time = f64::INFINITY;
 
     'app: loop {
+        macroquad::input::utils::repeat_all_miniquad_input(
+            &mut WindowLifecycleHandler,
+            window_subscriber,
+        );
         if main.paused() {
             match activity_lifecycle.recv() {
                 Ok(false) => {
@@ -232,11 +238,11 @@ async fn the_main() -> Result<()> {
 
         let frame_start = tm.real_time();
         let res = || -> Result<()> {
-            if let Ok(paused) = activity_foucus.try_recv() {
-                if paused {
-                    main.foucus_pause()?;
+            if let Ok(has_focus) = activity_focus.try_recv() {
+                if has_focus {
+                    main.focus_resume()?;
                 } else {
-                    main.foucus_resume()?;
+                    main.focus_pause()?;
                 }
             }
             main.update()?;
@@ -370,6 +376,25 @@ fn on_pause_resume(pause: bool) {
     }
 }
 
+fn on_focus_change(has_focus: bool) {
+    if let Some(tx) = ACTIVITY_FOCUS.lock().unwrap().as_mut() {
+        let _ = tx.send(has_focus);
+    }
+}
+
+struct WindowLifecycleHandler;
+
+impl miniquad::EventHandler for WindowLifecycleHandler {
+    fn update(&mut self) {}
+    fn draw(&mut self) {}
+    fn window_minimized_event(&mut self) {
+        on_focus_change(false);
+    }
+    fn window_restored_event(&mut self) {
+        on_focus_change(true);
+    }
+}
+
 #[cfg(target_os = "android")]
 unsafe fn string_from_java(env: *mut ndk_sys::JNIEnv, s: ndk_sys::jstring) -> String {
     let get_string_utf_chars = (**env).GetStringUTFChars.unwrap();
@@ -386,26 +411,20 @@ unsafe fn string_from_java(env: *mut ndk_sys::JNIEnv, s: ndk_sys::jstring) -> St
 #[no_mangle]
 pub extern "C" fn Java_quad_1native_QuadNative_libActivityOnPause(_: *mut std::ffi::c_void, _: *const std::ffi::c_void) {
     anti_addiction_action("leaveGame", None);
-    if let Some(tx) = ACTIVITY_LIFECYCLE.lock().unwrap().as_mut() {
-        let _ = tx.send(true);
-    }
+    on_pause_resume(true);
 }
 
 #[cfg(target_os = "android")]
 #[no_mangle]
 pub extern "C" fn Java_quad_1native_QuadNative_libActivityOnResume(_: *mut std::ffi::c_void, _: *const std::ffi::c_void) {
     anti_addiction_action("enterGame", None);
-    if let Some(tx) = ACTIVITY_LIFECYCLE.lock().unwrap().as_mut() {
-        let _ = tx.send(false);
-    }
+    on_pause_resume(false);
 }
 
 #[cfg(target_os = "android")]
 #[no_mangle]
 pub extern "C" fn Java_quad_1native_QuadNative_libActivityOnWindowFocusChanged(_: *mut std::ffi::c_void, _: *const std::ffi::c_void, has_focus: ndk_sys::jboolean) {
-    if let Some(tx) = ACTIVITY_FOUCUS.lock().unwrap().as_mut() {
-        let _ = tx.send(has_focus == 0);
-    }
+    on_focus_change(has_focus != 0);
 }
 
 #[cfg(target_os = "android")]

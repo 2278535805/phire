@@ -317,10 +317,10 @@ pub trait Scene {
     fn resume(&mut self, _tm: &mut TimeManager) -> Result<()> {
         Ok(())
     }
-    fn foucus_pause(&mut self, _tm: &mut TimeManager) -> Result<()> {
+    fn focus_pause(&mut self, _tm: &mut TimeManager) -> Result<()> {
         Ok(())
     }
-    fn foucus_resume(&mut self, _tm: &mut TimeManager) -> Result<()> {
+    fn focus_resume(&mut self, _tm: &mut TimeManager) -> Result<()> {
         Ok(())
     }
     fn on_result(&mut self, _tm: &mut TimeManager, _result: Box<dyn Any>) -> Result<()> {
@@ -523,17 +523,17 @@ impl Main {
         self.scenes.last_mut().unwrap().pause(&mut self.tm)
     }
 
-    pub fn foucus_pause(&mut self) -> Result<()> {
-        self.scenes.last_mut().unwrap().foucus_pause(&mut self.tm)
-    }
-
     pub fn resume(&mut self) -> Result<()> {
         self.paused = false;
         self.scenes.last_mut().unwrap().resume(&mut self.tm)
     }
 
-    pub fn foucus_resume(&mut self) -> Result<()> {
-        self.scenes.last_mut().unwrap().foucus_resume(&mut self.tm)
+    pub fn focus_pause(&mut self) -> Result<()> {
+        self.scenes.last_mut().unwrap().focus_pause(&mut self.tm)
+    }
+
+    pub fn focus_resume(&mut self) -> Result<()> {
+        self.scenes.last_mut().unwrap().focus_resume(&mut self.tm)
     }
 
     pub fn paused(&self) -> bool {

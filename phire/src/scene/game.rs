@@ -1072,7 +1072,7 @@ impl Scene for GameScene {
         Ok(())
     }
 
-    fn foucus_pause(&mut self, tm: &mut TimeManager) -> Result<()> {
+    fn focus_pause(&mut self, tm: &mut TimeManager) -> Result<()> {
         if !self.res.config.autoplay() && !tm.paused() {
             self.pause_rewind = PauseRewind {
                 time: None,
@@ -1085,7 +1085,7 @@ impl Scene for GameScene {
         Ok(())
     }
 
-    fn foucus_resume(&mut self, tm: &mut TimeManager) -> Result<()> {
+    fn focus_resume(&mut self, tm: &mut TimeManager) -> Result<()> {
         if tm.paused() && !matches!(self.state, State::Playing) {
             tm.resume();
         }
