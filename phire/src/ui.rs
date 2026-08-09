@@ -1198,6 +1198,7 @@ fn build_audio() -> AudioManager {
             performance_mode: PerformanceMode::None,
             sharing_mode: SharingMode::Shared,
             usage: Usage::Media,
+            mmap: false,
             ..Default::default()
         }))
         .unwrap()

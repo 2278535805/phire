@@ -424,11 +424,17 @@ pub fn create_audio_manger(config: &Config) -> Result<AudioManager> {
         } else {
             Usage::Game
         };
+        let mmap = if config.audio_compatibility {
+            false
+        } else {
+            true
+        };
         AudioManager::new(OboeBackend::new(OboeSettings {
             buffer_size: config.audio_buffer_size,
             performance_mode: PerformanceMode::LowLatency,
             sharing_mode,
             usage,
+            mmap,
             ..Default::default()
         }))
     }
