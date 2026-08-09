@@ -452,8 +452,6 @@ struct AudioList {
     bgm_slider: Slider,
     audio_offset_btn: DRectButton,
     judge_offset_btn: DRectButton,
-    #[cfg(target_os = "android")]
-    audio_compatibility_btn: DRectButton,
 
     latency_btn: DRectButton,
     output_btn: DRectButton,
@@ -475,8 +473,6 @@ impl AudioList {
             audio_offset_btn: DRectButton::new(),
             latency_btn: DRectButton::new(),
             output_btn: DRectButton::new(),
-            #[cfg(target_os = "android")]
-            audio_compatibility_btn: DRectButton::new(),
 
             cali_task: None,
             latency_task: None,
@@ -530,11 +526,6 @@ impl AudioList {
         if self.output_btn.touch(touch, t) {
             self.output_task = Some(Box::pin(OutputPage::new()));
             return Ok(Some(false));
-        }
-        #[cfg(target_os = "android")]
-        if self.audio_compatibility_btn.touch(touch, t) {
-            config.audio_compatibility ^= true;
-            return Ok(Some(true));
         }
         Ok(None)
     }
@@ -621,11 +612,6 @@ impl AudioList {
         item! {
             render_title(ui, c, tl!("item-output-test"), None);
             self.output_btn.render_text(ui, rr, t, c.a, ">", 0.5, true);
-        }
-        #[cfg(target_os = "android")]
-        item! {
-            render_title(ui, c, tl!("item-audio-compatibility"), None);
-            render_switch(ui, rr, t, c, &mut self.audio_compatibility_btn, config.audio_compatibility);
         }
         (w, h)
     }

@@ -390,7 +390,7 @@ impl Page for OutputPage {
                 };
                 let compat_rect = Rect::new(right_center - 0.22, y, 0.44, 0.08);
                 self.compat_btn
-                    .render_text(ui, compat_rect, t, c.a, compat_label, 0.35, self.compat);
+                    .render_text(ui, compat_rect, t, c.a, compat_label, 0.45, self.compat);
                 ui.text(tl!("compatibility"))
                     .pos(right_center + 0.25, y + 0.04)
                     .anchor(0., 0.5)
