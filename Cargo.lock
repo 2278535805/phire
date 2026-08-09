@@ -2424,7 +2424,7 @@ dependencies = [
 [[package]]
 name = "oboe"
 version = "0.6.1"
-source = "git+https://github.com/2278535805/oboe-rs#5260de2434f11ac3e3db4d83e31288ed370d1341"
+source = "git+https://github.com/2278535805/oboe-rs#24e443dbb2fa24ea52f504f12857d3e90dd21887"
 dependencies = [
  "num-derive",
  "num-traits",
@@ -2434,7 +2434,7 @@ dependencies = [
 [[package]]
 name = "oboe-sys"
 version = "0.6.1"
-source = "git+https://github.com/2278535805/oboe-rs#5260de2434f11ac3e3db4d83e31288ed370d1341"
+source = "git+https://github.com/2278535805/oboe-rs#24e443dbb2fa24ea52f504f12857d3e90dd21887"
 dependencies = [
  "cc",
 ]
