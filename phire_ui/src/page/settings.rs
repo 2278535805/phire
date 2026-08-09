@@ -588,9 +588,9 @@ impl AudioList {
             render_title(ui, c, tl!("item-audio-buffer-size"), None);
             let text = match config.audio_buffer_size {
                 None => tl!("auto"),
-                Some(n) => format!("{}", n),
+                Some(n) => Cow::Owned(format!("{}", n)),
             };
-            self.audio_buffer_size_btn.render_text(ui, rr, t, c.a, &text, 0.5, true);
+            self.audio_buffer_size_btn.render_text(ui, rr, t, c.a, text, 0.5, true);
         }
         (w, h)
     }
