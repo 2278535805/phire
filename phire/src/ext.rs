@@ -441,9 +441,14 @@ pub fn create_audio_manger(config: &Config) -> Result<AudioManager> {
     #[cfg(target_os = "windows")]
     {
         use sasa::backend::wasapi::*;
+        let share_mode = if config.audio_compatibility {
+            ShareMode::Shared
+        } else {
+            ShareMode::Exclusive
+        };
         AudioManager::new(WasapiBackend::new(WasapiSettings {
             buffer_size: config.audio_buffer_size,
-            exclusive: !config.audio_compatibility,
+            share_mode,
             raw_stream: true,
             ..Default::default()
         }))

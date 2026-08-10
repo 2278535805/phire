@@ -559,6 +559,13 @@ impl Page for OutputPage {
                                 }
                             }
                         }
+                        if let Some(settings_sample_rate) = info.settings.sample_rate {
+                            if let Some(actual_sample_rate) = info.sample_rate {
+                                if settings_sample_rate != actual_sample_rate {
+                                    warn_str.push(tl!("failed-sample-rate"));
+                                }
+                            }
+                        }
                     }
                     #[allow(unreachable_patterns)] _ => {}, // TODO: OHOS
                 }
