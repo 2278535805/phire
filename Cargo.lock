@@ -3300,7 +3300,7 @@ dependencies = [
 [[package]]
 name = "sasa"
 version = "0.1.0"
-source = "git+https://github.com/2278535805/sasa#24bb32ab68d82cbe57f7239f47eb1d5cd8277aae"
+source = "git+https://github.com/2278535805/sasa#b0484e92d2d3ffffa624c6206d226122459d0dfc"
 dependencies = [
  "anyhow",
  "atomic_float",
@@ -3310,6 +3310,7 @@ dependencies = [
  "ringbuf",
  "symphonia",
  "thiserror 2.0.18",
+ "wasapi",
 ]
 
 [[package]]
@@ -4340,6 +4341,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bfa7760aed19e106de2c7c0b581b509f2f25d3dacaf737cb82ac61bc6d760b0e"
 dependencies = [
  "try-lock",
+]
+
+[[package]]
+name = "wasapi"
+version = "0.23.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "80c3aa5d6b0e7acc3ea10cb19c334df0c8d825060f14a30d9e3b03385e6e5175"
+dependencies = [
+ "log",
+ "num-integer",
+ "thiserror 2.0.18",
+ "windows 0.62.2",
+ "windows-core 0.62.2",
 ]
 
 [[package]]

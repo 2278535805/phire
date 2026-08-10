@@ -710,7 +710,15 @@ fn create_recorder(
         recorder.add_recorder(tap_rec)?;
         Ok(recorder)
     }
-    #[cfg(not(target_os = "android"))]
+    #[cfg(target_os = "windows")]
+    {
+        use sasa::backend::wasapi::*;
+        let mut recorder = AudioRecorder::new(WasapiRecorderBackend::new(WasapiSettings::default()))?;
+        let tap_rec = TapRecorder::new(buffer, position, sample_rate);
+        recorder.add_recorder(tap_rec)?;
+        Ok(recorder)
+    }
+    #[cfg(not(any(target_os = "android", target_os = "windows")))]
     {
         use sasa::backend::cpal::*;
         let mut recorder = AudioRecorder::new(CpalRecorderBackend::new(CpalSettings::default()))?;

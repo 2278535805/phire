@@ -438,7 +438,17 @@ pub fn create_audio_manger(config: &Config) -> Result<AudioManager> {
             ..Default::default()
         }))
     }
-    #[cfg(not(target_os = "android"))]
+    #[cfg(target_os = "windows")]
+    {
+        use sasa::backend::wasapi::*;
+        AudioManager::new(WasapiBackend::new(WasapiSettings {
+            buffer_size: config.audio_buffer_size,
+            exclusive: !config.audio_compatibility,
+            raw_stream: true,
+            ..Default::default()
+        }))
+    }
+    #[cfg(not(any(target_os = "android", target_os = "windows")))]
     {
         use sasa::backend::cpal::*;
         Ok(AudioManager::new(CpalBackend::new(CpalSettings {

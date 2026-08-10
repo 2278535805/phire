@@ -12,7 +12,9 @@ use phire::{
     ui::{DRectButton, Ui},
 };
 use sasa::{AudioManager, Renderer};
-#[cfg(not(target_os = "android"))]
+#[cfg(target_os = "windows")]
+use sasa::BackendStreamInfo::Wasapi;
+#[cfg(not(any(target_os = "android", target_os = "windows")))]
 use sasa::BackendStreamInfo::Cpal;
 #[cfg(target_os = "android")]
 use sasa::{BackendStreamInfo::Oboe, backend::oboe::{PerformanceMode, SharingMode}};
@@ -149,9 +151,9 @@ pub struct OutputPage {
     active: bool,
     play_btn: DRectButton,
 
-    #[cfg(target_os = "android")]
+    #[cfg(any(target_os = "android", target_os = "windows"))]
     compat_btn: DRectButton,
-    #[cfg(target_os = "android")]
+    #[cfg(any(target_os = "android", target_os = "windows"))]
     compat: bool,
     audio_buffer_size_btn: DRectButton,
     base_buffer_size: Option<u32>,
@@ -190,14 +192,14 @@ impl OutputPage {
             active: false,
             play_btn: DRectButton::new(),
 
-            #[cfg(target_os = "android")]
+            #[cfg(any(target_os = "android", target_os = "windows"))]
             compat_btn: DRectButton::new(),
-            #[cfg(target_os = "android")]
+            #[cfg(any(target_os = "android", target_os = "windows"))]
             compat: config.audio_compatibility,
             audio_buffer_size_btn: DRectButton::new(),
-            #[cfg(not(target_os = "android"))]
+            #[cfg(not(any(target_os = "android", target_os = "windows")))]
             base_buffer_size: Some(64),
-            #[cfg(target_os = "android")]
+            #[cfg(any(target_os = "android", target_os = "windows"))]
             base_buffer_size: None,
             rebuild_needed: false,
 
@@ -269,7 +271,7 @@ impl Page for OutputPage {
                 return Ok(true);
             }
         }
-        #[cfg(target_os = "android")]
+        #[cfg(any(target_os = "android", target_os = "windows"))]
         if self.compat_btn.touch(touch, t) {
             let config = &mut get_data_mut().config;
             config.audio_compatibility ^= true;
@@ -286,9 +288,9 @@ impl Page for OutputPage {
                     Some(n) if n == base_buffer => Some(base_buffer * 2),
                     Some(n) if n == base_buffer * 2 => Some(base_buffer * 3),
                     Some(n) if n == base_buffer * 3 => Some(base_buffer * 4),
-                    #[cfg(not(target_os = "android"))]
+                    #[cfg(not(any(target_os = "android", target_os = "windows")))]
                     Some(n) if n == base_buffer * 4 => Some(base_buffer * 8),
-                    #[cfg(not(target_os = "android"))]
+                    #[cfg(not(any(target_os = "android", target_os = "windows")))]
                     Some(n) if n == base_buffer * 8 => Some(base_buffer * 16),
                     _ => None,
                 };
@@ -334,6 +336,15 @@ impl Page for OutputPage {
                             self.base_buffer_size = Some(frames_per_burst as u32);
                         }
                     },
+                    #[cfg(target_os = "windows")]
+                    Wasapi(info) => {
+                        if let Some(sample_rate) = info.sample_rate {
+                            if let Some(min_period_hns) = info.min_period_hns {
+                                let min_buffer = min_period_hns * sample_rate / 10000000;
+                                self.base_buffer_size = Some(min_buffer);
+                            }
+                        }
+                    }
                     #[allow(unreachable_patterns)] _ => {}, // TODO: OHOS
                 }
                 let y = r.y + aspect * 0.05;
@@ -362,9 +373,9 @@ impl Page for OutputPage {
             }
 
             let right_center = r.right() * 0.5  - 0.1;
-            #[cfg(not(target_os = "android"))]
+            #[cfg(not(any(target_os = "android", target_os = "windows")))]
             let mut y = r.center().y - 0.30;
-            #[cfg(target_os = "android")]
+            #[cfg(any(target_os = "android", target_os = "windows"))]
             let mut y = r.center().y - 0.35; // compat_btn
 
             let active = *self.params.active.lock().unwrap();
@@ -378,7 +389,7 @@ impl Page for OutputPage {
                 .color(Color::new(1., 1., 1., 0.7 * c.a))
                 .draw();
 
-            #[cfg(target_os = "android")]
+            #[cfg(any(target_os = "android", target_os = "windows"))]
             {
                 y += 0.10;
                 let compat_label = if self.compat {
@@ -481,10 +492,11 @@ impl Page for OutputPage {
                     .size(0.4)
                     .color(Color::new(1., 1., 1., 0.7 * c.a))
                     .draw();
+
+                let mut warn_str = Vec::new();
                 match audio.stream_info() {
                     #[cfg(target_os = "android")]
                     Oboe(info) => {
-                        let mut warn_str = Vec::new();
                         if let Some(latency_millis) = info.latency_millis {
                             if latency_millis < 0.0 {
                                 warn_str.push(tl!("failed-audio-write"));
@@ -527,29 +539,9 @@ impl Page for OutputPage {
                                 warn_str.push(tl!("found-xrun"));
                             }
                         }
-                        if !warn_str.is_empty() {
-                            let mut warn_str_merge = String::new();
-                            for (i, s) in warn_str.iter().enumerate() {
-                                warn_str_merge.push_str(s);
-                                if i > 0 && (i + 1) % 2 == 0 {
-                                    warn_str_merge.push_str("\n");
-                                } else {
-                                    warn_str_merge.push_str("  ");
-                                }
-                            }
-                            y += 0.06;
-                            ui.text(warn_str_merge)
-                                .pos(right_center, y)
-                                .anchor(0.0, 0.0)
-                                .size(0.4)
-                                .color(Color::new(1., 1., 1., 0.7 * c.a))
-                                .centered_multiline()
-                                .draw();
-                        }
                     },
-                    #[cfg(not(target_os = "android"))]
+                    #[cfg(not(any(target_os = "android", target_os = "windows")))]
                     Cpal(info) => {
-                        let mut warn_str = Vec::new();
                         if let Some(settings_buffer_size) = info.settings.buffer_size {
                             if let Some(actual_frames_per_callback) = info.actual_frames_per_callback {
                                 if settings_buffer_size != actual_frames_per_callback {
@@ -557,27 +549,37 @@ impl Page for OutputPage {
                                 }
                             }
                         }
-                        if !warn_str.is_empty() {
-                            let mut warn_str_merge = String::new();
-                            for (i, s) in warn_str.iter().enumerate() {
-                                warn_str_merge.push_str(s);
-                                if i > 0 && (i + 1) % 2 == 0 {
-                                    warn_str_merge.push_str("\n");
-                                } else {
-                                    warn_str_merge.push_str("  ");
+                    }
+                    #[cfg(target_os = "windows")]
+                    Wasapi(info) => {
+                        if let Some(settings_buffer_size) = info.settings.buffer_size {
+                            if let Some(actual_frames_per_callback) = info.actual_frames_per_callback {
+                                if settings_buffer_size != actual_frames_per_callback {
+                                    warn_str.push(tl!("failed-buffer-size"));
                                 }
                             }
-                            y += 0.06;
-                            ui.text(warn_str_merge)
-                                .pos(right_center, y)
-                                .anchor(0.0, 0.0)
-                                .size(0.4)
-                                .color(Color::new(1., 1., 1., 0.7 * c.a))
-                                .centered_multiline()
-                                .draw();
                         }
                     }
                     #[allow(unreachable_patterns)] _ => {}, // TODO: OHOS
+                }
+                if !warn_str.is_empty() {
+                    let mut warn_str_merge = String::new();
+                    for (i, s) in warn_str.iter().enumerate() {
+                        warn_str_merge.push_str(s);
+                        if i > 0 && (i + 1) % 2 == 0 {
+                            warn_str_merge.push_str("\n");
+                        } else {
+                            warn_str_merge.push_str("  ");
+                        }
+                    }
+                    y += 0.06;
+                    ui.text(warn_str_merge)
+                        .pos(right_center, y)
+                        .anchor(0.0, 0.0)
+                        .size(0.4)
+                        .color(Color::new(1., 1., 1., 0.7 * c.a))
+                        .centered_multiline()
+                        .draw();
                 }
             }
             push_frame_time(&mut self.frame_times, self.tm.real_time());

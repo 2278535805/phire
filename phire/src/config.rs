@@ -53,7 +53,6 @@ pub struct Config {
     pub aggressive_particle: bool,
     pub aspect_ratio: Option<f32>,
     pub audio_buffer_size: Option<u32>,
-    #[cfg(target_os = "android")]
     pub audio_compatibility: bool,
     pub challenge_color: ChallengeModeColor,
     pub challenge_rank: u32,
@@ -143,8 +142,10 @@ impl Default for Config {
             aggressive_particle: false,
             aspect_ratio: None,
             audio_buffer_size: None,
-            #[cfg(target_os = "android")]
+            #[cfg(not(target_os = "windows"))]
             audio_compatibility: false,
+            #[cfg(target_os = "windows")]
+            audio_compatibility: true,
             challenge_color: ChallengeModeColor::Rainbow,
             challenge_rank: 3,
             chart_debug_line: 0.0,

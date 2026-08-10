@@ -1200,14 +1200,17 @@ fn build_audio() -> AudioManager {
             usage: Usage::Media,
             mmap: false,
             ..Default::default()
-        }))
-        .unwrap()
+        })).unwrap()
     }
-    #[cfg(not(target_os = "android"))]
+    #[cfg(target_os = "windows")]
+    {
+        use sasa::backend::wasapi::*;
+        AudioManager::new(WasapiBackend::new(WasapiSettings::default())).unwrap()
+    }
+    #[cfg(not(any(target_os = "android", target_os = "windows")))]
     {
         use sasa::backend::cpal::*;
-        AudioManager::new(CpalBackend::new(CpalSettings::default()))
-        .unwrap()
+        AudioManager::new(CpalBackend::new(CpalSettings::default())).unwrap()
         //.expect("Failed to play sound")
     }
 }
