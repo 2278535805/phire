@@ -531,10 +531,10 @@ impl Page for OutputPage {
                             let mut warn_str_merge = String::new();
                             for (i, s) in warn_str.iter().enumerate() {
                                 warn_str_merge.push_str(s);
-                                if i > 0 && (i + 1) % 3 == 0 {
+                                if i > 0 && (i + 1) % 2 == 0 {
                                     warn_str_merge.push_str("\n");
                                 } else {
-                                    warn_str_merge.push_str(" ");
+                                    warn_str_merge.push_str("  ");
                                 }
                             }
                             y += 0.06;
@@ -561,10 +561,10 @@ impl Page for OutputPage {
                             let mut warn_str_merge = String::new();
                             for (i, s) in warn_str.iter().enumerate() {
                                 warn_str_merge.push_str(s);
-                                if i > 0 && (i + 1) % 3 == 0 {
+                                if i > 0 && (i + 1) % 2 == 0 {
                                     warn_str_merge.push_str("\n");
                                 } else {
-                                    warn_str_merge.push_str(" ");
+                                    warn_str_merge.push_str("  ");
                                 }
                             }
                             y += 0.06;
