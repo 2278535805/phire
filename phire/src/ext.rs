@@ -449,7 +449,8 @@ pub fn create_audio_manger(config: &Config) -> Result<AudioManager> {
         AudioManager::new(WasapiBackend::new(WasapiSettings {
             buffer_size: config.audio_buffer_size,
             share_mode,
-            raw_stream: true,
+            stream_category: StreamCategory::Media,
+            stream_option: Some(StreamOption::Raw),
             ..Default::default()
         }))
     }

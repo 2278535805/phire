@@ -1205,7 +1205,10 @@ fn build_audio() -> AudioManager {
     #[cfg(target_os = "windows")]
     {
         use sasa::backend::wasapi::*;
-        AudioManager::new(WasapiBackend::new(WasapiSettings::default())).unwrap()
+        AudioManager::new(WasapiBackend::new(WasapiSettings {
+            stream_category: StreamCategory::Media,
+            ..Default::default()
+        })).unwrap()
     }
     #[cfg(not(any(target_os = "android", target_os = "windows")))]
     {
