@@ -5,4 +5,4 @@ edition = "2021"
 license = "GPL-3.0-only"
 
 [dependencies]
-phire_ui = { path = "../phire_ui" }
+phire-ui = { path = "../phire-ui" }
