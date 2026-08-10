@@ -41,7 +41,7 @@ use lyon::{
 use macroquad::prelude::*;
 use miniquad::PassAction;
 use sasa::{AudioManager, PlaySfxParams, Sfx};
-use std::{borrow::Cow, cell::RefCell, collections::HashMap, ops::Range};
+use std::{borrow::Cow, cell::RefCell, collections::HashMap, mem::ManuallyDrop, ops::Range};
 
 #[derive(Default, Clone, Copy)]
 pub struct Gravity(u8);
@@ -1216,7 +1216,7 @@ fn build_audio() -> AudioManager {
 }
 
 thread_local! {
-    pub static UI_AUDIO: RefCell<AudioManager> = RefCell::new(build_audio());
+    pub static UI_AUDIO: ManuallyDrop<RefCell<AudioManager>> = ManuallyDrop::new(RefCell::new(build_audio()));
     pub static UI_BTN_HITSOUND_LARGE: RefCell<Option<Sfx>> = const { RefCell::new(None) };
     pub static UI_BTN_HITSOUND: RefCell<Option<Sfx>> = const { RefCell::new(None) };
     pub static UI_SWITCH_SOUND: RefCell<Option<Sfx>> = const { RefCell::new(None) };
