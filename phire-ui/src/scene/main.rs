@@ -173,6 +173,7 @@ impl Scene for MainScene {
 
     fn enter(&mut self, tm: &mut TimeManager, _target: Option<RenderTarget>) -> Result<()> {
         crate::character::check_erosion_trigger();
+        UI_AUDIO.with(|it| it.borrow_mut().recover_if_needed())?;
         if let Some(bgm) = &mut self.bgm {
             bgm.fade_in(1.3)?;
         }
@@ -296,7 +297,6 @@ impl Scene for MainScene {
     }
 
     fn update(&mut self, tm: &mut TimeManager) -> Result<()> {
-        UI_AUDIO.with(|it| it.borrow_mut().recover_if_needed())?;
         if get_data().config.mp_enabled {
             MP_PANEL.with(|it| {
                 if let Some(panel) = it.borrow_mut().as_mut() {
