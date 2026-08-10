@@ -9,7 +9,7 @@ use phire::{
     ext::{create_audio_manger, get_audio_latency, get_frame_latency, push_frame_time, screen_aspect, semi_black},
     scene::show_message,
     time::TimeManager,
-    ui::{DRectButton, Slider, Ui},
+    ui::{DRectButton, Ui},
 };
 use sasa::{AudioManager, Renderer};
 #[cfg(not(target_os = "android"))]
@@ -40,9 +40,11 @@ const WAVEFORMS: &[(&str, Waveform)] = &[
     ("Sweep", Waveform::Sweep),
 ];
 
-const FREQ_MIN: f32 = 20.0;
-const FREQ_MAX: f32 = 8000.0;
-const FREQ_DEFAULT: f32 = 440.0;
+const FREQ_VALUES: &[f32] = &[80.0, 200.0, 440.0, 1000.0];
+const AMP_VALUES: &[f32] = &[0.0, 0.25, 0.5, 0.75, 1.0];
+
+const FREQ_DEFAULT_IDX: usize = 2; // 440 Hz
+const AMP_DEFAULT_IDX: usize = 3; // 0.5
 
 struct ToneParams {
     frequency: Mutex<f64>,
@@ -138,10 +140,10 @@ pub struct OutputPage {
 
     tm: TimeManager,
 
-    freq_slider: Slider,
-    amp_slider: Slider,
-    freq_norm: f32,
-    amp_norm: f32,
+    freq_btn: DRectButton,
+    amp_btn: DRectButton,
+    freq_idx: usize,
+    amp_idx: usize,
     waveform_idx: usize,
     wf_btns: Vec<DRectButton>,
     active: bool,
@@ -164,8 +166,8 @@ impl OutputPage {
         let mut audio = create_audio_manger(config)?;
 
         let params = Arc::new(ToneParams {
-            frequency: Mutex::new(FREQ_DEFAULT as f64),
-            amplitude: Mutex::new(0.5),
+            frequency: Mutex::new(FREQ_VALUES[FREQ_DEFAULT_IDX] as f64),
+            amplitude: Mutex::new(AMP_VALUES[AMP_DEFAULT_IDX]),
             waveform: Mutex::new(Waveform::Sine),
             active: Mutex::new(false),
         });
@@ -173,19 +175,16 @@ impl OutputPage {
         let renderer = ToneRenderer::new(params.clone());
         audio.add_renderer(renderer)?;
 
-        let freq_norm = freq_to_norm(FREQ_DEFAULT);
-        let amp_norm = 0.5;
-
         Ok(Self {
             audio: Some(audio),
             params,
 
             tm: TimeManager::new(1., false),
 
-            freq_slider: Slider::new(0.0..1.0, 0.001),
-            amp_slider: Slider::new(0.0..1.0, 0.01),
-            freq_norm,
-            amp_norm,
+            freq_btn: DRectButton::new(),
+            amp_btn: DRectButton::new(),
+            freq_idx: FREQ_DEFAULT_IDX,
+            amp_idx: AMP_DEFAULT_IDX,
             waveform_idx: 0,
             wf_btns: (0..6).map(|_| DRectButton::new()).collect(),
             active: false,
@@ -248,13 +247,14 @@ impl Page for OutputPage {
     fn touch(&mut self, touch: &Touch, s: &mut SharedState) -> Result<bool> {
         let t = s.t;
 
-        if self.freq_slider.touch(touch, t, &mut self.freq_norm).is_some() {
-            let freq = norm_to_freq(self.freq_norm) as f64;
-            *self.params.frequency.lock().unwrap() = freq;
+        if self.freq_btn.touch(touch, t) {
+            self.freq_idx = (self.freq_idx + 1) % FREQ_VALUES.len();
+            *self.params.frequency.lock().unwrap() = FREQ_VALUES[self.freq_idx] as f64;
             return Ok(true);
         }
-        if self.amp_slider.touch(touch, t, &mut self.amp_norm).is_some() {
-            *self.params.amplitude.lock().unwrap() = self.amp_norm;
+        if self.amp_btn.touch(touch, t) {
+            self.amp_idx = (self.amp_idx + 1) % AMP_VALUES.len();
+            *self.params.amplitude.lock().unwrap() = AMP_VALUES[self.amp_idx];
             return Ok(true);
         }
         if self.play_btn.touch(touch, t) {
@@ -363,22 +363,20 @@ impl Page for OutputPage {
 
             let right_center = r.right() * 0.5  - 0.1;
             #[cfg(not(target_os = "android"))]
-            let mut y = r.center().y - aspect * 0.70;
+            let mut y = r.center().y - 0.30;
             #[cfg(target_os = "android")]
-            let mut y = r.center().y - aspect * 0.75; // compat_btn
-
-            ui.text(tl!("title"))
-                .pos(right_center, y)
-                .anchor(0.5, 0.)
-                .size(0.65)
-                .color(Color::new(1., 1., 1., c.a))
-                .draw();
-            y += 0.10;
+            let mut y = r.center().y - 0.35; // compat_btn
 
             let active = *self.params.active.lock().unwrap();
             let start_label = if active { tl!("stop") } else { tl!("start") };
             let btn_rect = Rect::new(right_center - 0.22, y, 0.44, 0.08);
             self.play_btn.render_text(ui, btn_rect, t, c.a, start_label, 0.45, active);
+            ui.text(tl!("title"))
+                .pos(right_center + 0.25, y + 0.04)
+                .anchor(0., 0.5)
+                .size(0.32)
+                .color(Color::new(1., 1., 1., 0.7 * c.a))
+                .draw();
 
             #[cfg(target_os = "android")]
             {
@@ -415,32 +413,32 @@ impl Page for OutputPage {
                     .color(Color::new(1., 1., 1., 0.7 * c.a))
                     .draw();
             }
-            y += aspect * 0.20;
-
-            let slider_left = right_center - 0.08 + 0.03;
-
-            let freq = norm_to_freq(self.freq_norm);
-            *self.params.frequency.lock().unwrap() = freq as f64;
-            self.freq_slider.render(
-                ui,
-                Rect::new(slider_left, y + aspect * 0.01, 0.55, aspect * 0.035),
-                t,
-                c,
-                self.freq_norm,
-                format!("{:.0} Hz", freq),
-            );
             y += 0.10;
 
-            *self.params.amplitude.lock().unwrap() = self.amp_norm;
-            self.amp_slider.render(
-                ui,
-                Rect::new(slider_left, y + aspect * 0.01, 0.55, aspect * 0.035),
-                t,
-                c,
-                self.amp_norm,
-                format!("{:.0}%", self.amp_norm * 100.0),
-            );
-            y += aspect * 0.18;
+            let freq = FREQ_VALUES[self.freq_idx];
+            *self.params.frequency.lock().unwrap() = freq as f64;
+            let freq_text = format!("{:.0} Hz", freq);
+            let freq_rect = Rect::new(right_center - 0.22, y, 0.44, 0.08);
+            self.freq_btn.render_text(ui, freq_rect, t, c.a, freq_text, 0.45, false);
+            ui.text(tl!("freq"))
+                .pos(right_center + 0.25, y + 0.04)
+                .anchor(0., 0.5)
+                .size(0.32)
+                .color(Color::new(1., 1., 1., 0.7 * c.a))
+                .draw();
+            y += 0.10;
+
+            *self.params.amplitude.lock().unwrap() = AMP_VALUES[self.amp_idx];
+            let amp_text = format!("{:.0}%", AMP_VALUES[self.amp_idx] * 100.0);
+            let amp_rect = Rect::new(right_center - 0.22, y, 0.44, 0.08);
+            self.amp_btn.render_text(ui, amp_rect, t, c.a, amp_text, 0.45, false);
+            ui.text(tl!("volume"))
+                .pos(right_center + 0.25, y + 0.04)
+                .anchor(0., 0.5)
+                .size(0.32)
+                .color(Color::new(1., 1., 1., 0.7 * c.a))
+                .draw();
+            y += 0.12;
 
             ui.text(tl!("waveform"))
                 .pos(right_center, y)
@@ -448,7 +446,7 @@ impl Page for OutputPage {
                 .size(0.5)
                 .color(Color::new(1., 1., 1., 0.6 * c.a))
                 .draw();
-            y += 0.08;
+            y += 0.06;
 
             let btn_w = 0.16;
             let btn_h = 0.06;
@@ -467,7 +465,7 @@ impl Page for OutputPage {
                     sel,
                 );
             }
-            y += 0.10;
+            y += 0.08;
 
             if let Some(audio) = self.audio.as_mut() {
                 let audio_latency = get_audio_latency(audio);
@@ -577,23 +575,8 @@ impl Page for OutputPage {
                     #[allow(unreachable_patterns)] _ => {}, // TODO: OHOS
                 }
             }
-            if get_data().config.auto_tweak_offset {
-                push_frame_time(&mut self.frame_times, self.tm.real_time());
-            }
+            push_frame_time(&mut self.frame_times, self.tm.real_time());
         });
         Ok(())
     }
-}
-
-fn freq_to_norm(freq: f32) -> f32 {
-    let log_min = FREQ_MIN.ln();
-    let log_max = FREQ_MAX.ln();
-    ((freq.ln() - log_min) / (log_max - log_min)).clamp(0.0, 1.0)
-}
-
-fn norm_to_freq(norm: f32) -> f32 {
-    let log_min = FREQ_MIN.ln();
-    let log_max = FREQ_MAX.ln();
-    let log_val = log_min + (log_max - log_min) * norm;
-    log_val.exp().clamp(FREQ_MIN, FREQ_MAX)
 }
