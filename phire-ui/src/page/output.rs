@@ -340,7 +340,7 @@ impl Page for OutputPage {
                     Wasapi(info) => {
                         if let Some(sample_rate) = info.sample_rate {
                             if let Some(min_period_hns) = info.min_period_hns {
-                                let min_buffer = min_period_hns * sample_rate / 10000000;
+                                let min_buffer = (min_period_hns as f64 / 10000000.0 * sample_rate as f64) as u32;
                                 self.base_buffer_size = Some(min_buffer);
                             }
                         }
