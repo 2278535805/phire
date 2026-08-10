@@ -14,3 +14,4 @@ failed-low-latency = Failed to set low latency
 unexpected-buffer-size = Unexpected buffer size
 failed-buffer-size = Failed to set buffer size
 found-xrun = Audio stuttering detected
+failed-audio-write = Audio stream not responding

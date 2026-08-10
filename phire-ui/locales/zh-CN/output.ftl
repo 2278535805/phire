@@ -14,3 +14,4 @@ failed-low-latency = 低延迟模式设置失败
 unexpected-buffer-size = 缓冲区大小过大
 failed-buffer-size = 无法设置缓冲区大小
 found-xrun = 检测到音频卡顿
+failed-audio-write = 音频流未响应

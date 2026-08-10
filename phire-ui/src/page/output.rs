@@ -485,6 +485,11 @@ impl Page for OutputPage {
                     #[cfg(target_os = "android")]
                     Oboe(info) => {
                         let mut warn_str = Vec::new();
+                        if let Some(latency_millis) = info.latency_millis {
+                            if latency_millis < 0.0 {
+                                warn_str.push(tl!("failed-audio-write"));
+                            }
+                        }
                         if matches!(info.settings.sharing_mode, SharingMode::Exclusive) {
                             if let Some(actual_sharing_mode) = info.actual_sharing_mode {
                                 if info.settings.sharing_mode != actual_sharing_mode {
