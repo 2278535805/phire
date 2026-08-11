@@ -384,11 +384,14 @@ pub async fn sync_active_play_config() -> Result<Option<String>> {
 /// into the local list (updates by id, appends new ones; configs missing on
 /// the server keep their values but become local-only by clearing the id).
 pub async fn download_play_configurations() -> Result<()> {
-    let resp: ResponseDto<Vec<PlayConfigurationDto>> =
-        recv_raw(Client::get("/player/configurations").query(&[("page", "1"), ("perPage", "100")]))
-            .await?
-            .json()
-            .await?;
+    let owner_id = get_data().me.as_ref().map(|it| it.id.to_string()).unwrap_or_default();
+    let resp: ResponseDto<Vec<PlayConfigurationDto>> = recv_raw(
+        Client::get("/player/configurations")
+            .query(&[("page", "1"), ("perPage", "100"), ("rangeOwnerId", owner_id.as_str())]),
+    )
+    .await?
+    .json()
+    .await?;
     let list = resp.data.unwrap_or_default();
     let data = get_data_mut();
     let ids: HashSet<&str> = list.iter().filter_map(|it| it.id.as_deref()).collect();
