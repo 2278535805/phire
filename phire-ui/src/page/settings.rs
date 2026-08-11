@@ -5,9 +5,9 @@ use crate::{get_data, get_data_mut, popup::ChooseButton, save_data, scene::BGM_V
 use anyhow::Result;
 use macroquad::prelude::*;
 use phire::{
-    ext::{LocalTask, RectExt, SafeTexture, ScaleType, poll_future, semi_black, validate_combo},
+    ext::{poll_future, semi_black, validate_combo, LocalTask, RectExt, SafeTexture, ScaleType},
     health::{HealthConfig, HealthType},
-    l10n::{LANG_IDENTS, LANG_NAMES, LanguageIdentifier},
+    l10n::{LanguageIdentifier, LANG_IDENTS, LANG_NAMES},
     scene::{show_error, show_message},
     ui::{DRectButton, InlineInputBox, Scroll, Slider, Ui},
 };
@@ -277,7 +277,7 @@ struct GeneralList {
 
     lang_btn: ChooseButton,
     offline_btn: DRectButton,
-    #[cfg(any(target_os = "windows", target_os = "linux"))]
+    #[cfg(all(any(target_os = "windows", target_os = "linux"), not(target_env = "ohos")))]
     fullscreen_btn: DRectButton,
     mp_btn: DRectButton,
     mp_addr_btn: DRectButton,
@@ -303,7 +303,7 @@ impl GeneralList {
                         .unwrap_or_default(),
                 ),
             offline_btn: DRectButton::new(),
-            #[cfg(any(target_os = "windows", target_os = "linux"))]
+            #[cfg(all(any(target_os = "windows", target_os = "linux"), not(target_env = "ohos")))]
             fullscreen_btn: DRectButton::new(),
             mp_btn: DRectButton::new(),
             mp_addr_btn: DRectButton::new(),
@@ -343,7 +343,7 @@ impl GeneralList {
             config.offline_mode ^= true;
             return Ok(Some(true));
         }
-        #[cfg(any(target_os = "windows", target_os = "linux"))]
+        #[cfg(all(any(target_os = "windows", target_os = "linux"), not(target_env = "ohos")))]
         if self.fullscreen_btn.touch(touch, t) {
             config.fullscreen_mode ^= true;
             macroquad::window::set_fullscreen(config.fullscreen_mode);
@@ -411,7 +411,7 @@ impl GeneralList {
             render_title(ui, c, tl!("item-offline"), Some(tl!("item-offline-sub")));
             render_switch(ui, rr, t, c, &mut self.offline_btn, config.offline_mode);
         }
-        #[cfg(any(target_os = "windows", target_os = "linux"))]
+        #[cfg(all(any(target_os = "windows", target_os = "linux"), not(target_env = "ohos")))]
         item! {
             render_title(ui, c, tl!("item-fullscreen"), None);
             render_switch(ui, rr, t, c, &mut self.fullscreen_btn, config.fullscreen_mode);
@@ -453,6 +453,8 @@ struct AudioList {
     cali_btn: DRectButton,
     #[cfg(target_os = "android")]
     audio_compatibility_btn: DRectButton,
+    #[cfg(target_env = "ohos")]
+    audio_buffer_size_btn: DRectButton,
 
     cali_task: LocalTask<Result<OffsetPage>>,
     next_page: Option<NextPage>,
@@ -468,6 +470,8 @@ impl AudioList {
             cali_btn: DRectButton::new(),
             #[cfg(target_os = "android")]
             audio_compatibility_btn: DRectButton::new(),
+            #[cfg(target_env = "ohos")]
+            audio_buffer_size_btn: DRectButton::new(),
 
             cali_task: None,
             next_page: None,
@@ -505,6 +509,21 @@ impl AudioList {
         #[cfg(target_os = "android")]
         if self.audio_compatibility_btn.touch(touch, t) {
             config.audio_compatibility ^= true;
+            return Ok(Some(true));
+        }
+        #[cfg(target_env = "ohos")]
+        if self.audio_buffer_size_btn.touch(touch, t) {
+            const AUDIO_BUFFER: u32 = 240;
+            const AUDIO_BUFFER_2: u32 = AUDIO_BUFFER * 2;
+            const AUDIO_BUFFER_4: u32 = AUDIO_BUFFER * 4;
+            const AUDIO_BUFFER_8: u32 = AUDIO_BUFFER * 8;
+            config.audio_buffer_size = match config.audio_buffer_size {
+                None => Some(AUDIO_BUFFER),
+                Some(AUDIO_BUFFER) => Some(AUDIO_BUFFER_2),
+                Some(AUDIO_BUFFER_2) => Some(AUDIO_BUFFER_4),
+                Some(AUDIO_BUFFER_4) => Some(AUDIO_BUFFER_8),
+                _ => None,
+            };
             return Ok(Some(true));
         }
         Ok(None)
@@ -563,6 +582,15 @@ impl AudioList {
         item! {
             render_title(ui, c, tl!("item-audio-compatibility"), None);
             render_switch(ui, rr, t, c, &mut self.audio_compatibility_btn, config.audio_compatibility);
+        }
+        #[cfg(target_env = "ohos")]
+        item! {
+            render_title(ui, c, tl!("item-audio-buffer-size"), None);
+            let text = match config.audio_buffer_size {
+                None => tl!("auto"),
+                Some(n) => Cow::Owned(format!("{}", n)),
+            };
+            self.audio_buffer_size_btn.render_text(ui, rr, t, c.a, text, 0.5, true);
         }
         (w, h)
     }

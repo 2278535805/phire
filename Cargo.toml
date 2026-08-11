@@ -49,6 +49,7 @@ hex = "0.4.3"
 hmac = "0.12.1"
 image = "0.24"
 intl-memoizer = "0.5.1"
+inputbox = "0.1.4"
 js-sys = "0.3.85"
 lazy_static = "1.5.0"
 libc = "0.2.142"
@@ -99,3 +100,5 @@ wasm-bindgen-futures = "0.4"
 web-sys = { version = "0.3", features = ["Location", "Performance", "UrlSearchParams", "Window"] }
 zip = "4.6.1"
 zstd = "0.13.3"
+napi-derive-ohos = "1.1.6"
+napi-ohos = { version = "1.1.6", default-features = false, features = ["napi8", "async"] }

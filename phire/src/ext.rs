@@ -5,22 +5,29 @@ use crate::{
 };
 use anyhow::{anyhow, Result};
 use image::DynamicImage;
+use lazy_static::lazy_static;
 use lyon::{
     math::Box2D,
     path::{builder::BorderRadii, Path, Winding},
 };
+use macroquad::miniquad::{
+    gl::GLenum, BlendFactor, BlendState, BlendValue, CompareFunc, Equation, PrimitiveType, StencilFaceState, StencilOp, StencilState,
+};
 use macroquad::prelude::*;
-use macroquad::miniquad::{gl::GLenum, BlendFactor, BlendState, BlendValue, CompareFunc, Equation, PrimitiveType, StencilFaceState, StencilOp, StencilState};
 use once_cell::sync::Lazy;
 use ordered_float::{Float, NotNan};
 use regex::Regex;
 use sasa::AudioManager;
 use serde::Deserialize;
 use std::{
-    collections::VecDeque, future::Future, ops::Deref, pin::Pin, sync::{Arc, Mutex}, task::{Poll, RawWaker, RawWakerVTable, Waker}
+    collections::VecDeque,
+    future::Future,
+    ops::Deref,
+    pin::Pin,
+    sync::{Arc, Mutex},
+    task::{Poll, RawWaker, RawWakerVTable, Waker},
 };
 use tracing::{debug, info_span};
-use lazy_static::lazy_static;
 
 pub type LocalTask<R> = Option<Pin<Box<dyn Future<Output = R>>>>;
 
@@ -111,7 +118,6 @@ impl SafeTexture {
         }
         self
     }
-
 }
 
 impl Clone for SafeTexture {
@@ -173,10 +179,25 @@ pub fn get_viewport() -> (i32, i32, i32, i32) {
 
 #[inline]
 pub fn draw_text_aligned(ui: &mut Ui, text: &str, x: f32, y: f32, anchor: (f32, f32), scale: f32, color: Color) -> Rect {
-    ui.text(text).pos(x, y).anchor(anchor.0, anchor.1).size(scale).color(color).multiline().draw()
+    ui.text(text)
+        .pos(x, y)
+        .anchor(anchor.0, anchor.1)
+        .size(scale)
+        .color(color)
+        .multiline()
+        .draw()
 }
 
-pub fn draw_text_aligned_opt_width(ui: &mut Ui, text: &str, x: f32, y: f32, anchor: (f32, f32), mut scale: f32, color: Color, max_width: f32) -> Rect {
+pub fn draw_text_aligned_opt_width(
+    ui: &mut Ui,
+    text: &str,
+    x: f32,
+    y: f32,
+    anchor: (f32, f32),
+    mut scale: f32,
+    color: Color,
+    max_width: f32,
+) -> Rect {
     let mut text = ui.text(text).size(scale).pos(x, y).anchor(anchor.0, anchor.1).color(color).multiline();
     let text_width = text.measure().w;
     if text_width > max_width {
@@ -185,7 +206,17 @@ pub fn draw_text_aligned_opt_width(ui: &mut Ui, text: &str, x: f32, y: f32, anch
     text.size(scale).draw()
 }
 
-pub fn draw_text_aligned_opt(ui: &mut Ui, text: &str, x: f32, y: f32, anchor: (f32, f32), mut scale: f32, color: Color, max_width: f32, max_height: f32) -> Rect {
+pub fn draw_text_aligned_opt(
+    ui: &mut Ui,
+    text: &str,
+    x: f32,
+    y: f32,
+    anchor: (f32, f32),
+    mut scale: f32,
+    color: Color,
+    max_width: f32,
+    max_height: f32,
+) -> Rect {
     let r = ui.text(text).size(scale).multiline().measure();
     let (text_width, text_height) = (r.w, r.h);
     if text_width > max_width {
@@ -194,7 +225,13 @@ pub fn draw_text_aligned_opt(ui: &mut Ui, text: &str, x: f32, y: f32, anchor: (f
     if text_height > max_height {
         scale *= max_height / text_height
     }
-    ui.text(text).pos(x, y).anchor(anchor.0, anchor.1).size(scale).color(color).multiline().draw()
+    ui.text(text)
+        .pos(x, y)
+        .anchor(anchor.0, anchor.1)
+        .size(scale)
+        .color(color)
+        .multiline()
+        .draw()
 }
 
 #[derive(Debug, Default, Clone, Copy, Deserialize)]
@@ -311,7 +348,6 @@ pub fn draw_illustration(tex: &Texture2D, x: f32, y: f32, w: f32, h: f32, color:
     r
 }
 
-
 fn drop_shadow(p: [Point; 4], alpha: f32) {
     const RADIUS: f32 = 0.018;
     let len = (PARALLELOGRAM_SLOPE * PARALLELOGRAM_SLOPE + 1.).sqrt();
@@ -414,16 +450,8 @@ pub fn create_audio_manger(config: &Config) -> Result<AudioManager> {
     #[cfg(target_os = "android")]
     {
         use sasa::backend::oboe::*;
-        let sharing_mode = if config.audio_compatibility {
-            SharingMode::Shared
-        } else {
-            SharingMode::Exclusive
-        };
-        let usage = if config.audio_compatibility {
-            Usage::Media
-        } else {
-            Usage::Game
-        };
+        let sharing_mode = if config.audio_compatibility { SharingMode::Shared } else { SharingMode::Exclusive };
+        let usage = if config.audio_compatibility { Usage::Media } else { Usage::Game };
         AudioManager::new(OboeBackend::new(OboeSettings {
             buffer_size: config.audio_buffer_size,
             performance_mode: PerformanceMode::LowLatency,
@@ -432,7 +460,15 @@ pub fn create_audio_manger(config: &Config) -> Result<AudioManager> {
             ..Default::default()
         }))
     }
-    #[cfg(not(target_os = "android"))]
+    #[cfg(target_env = "ohos")]
+    {
+        use sasa::backend::ohos::*;
+        AudioManager::new(OhosBackend::new(OhosSettings {
+            buffer_size: config.audio_buffer_size,
+            ..Default::default()
+        }))
+    }
+    #[cfg(not(any(target_os = "android", target_env = "ohos")))]
     {
         use sasa::backend::cpal::*;
         Ok(AudioManager::new(CpalBackend::new(CpalSettings {
@@ -449,7 +485,10 @@ pub fn make_pipeline(write_color: bool, pass_op: StencilOp, test_func: CompareFu
     } = unsafe { get_internal_gl() };
     gl.make_pipeline(
         context,
-        ShaderSource::Glsl { vertex: shader::VERTEX, fragment: shader::FRAGMENT },
+        ShaderSource::Glsl {
+            vertex: shader::VERTEX,
+            fragment: shader::FRAGMENT,
+        },
         PipelineParams {
             color_write: (write_color, write_color, write_color, write_color),
             color_blend: Some(BlendState::new(
@@ -490,7 +529,11 @@ pub fn semi_white(alpha: f32) -> Color {
 
 pub fn open_url(url: &str) -> Result<()> {
     cfg_if::cfg_if! {
-        if #[cfg(target_os = "android")] {
+        if #[cfg(target_env = "ohos")] {
+            macroquad::miniquad::native::call_request_callback(
+                format!(r#"{{"action":"openurl","payload":"{}"}}"#, url),
+            );
+        } else if #[cfg(target_os = "android")] {
             unsafe {
                 let env = macroquad::miniquad::native::attach_jni_env();
                 let ctx = ndk_context::android_context().context();
@@ -520,7 +563,6 @@ pub fn open_url(url: &str) -> Result<()> {
 
     Ok(())
 }
-
 
 pub fn unzip_into<R: std::io::Read + std::io::Seek>(reader: R, dir: &crate::dir::Dir, strip_root: bool) -> Result<()> {
     let mut zip = zip::ZipArchive::new(reader)?;
@@ -671,16 +713,13 @@ pub fn blur_image(image: DynamicImage, blur: f32) -> Result<SafeTexture> {
         blurred.push(input[2]);
         blurred.push(255);
     }
-    Ok((
-        Texture2D::from_image(&Image {
-            width: w as _,
-            height: h as _,
-            bytes: blurred,
-        })
-    ).into())
-
+    Ok((Texture2D::from_image(&Image {
+        width: w as _,
+        height: h as _,
+        bytes: blurred,
+    }))
+    .into())
 }
-
 
 mod shader {
     pub const VERTEX: &str = r#"#version 100

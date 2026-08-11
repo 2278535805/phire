@@ -66,11 +66,11 @@ colored = { workspace = true, optional = true }
 
 prpr-avc = { path = "../prpr-avc", optional = true }
 lazy_static = { workspace = true }
-open = { workspace = true }
 rustc-hash = { workspace = true }
 
-[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+[target.'cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))'.dependencies]
 rfd = { workspace = true }
+open = { workspace = true }
 
 [target.'cfg(target_os = "ios")'.dependencies]
 objc = { workspace = true }
@@ -82,8 +82,12 @@ block = { workspace = true }
 ndk-context = { workspace = true }
 sasa = { workspace = true, default-features = false, features = ["oboe"] }
 
-[target.'cfg(not(target_os = "android"))'.dependencies]
-sasa = { workspace = true, default-features = false, features = ["cpal"]  }
+[target.'cfg(target_env = "ohos")'.dependencies]
+sasa = { workspace = true, default-features = false, features = ["ohos"] }
+inputbox = { workspace = true }
+
+[target.'cfg(not(any(target_os = "android", target_env = "ohos")))'.dependencies]
+sasa = { workspace = true, default-features = false, features = ["cpal"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tokio = { workspace = true, features = ["rt-multi-thread", "fs"] }

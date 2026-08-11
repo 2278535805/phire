@@ -24,18 +24,18 @@ pub enum ChallengeModeColor {
     Blue,
     Red,
     Golden,
-    #[default] 
+    #[default]
     Rainbow,
 }
 
 impl fmt::Display for ChallengeModeColor {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let s = match self {
-            ChallengeModeColor::White   => "white",
-            ChallengeModeColor::Green   => "green",
-            ChallengeModeColor::Blue    => "blue",
-            ChallengeModeColor::Red     => "red",
-            ChallengeModeColor::Golden  => "golden",
+            ChallengeModeColor::White => "white",
+            ChallengeModeColor::Green => "green",
+            ChallengeModeColor::Blue => "blue",
+            ChallengeModeColor::Red => "red",
+            ChallengeModeColor::Golden => "golden",
             ChallengeModeColor::Rainbow => "rainbow",
         };
         write!(f, "{}", s)
