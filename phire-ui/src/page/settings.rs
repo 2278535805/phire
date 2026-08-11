@@ -1,6 +1,6 @@
 phire::tl_file!("settings");
 
-use super::{NextPage, OffsetPage, Page, SharedState};
+use super::{NextPage, OffsetPage, Page, PlayConfigurationPage, SharedState};
 use crate::{get_data, get_data_mut, popup::ChooseButton, save_data, scene::BGM_VOLUME_UPDATED, sync_data};
 use anyhow::Result;
 use macroquad::prelude::*;
@@ -208,8 +208,10 @@ impl Page for SettingsPage {
     }
 
     fn next_page(&mut self) -> NextPage {
-        if matches!(self.chosen, SettingListType::Audio) {
-            return self.list_audio.next_page().unwrap_or_default();
+        match self.chosen {
+            SettingListType::Audio => return self.list_audio.next_page().unwrap_or_default(),
+            SettingListType::Chart => return self.list_chart.next_page().unwrap_or_default(),
+            _ => {}
         }
         NextPage::None
     }
@@ -582,6 +584,8 @@ struct ChartList {
     speed_slider: Slider,
     size_slider: Slider,
     render_extra_btn: DRectButton,
+    play_config_btn: DRectButton,
+    next_page: Option<NextPage>,
 }
 
 impl ChartList {
@@ -596,6 +600,8 @@ impl ChartList {
             speed_slider: Slider::new(0.1..2.0, 0.05),
             size_slider: Slider::new(0.0..5.0, 0.005),
             render_extra_btn: DRectButton::new(),
+            play_config_btn: DRectButton::new(),
+            next_page: None,
         }
     }
 
@@ -649,6 +655,10 @@ impl ChartList {
         if self.render_extra_btn.touch(touch, t) {
             config.render_extra ^= true;
             return Ok(Some(true));
+        }
+        if self.play_config_btn.touch(touch, t) {
+            self.next_page = Some(NextPage::Overlay(Box::new(PlayConfigurationPage::new())));
+            return Ok(Some(false));
         }
         Ok(None)
     }
@@ -707,7 +717,23 @@ impl ChartList {
             render_title(ui, c, tl!("item-render-extra"), None);
             render_switch(ui, rr, t, c, &mut self.render_extra_btn, config.render_extra);
         }
+        item! {
+            render_title(ui, c, tl!("item-play-config"), Some(tl!("item-play-config-sub")));
+            self.play_config_btn.render_text(
+                ui,
+                rr,
+                t,
+                c.a,
+                format!("{:.0}ms / {:.0}ms", config.perfect_judgment * 1000., config.good_judgment * 1000.),
+                0.4,
+                false,
+            );
+        }
         (w, h)
+    }
+
+    pub fn next_page(&mut self) -> Option<NextPage> {
+        self.next_page.take()
     }
 }
 

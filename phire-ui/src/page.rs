@@ -15,6 +15,9 @@ mod message;
 mod offset;
 pub use offset::OffsetPage;
 
+mod play_configuration;
+pub use play_configuration::PlayConfigurationPage;
+
 mod respack;
 pub use respack::{ResPackItem, ResPackPage};
 

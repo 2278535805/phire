@@ -26,6 +26,8 @@ item-opt = Aggressive optimization
 item-opt-sub = เพิ่มประสิทธิภาพให้กับตัวเกม (อาจจะมีข้อผิดผลาด)
 item-speed = ความเร็ว
 item-note-size = ขนาดของ Note
+item-play-config = ตั้งค่าการตีจังหวะ
+item-play-config-sub = ปรับช่วงเวลา Perfect / Good / Bad
 
 item-touch-debug = Touch debug mode
 item-touch-debug-sub = แสดงจุดที่สัมผัส

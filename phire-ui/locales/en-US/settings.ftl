@@ -49,6 +49,8 @@ item-aggressive-particle-sub = Uses aggressive optimization strategy to improve 
 item-speed = Speed
 item-note-size = Note size
 item-render-extra = Enable Extra (Shader/Effect)
+item-play-config = Judgment Settings
+item-play-config-sub = Customize Perfect / Good / Bad judgment windows
 
 item-chart-debug-line = Chart Debug Mode - Line
 item-chart-debug-line-sub = Display line properties

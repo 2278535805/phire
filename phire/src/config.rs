@@ -97,6 +97,10 @@ pub struct Config {
 
     pub judge_offset: f64,
 
+    pub perfect_judgment: f64,
+    pub good_judgment: f64,
+    pub bad_judgment: f64,
+
     pub render_line: bool,
     pub render_line_extra: bool,
     pub render_note: bool,
@@ -185,6 +189,10 @@ impl Default for Config {
             autoplay: None,
 
             judge_offset: 0.,
+
+            perfect_judgment: 0.08,
+            good_judgment: 0.16,
+            bad_judgment: 0.22,
 
             render_line: true,
             render_line_extra: true,

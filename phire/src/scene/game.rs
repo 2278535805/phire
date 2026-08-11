@@ -384,7 +384,8 @@ impl GameScene {
                 .push(Effect::new(0.0..f64::INFINITY, include_str!("fxaa.glsl"), Vec::new(), false).unwrap());
         }
 
-        let judge = Judge::new(&chart);
+        let mut judge = Judge::new(&chart);
+        judge.set_limits(config.perfect_judgment, config.good_judgment, config.bad_judgment);
 
         let info_offset = info.offset;
         let mut res = Resource::new(
