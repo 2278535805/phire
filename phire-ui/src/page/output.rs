@@ -338,12 +338,10 @@ impl Page for OutputPage {
                     },
                     #[cfg(target_os = "windows")]
                     Wasapi(info) => {
-                        if let Some(sample_rate) = info.sample_rate {
-                            if let Some(min_period_hns) = info.min_period_hns {
-                                let min_buffer = (min_period_hns as f64 / 10000000.0 * sample_rate as f64) as u32;
-                                self.base_buffer_size = Some(min_buffer);
-                            }
-                        }
+                        self.base_buffer_size = (!(cfg!(target_os = "windows") && self.compat))
+                            .then(|| info.sample_rate.zip(info.min_period_hns))
+                            .flatten()
+                            .map(|(sample_rate, period_hns)| (period_hns as f64 / 10_000_000.0 * sample_rate as f64) as u32);
                     }
                     #[allow(unreachable_patterns)] _ => {}, // TODO: OHOS
                 }
