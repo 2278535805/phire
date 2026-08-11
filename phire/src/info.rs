@@ -16,6 +16,7 @@ pub enum ChartFormat {
 #[serde(rename_all = "camelCase")]
 pub struct ChartInfo {
     pub id: Option<i32>,
+    pub guid: Option<String>,
     pub uploader: Option<i32>,
 
     pub name: String,
@@ -59,6 +60,7 @@ impl Default for ChartInfo {
     fn default() -> Self {
         Self {
             id: None,
+            guid: None,
             uploader: None,
 
             name: "UK".to_string(),

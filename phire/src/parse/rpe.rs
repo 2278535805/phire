@@ -49,6 +49,13 @@ fn i32_one() -> i32 {
 
 type BezierMap = FxHashMap<(u16, i16, i16), Rc<dyn TweenFunction>>;
 
+fn deserialize_bezier_points<'de, D>(d: D) -> Result<[f32; 4], D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    Ok(Option::<[f32; 4]>::deserialize(d)?.unwrap_or_default())
+}
+
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RPEEvent<T = f32> {
@@ -58,7 +65,7 @@ pub struct RPEEvent<T = f32> {
     easing_right: f32,
     #[serde(default)]
     bezier: u8,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_bezier_points")]
     bezier_points: [f32; 4],
     #[serde(default = "i32_one")]
     easing_type: i32,
@@ -98,7 +105,7 @@ pub struct RPETextEvent {
     easing_right: f32,
     #[serde(default)]
     bezier: u8,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_bezier_points")]
     bezier_points: [f32; 4],
     #[serde(default = "i32_one")]
     easing_type: i32,
@@ -583,9 +590,9 @@ async fn parse_judge_line(
                         continue;
                     }
                     if !font_cache.contains_key(font_path) {
-                        let font_data = fs.load_file(font_path).await.with_context(|| format!("failed to load font: {font_path}"))?;
-                        let font_arc = FontArc::try_from_vec(font_data).map_err(|err| anyhow::anyhow!("failed to parse font: {err}"))?;
-                        let painter = TextPainter::new(font_arc);
+                        let font_data = fs.load_file(font_path).await.with_context(|| format!("failed to load file: {font_path}"))?;
+                        let font_arc = FontArc::try_from_vec(font_data).map_err(|err| anyhow::anyhow!("failed to load font {font_path}: {err}"))?;
+                        let painter = TextPainter::new(vec![font_arc]);
                         let id = fonts.len();
                         fonts.push(RefCell::new(painter));
                         font_cache.insert(font_path.clone(), id);

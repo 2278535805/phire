@@ -14,6 +14,7 @@ uploading-avatar = Mengupload avatar
 
 load-record-failed = Gagal memuat catatan
 
+user-id = UID: { $id }
 last-login = Terakhir login: { $time }
 badge-admin = Admin
 badge-sponsor = Sponsor

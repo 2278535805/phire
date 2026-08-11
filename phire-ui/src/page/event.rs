@@ -1,6 +1,6 @@
 use super::{Illustration, Page, SharedState};
 use crate::{
-    client::{Client, Event},
+    client::{Client, Event, File},
     icons::Icons,
     scene::EventScene,
 };
@@ -27,7 +27,7 @@ struct Item {
 
 impl Item {
     pub fn new(event: Event) -> Self {
-        let illu = Illustration::from_file(event.illustration.clone());
+        let illu = Illustration::from_file(File { url: event.illustration.clone().unwrap_or_default() });
         Self {
             event,
             illu,
@@ -181,7 +181,7 @@ impl Page for EventPage {
                             if index == self.index {
                                 self.tr_from = ui.rect_to_global(r);
                             }
-                            ui.text(&item.event.name)
+                            ui.text(&item.event.title)
                                 .pos(r.x + Self::LB_PAD, r.bottom() - Self::LB_PAD)
                                 .anchor(0., 1.)
                                 .color(c)
@@ -256,7 +256,7 @@ impl Page for EventPage {
             let path = r.rounded(0.02 * (1. - p));
             ui.fill_path(&path, item.illu.shading(r.feather((1. - p) * ILLU_FEATHER), t, 1.));
             ui.fill_path(&path, semi_black(0.4));
-            ui.text(&item.event.name)
+            ui.text(&item.event.title)
                 .pos(r.x + Self::LB_PAD, r.bottom() - Self::LB_PAD)
                 .anchor(0., 1.)
                 .size(1.3 + p * 0.2)

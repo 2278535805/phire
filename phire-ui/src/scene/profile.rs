@@ -3,12 +3,12 @@ phire::tl_file!("profile");
 use super::{confirm_delete, TEX_BACKGROUND, TEX_ICON_BACK};
 use crate::{
     anti_addiction_action,
-    client::{recv_raw, Client, Record, User, UserManager},
+    client::{recv_raw, Chart, Client, File, Ptr, Record, ResponseDto, User, UserManager},
     get_data, get_data_mut,
     page::{Fader, Illustration, SFader},
     save_data, sync_data,
 };
-use anyhow::Result;
+use anyhow::{bail, Result};
 use chrono::Local;
 use macroquad::prelude::*;
 use phire::{
@@ -19,7 +19,6 @@ use phire::{
     time::TimeManager,
     ui::{button_hit, rounded_rect_shadow, DRectButton, RectButton, Scroll, ShadowConfig, Ui},
 };
-use serde_json::json;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc,
@@ -69,7 +68,9 @@ impl ProfileScene {
     pub fn new(id: i32, icon_user: SafeTexture, rank_icons: [SafeTexture; 8]) -> Self {
         let _ = UserManager::clear_cache(id);
         UserManager::request(id);
-        let load_task = Some(Task::new(Client::load(id)));
+        let id_str = id.to_string();
+        let load_task = Some(Task::new(async move { Client::load(&id_str).await }));
+        let black = BLACK_TEXTURE.clone();
         Self {
             id,
             user: None,
@@ -94,31 +95,49 @@ impl ProfileScene {
 
             scroll: Scroll::new(),
             record_task: Some(Task::new(async move {
-                let records: Vec<Record> = recv_raw(Client::get(format!("/record?player={id}"))).await?.json().await?;
+                let resp: ResponseDto<Vec<Record>> = recv_raw(
+                    Client::get("/records").query(&[("rangeOwnerId", id.to_string().as_str()), ("Order", "DateCreated"), ("Desc", "true"), ("PerPage", "20")]),
+                )
+                .await?
+                .json()
+                .await?;
+                let records = resp.data.unwrap_or_default();
                 Ok(records
                     .into_iter()
                     .map(|it| {
+                        let chart_id = it.chart_id.clone();
                         let illu = {
-                            let chart = it.chart.clone();
                             let notify = Arc::new(Notify::new());
                             Illustration {
-                                texture: (BLACK_TEXTURE.clone(), BLACK_TEXTURE.clone()),
+                                texture: (black.clone(), black.clone()),
                                 notify: Arc::clone(&notify),
                                 task: Some(Task::new({
+                                    let cid = chart_id.clone();
                                     async move {
                                         notify.notified().await;
-                                        let illu = &chart.fetch().await?.illustration;
-                                        Ok((illu.load_thumbnail().await?, None))
+                                        let chart = Ptr::<Chart>::new(cid).fetch().await?;
+                                        let illu_url = chart
+                                            .illustration
+                                            .clone()
+                                            .or_else(|| chart.song.as_ref().and_then(|s| s.illustration.clone()))
+                                            .unwrap_or_default();
+                                        if illu_url.is_empty() {
+                                            bail!("no illustration")
+                                        }
+                                        Ok((File { url: illu_url }.load_thumbnail().await?, None))
                                     }
                                 })),
                                 loaded: Arc::default(),
                                 load_time: f32::NAN,
                             }
                         };
-                        let chart = it.chart.clone();
+                        let cid = chart_id;
                         RecordItem {
                             record: it,
-                            name: Task::new(async move { Ok(chart.fetch().await?.name.clone()) }),
+                            name: Task::new(async move {
+                                let chart = Ptr::<Chart>::new(cid).fetch().await?;
+                                Ok(chart.title.clone().or_else(|| chart.song.as_ref().map(|s| s.title.clone())).unwrap_or_default())
+                            }),
                             btn: DRectButton::new(),
                             illu,
                         }
@@ -168,9 +187,8 @@ impl Scene for ProfileScene {
         if let Some((id, file)) = take_file() {
             if id == "avatar" {
                 self.avatar_task = Some(Task::new(async move {
-                    let id = Client::upload_file("avatar", std::fs::read(file)?).await?;
-                    recv_raw(Client::post("/edit/avatar", &json!({ "file": id }))).await?;
-                    Ok(())
+                    Client::upload_file("avatar", std::fs::read(file)?).await?;
+                    bail!("no longer available");
                 }));
             } else {
                 return_file(id, file);
@@ -185,7 +203,7 @@ impl Scene for ProfileScene {
                     Ok(_) => {
                         show_message(tl!("edit-avatar-success")).ok();
                         let id = get_data().me.as_ref().unwrap().id;
-                        Client::clear_cache::<User>(id)?;
+                        Client::clear_cache::<User>(&id.to_string())?;
                         UserManager::clear_cache(id)?;
                         UserManager::request(id);
                     }
@@ -223,8 +241,7 @@ impl Scene for ProfileScene {
 
         if self.should_delete.fetch_and(false, Ordering::Relaxed) {
             self.delete_task = Some(Task::new(async move {
-                Client::post("/delete-account", &()).send().await?.error_for_status()?;
-                Ok(())
+                bail!("no longer available");
             }));
         }
 
@@ -313,12 +330,18 @@ impl Scene for ProfileScene {
             let r = ui.avatar(cx, r.y + radius + 0.05, radius, WHITE, t, UserManager::opt_avatar(self.id, &self.icon_user));
             self.avatar_btn.set(ui, r);
             let r = ui
-                .text(&user.name)
+                .text(user.name())
                 .size(0.74)
                 .pos(cx, r.bottom() + 0.03)
                 .anchor(0.5, 0.)
                 .max_width(mw)
                 .color(user.name_color())
+                .draw();
+            let r = ui
+                .text(tl!("user-id", "id" => user.id))
+                .size(0.5)
+                .pos(cx, r.bottom() + 0.01)
+                .anchor(0.5, 0.)
                 .draw();
             let r = ui
                 .text(format!("RKS {:.2}", user.rks))
@@ -327,7 +350,7 @@ impl Scene for ProfileScene {
                 .anchor(0.5, 0.)
                 .draw();
             let mut r = ui
-                .text(user.bio.as_deref().unwrap_or(""))
+                .text(user.biography.as_deref().unwrap_or(""))
                 .pos(cx, r.bottom() + 0.01)
                 .anchor(0.5, 0.)
                 .multiline()
@@ -343,7 +366,7 @@ impl Scene for ProfileScene {
                     .draw();
             }
             let r = ui
-                .text(tl!("last-login", "time" => user.last_login.with_timezone(&Local).format("%Y-%m-%d %H:%M").to_string()))
+                .text(tl!("last-login", "time" => user.date_last_logged_in.with_timezone(&Local).format("%Y-%m-%d %H:%M").to_string()))
                 .pos(cx, r.bottom() + 0.01)
                 .anchor(0.5, 0.)
                 .size(0.4)
@@ -388,7 +411,7 @@ impl Scene for ProfileScene {
                                         .render_shadow(ui, r, t, c.a, |r| (Texture2D::clone(&item.illu.texture.0), r, ScaleType::CropCenter, c));
                                     ui.fill_path(&path, semi_black(0.6));
 
-                                    let icon = icon_index(item.record.score as _, item.record.full_combo, true);
+                                    let icon = icon_index(item.record.score as _, item.record.is_full_combo, true);
                                     let s = r.h - pad * 2.;
                                     let ir = Rect::new(r.x + pad, r.y + pad, s, s);
                                     ui.fill_rect(ir, (Texture2D::clone(&self.rank_icons[icon]), ir, ScaleType::Fit, c));
@@ -399,7 +422,7 @@ impl Scene for ProfileScene {
                                         ui.text(name).pos(lf, ir.y).max_width(r.right() - lf - 0.03).size(0.56).color(c).draw();
                                     }
 
-                                    ui.text(format!("{:07} {}", item.record.score, if item.record.full_combo { "[FC]" } else { "" }))
+                                    ui.text(format!("{:07} {}", item.record.score, if item.record.is_full_combo { "[FC]" } else { "" }))
                                         .pos(lf, ir.bottom() - 0.02)
                                         .anchor(0., 1.)
                                         .size(0.6)

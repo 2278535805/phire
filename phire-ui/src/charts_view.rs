@@ -1,5 +1,5 @@
 use crate::{
-    client::Chart,
+    client::{Chart, File},
     dir, get_data, get_data_mut,
     icons::Icons,
     page::{ChartItem, Fader, Illustration},
@@ -47,34 +47,39 @@ impl ChartDisplayItem {
     }
 
     pub fn from_remote(chart: &Chart) -> Self {
+        let illu_url = chart
+            .illustration
+            .clone()
+            .or_else(|| chart.song.as_ref().and_then(|s| s.illustration.clone()))
+            .unwrap_or_default();
         Self::new(
             ChartItem {
                 info: chart.to_info(),
                 illu: {
                     let notify = Arc::new(Notify::new());
+                    let has_url = !illu_url.is_empty();
                     Illustration {
                         texture: (BLACK_TEXTURE.clone(), BLACK_TEXTURE.clone()),
                         notify: Arc::clone(&notify),
-                        task: Some(Task::new({
-                            let illu = chart.illustration.clone();
-                            async move {
-                                notify.notified().await;
-                                Ok((illu.load_thumbnail().await?, None))
-                            }
-                        })),
+                        task: if has_url {
+                            Some(Task::new({
+                                let url = illu_url;
+                                async move {
+                                    notify.notified().await;
+                                    Ok((File { url }.load_thumbnail().await?, None))
+                                }
+                            }))
+                        } else {
+                            None
+                        },
                         loaded: Arc::default(),
                         load_time: f32::NAN,
                     }
                 },
                 local_path: None,
+                guid: Some(chart.id.clone()),
             },
-            if chart.stable_request {
-                Some('+')
-            } else if !chart.reviewed {
-                Some('*')
-            } else {
-                None
-            },
+            None,
         )
     }
 }
@@ -217,16 +222,19 @@ impl ChartsView {
                         if handled_by_mp {
                             continue;
                         }
-                        let download_path = chart.info.id.map(|it| format!("download/{it}"));
+                        let download_path = chart.info.guid.clone().map(|it| format!("download/{it}"));
                         let scene = SongScene::new(
                             chart.clone(),
                             None,
                             if let Some(path) = &chart.local_path {
                                 Some(path.clone())
                             } else {
-                                let path = download_path.clone().unwrap();
-                                if Path::new(&format!("{}/{path}", dir::charts()?)).exists() {
-                                    Some(path)
+                                if let Some(path) = download_path.clone() {
+                                    if Path::new(&format!("{}/{path}", dir::charts()?)).exists() {
+                                        Some(path)
+                                    } else {
+                                        None
+                                    }
                                 } else {
                                     None
                                 }
@@ -280,6 +288,8 @@ impl ChartsView {
                         let item = &self.charts.as_ref().unwrap()[transit.id as usize];
                         let path = if let Some(path) = &item.chart.local_path {
                             path.clone()
+                        } else if let Some(guid) = &item.chart.guid {
+                            format!("download/{guid}")
                         } else {
                             format!("download/{}", item.chart.info.id.unwrap())
                         };

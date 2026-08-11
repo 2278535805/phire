@@ -34,7 +34,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-pub(crate) type ObjectMap<T> = LruCache<i32, Arc<T>>;
+pub(crate) type ObjectMap<T> = LruCache<String, Arc<T>>;
 static CACHES: Lazy<Mutex<HashMap<&'static str, Arc<Mutex<Box<dyn Any + Send + Sync>>>>>> = Lazy::new(Mutex::default);
 
 pub(crate) fn obtain_map_cache<T: Object + 'static>() -> Arc<Mutex<Box<dyn Any + Send + Sync>>> {
@@ -49,7 +49,7 @@ pub(crate) fn obtain_map_cache<T: Object + 'static>() -> Arc<Mutex<Box<dyn Any +
 pub trait Object: Clone + DeserializeOwned + Send + Sync {
     const QUERY_PATH: &'static str;
 
-    fn id(&self) -> i32;
+    fn id(&self) -> String;
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -109,40 +109,44 @@ impl TryFrom<u8> for LevelType {
 
 #[derive(Debug)]
 pub struct Ptr<T> {
-    pub id: i32,
+    pub id: String,
     _marker: PhantomData<T>,
 }
 impl<T: Object + 'static> Clone for Ptr<T> {
     fn clone(&self) -> Self {
-        Self::new(self.id)
+        Self::new(self.id.clone())
+    }
+}
+impl<T: Object + 'static> From<String> for Ptr<T> {
+    fn from(value: String) -> Self {
+        Self::new(value)
     }
 }
 impl<T: Object + 'static> From<i32> for Ptr<T> {
     fn from(value: i32) -> Self {
-        Self::new(value)
+        Self::new(value.to_string())
     }
 }
 
 impl<T: Object + 'static> Ptr<T> {
-    pub fn new(id: i32) -> Self {
+    pub fn new(id: impl Into<String>) -> Self {
         Self {
-            id,
+            id: id.into(),
             _marker: PhantomData::default(),
         }
     }
 
     #[inline]
     pub async fn fetch(&self) -> Result<Arc<T>> {
-        Client::fetch(self.id).await
+        Client::fetch(&self.id).await
     }
 
     #[inline]
     pub async fn fetch_opt(&self) -> Result<Option<Arc<T>>> {
-        Client::fetch_opt(self.id).await
+        Client::fetch_opt(&self.id).await
     }
 
     pub async fn load(&self) -> Result<Arc<T>> {
-        // sync locks can not be held accross await point
         {
             let map = obtain_map_cache::<T>();
             let mut guard = map.lock().unwrap();
@@ -158,7 +162,7 @@ impl<T: Object + 'static> Ptr<T> {
 }
 impl<T: Object + 'static> Serialize for Ptr<T> {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_i32(self.id)
+        serializer.serialize_str(&self.id)
     }
 }
 impl<'de, T: Object + 'static> Deserialize<'de> for Ptr<T> {
@@ -166,7 +170,13 @@ impl<'de, T: Object + 'static> Deserialize<'de> for Ptr<T> {
     where
         D: serde::Deserializer<'de>,
     {
-        i32::deserialize(deserializer).map(Self::new)
+        let value = serde_json::Value::deserialize(deserializer)?;
+        let id = match value {
+            serde_json::Value::String(s) => s,
+            serde_json::Value::Number(n) => n.to_string(),
+            _ => return Err(serde::de::Error::custom("expected string or number for Ptr")),
+        };
+        Ok(Self::new(id))
     }
 }
 
@@ -208,15 +218,9 @@ impl File {
     }
 
     pub async fn load_thumbnail(&self) -> Result<DynamicImage> {
-        if self.url.starts_with("https://phira.mivik.cn/") {
+        if self.url.starts_with("https://res.phizone.cn/") {
             File {
-                url: format!("{}?imageView/0/w/{THUMBNAIL_WIDTH}/h/{THUMBNAIL_HEIGHT}", self.url),
-            }
-            .load_image()
-            .await
-        } else if self.url.starts_with("https://files.phira.cn/") || self.url.starts_with("https://phira.5wyxi.com/files/") {
-            File {
-                url: format!("{}.thumbnail", self.url),
+                url: format!("{}?imageView2/1/w/{THUMBNAIL_WIDTH}/h/{THUMBNAIL_HEIGHT}", self.url),
             }
             .load_image()
             .await

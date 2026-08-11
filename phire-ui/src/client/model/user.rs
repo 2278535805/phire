@@ -1,7 +1,29 @@
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(i64)]
+#[allow(unused)]
+pub enum Permission {
+    UploadChart     = 0x00000001,
+    SeeUnreviewed   = 0x00000002,
+    DeleteUnstable  = 0x00000004,
+    Review          = 0x00000008,
+    SeeStableReq    = 0x00000010,
+    StabilizeChart  = 0x00000020,
+    EditTags        = 0x00000040,
+    StabilizeJudge  = 0x00000080,
+    DeleteStable    = 0x00000100,
+    SeeAllEvents    = 0x00000200,
+    BanUser         = 0x00000400,
+    SetRanked       = 0x00000800,
+    SetAllRole      = 0x00001000,
+    SetReviewer     = 0x00002000,
+    SetSupervisor   = 0x00004000,
+    BanAvatar       = 0x00008000,
+    ReviewPecJam    = 0x00010000,
+}
+
 use super::{File, Object};
 use crate::client::Client;
 use anyhow::Result;
-use bitflags::bitflags;
 use chrono::{DateTime, Utc};
 use image::DynamicImage;
 use macroquad::prelude::Color;
@@ -12,110 +34,63 @@ use std::{collections::HashMap, sync::Arc};
 use tokio::sync::Mutex;
 use tracing::warn;
 
-bitflags! {
-    #[derive(Default, Debug, Clone, Copy)]
-    pub struct Permissions: i64 {
-        const UPLOAD_CHART      = 0x00000001;
-        const SEE_UNREVIEWED    = 0x00000002;
-        const DELETE_UNSTABLE   = 0x00000004;
-        const REVIEW            = 0x00000008;
-        const SEE_STABLE_REQ    = 0x00000010;
-        const STABILIZE_CHART   = 0x00000020;
-        const EDIT_TAGS         = 0x00000040;
-        const STABILIZE_JUDGE   = 0x00000080;
-        const DELETE_STABLE     = 0x00000100;
-        const SEE_ALL_EVENTS    = 0x00000200;
-        const BAN_USER          = 0x00000400;
-        const SET_RANKED        = 0x00000800;
-        const SET_ALL_ROLE      = 0x00001000;
-        const SET_REVIEWER      = 0x00002000;
-        const SET_SUPERVISOR    = 0x00004000;
-        const BAN_AVATAR        = 0x00008000;
-        const REVIEW_PECJAM     = 0x00010000;
-    }
-}
-
-bitflags! {
-    #[derive(Default, Debug, Clone, Copy)]
-    pub struct Roles: i32 {
-        const ADMIN             = 0x0001;
-        const REVIEWER          = 0x0002;
-        const SUPERVISOR        = 0x0004;
-        const HEAD_SUPERVISOR   = 0x0008;
-        const HEAD_REVIEWER     = 0x0010;
-        const PECJAM_REVIEWER   = 0x0020;
-    }
-}
-
-impl Roles {
-    pub fn perms(&self, banned: bool) -> Permissions {
-        let mut perm = Permissions::empty();
-        if !banned {
-            perm |= Permissions::UPLOAD_CHART;
-        }
-        if self.contains(Self::ADMIN) {
-            perm = Permissions::all();
-        }
-        if self.contains(Self::REVIEWER) {
-            perm |= Permissions::SEE_UNREVIEWED;
-            perm |= Permissions::DELETE_UNSTABLE;
-            perm |= Permissions::REVIEW;
-            perm |= Permissions::EDIT_TAGS;
-        }
-        if self.contains(Self::HEAD_REVIEWER) {
-            perm |= Permissions::BAN_USER;
-            perm |= Permissions::SET_REVIEWER;
-        }
-        if self.contains(Self::SUPERVISOR) {
-            perm |= Permissions::SEE_UNREVIEWED;
-            perm |= Permissions::SEE_STABLE_REQ;
-            perm |= Permissions::STABILIZE_CHART;
-            perm |= Permissions::EDIT_TAGS;
-        }
-        if self.contains(Self::HEAD_SUPERVISOR) {
-            perm |= Permissions::STABILIZE_JUDGE;
-            perm |= Permissions::DELETE_STABLE;
-            perm |= Permissions::SET_RANKED;
-            perm |= Permissions::SET_SUPERVISOR;
-        }
-        if self.contains(Self::PECJAM_REVIEWER) {
-            perm |= Permissions::REVIEW_PECJAM;
-        }
-        perm
-    }
-}
-
 #[derive(Default, Clone, Debug, Serialize, Deserialize)]
 #[serde(default)]
+#[serde(rename_all = "camelCase")]
 pub struct User {
     pub id: i32,
-    pub name: String,
+    #[serde(alias = "name")]
+    pub user_name: String,
+    #[serde(deserialize_with = "deser_avatar")]
     pub avatar: Option<File>,
-    pub badge: Option<String>,
+    #[serde(default)]
     pub badges: Vec<String>,
     pub language: String,
-    pub bio: Option<String>,
-    pub exp: i64,
+    #[serde(alias = "bio")]
+    pub biography: Option<String>,
+    #[serde(alias = "exp")]
+    pub experience: i64,
     pub rks: f32,
-    pub roles: i32,
+    #[serde(alias = "roles")]
+    pub role: String,
 
-    pub joined: DateTime<Utc>,
-    pub last_login: DateTime<Utc>,
+    #[serde(alias = "joined")]
+    pub date_joined: DateTime<Utc>,
+    #[serde(alias = "last_login")]
+    pub date_last_logged_in: DateTime<Utc>,
 }
-impl Object for User {
-    const QUERY_PATH: &'static str = "user";
 
-    fn id(&self) -> i32 {
-        self.id
+fn deser_avatar<'de, D>(deserializer: D) -> Result<Option<File>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value: Option<serde_json::Value> = Option::deserialize(deserializer)?;
+    Ok(value.and_then(|v| match v {
+        serde_json::Value::String(s) if !s.is_empty() => Some(File { url: s }),
+        serde_json::Value::Object(_) => serde_json::from_value::<File>(v).ok(),
+        _ => None,
+    }))
+}
+
+impl Object for User {
+    const QUERY_PATH: &'static str = "users";
+
+    fn id(&self) -> String {
+        self.id.to_string()
     }
 }
 impl User {
-    pub fn perms(&self) -> Permissions {
-        Roles::from_bits(self.roles).map(|it| it.perms(false)).unwrap_or_default()
+    pub fn perms(&self) -> i64 {
+        match self.role.as_str() {
+            "Administrator" => i64::MAX,
+            "Moderator" => 0x000003ff,
+            "Qualified" => 0x00000001,
+            _ => 0,
+        }
     }
 
-    pub fn has_perm(&self, perm: Permissions) -> bool {
-        Roles::from_bits(self.roles).is_some_and(|it| it.perms(false).contains(perm))
+    pub fn has_perm(&self, perm: i64) -> bool {
+        self.perms() & perm != 0
     }
 
     pub fn name_color(&self) -> Color {
@@ -126,6 +101,10 @@ impl User {
         } else {
             0xffffff
         })
+    }
+
+    pub fn name(&self) -> &str {
+        &self.user_name
     }
 }
 
@@ -154,8 +133,9 @@ impl UserManager {
         tasks.insert(
             id,
             Task::new(async move {
-                let user: Arc<User> = Client::load(id).await?;
-                RESULTS.lock().await.insert(id, (user.name.clone(), user.name_color(), None));
+                let id_str = id.to_string();
+                let user: Arc<User> = Client::load(&id_str).await?;
+                RESULTS.lock().await.insert(id, (user.user_name.clone(), user.name_color(), None));
                 if let Some(avatar) = &user.avatar {
                     Ok(Some(image::load_from_memory(&avatar.fetch().await?)?))
                 } else {

@@ -14,6 +14,7 @@ uploading-avatar = Uploading avatar
 
 load-record-failed = Failed to load records
 
+user-id = Starry Explorer #{ $id }
 last-login = Last login: { $time }
 badge-admin = Admin
 badge-sponsor = Sponsor

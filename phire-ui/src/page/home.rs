@@ -130,7 +130,6 @@ impl Page for HomePage {
             self.sf.enter(s.t);
             self.need_back = false;
         }
-        self.fetch_has_new();
         Ok(())
     }
 
@@ -400,7 +399,7 @@ impl Page for HomePage {
             );
             let rt = ct.0 - rad - 0.02;
             if let Some(me) = &get_data().me {
-                ui.text(&me.name).pos(rt, r.center().y + 0.002).anchor(1., 1.).size(0.6).color(c).draw();
+                ui.text(&me.user_name).pos(rt, r.center().y + 0.002).anchor(1., 1.).size(0.6).color(c).draw();
                 ui.text(format!("{:.2}", me.rks))
                     .pos(rt, r.center().y + 0.008)
                     .anchor(1., 0.)

@@ -14,7 +14,7 @@ use crate::{
 use anyhow::{anyhow, Result};
 use macroquad::prelude::*;
 use phire::{
-    ext::{semi_black, JoinToString, RectExt, SafeTexture, ScaleType},
+    ext::{semi_black, RectExt, SafeTexture, ScaleType},
     scene::{request_file, request_input, return_input, show_error, show_message, take_input, NextScene},
     task::Task,
     ui::{button_hit, DRectButton, RectButton, Ui},
@@ -33,7 +33,7 @@ const PAGE_NUM: u64 = 28;
 enum ChartListType {
     Local,
     Ranked,
-    Special,
+    // Special,
     Unstable,
     Popular,
 }
@@ -44,7 +44,7 @@ type OnlineTask = Task<Result<OnlineTaskResult>>;
 pub struct LibraryPage {
     btn_local: DRectButton,
     btn_ranked: DRectButton,
-    btn_special: DRectButton,
+    // btn_special: DRectButton,
     btn_unstable: DRectButton,
     btn_popular: DRectButton,
     chosen: ChartListType,
@@ -86,7 +86,7 @@ impl LibraryPage {
         Ok(Self {
             btn_local: DRectButton::new(),
             btn_ranked: DRectButton::new(),
-            btn_special: DRectButton::new(),
+            // btn_special: DRectButton::new(),
             btn_unstable: DRectButton::new(),
             btn_popular: DRectButton::new(),
             chosen: ChartListType::Local,
@@ -149,72 +149,70 @@ impl LibraryPage {
             show_message(tl!("offline-mode")).error();
             return;
         }
-        if get_data().me.is_none() {
-            show_error(anyhow!(tl!("must-login")));
-            return;
-        }
+        // if get_data().me.is_none() {
+        //     show_error(anyhow!(tl!("must-login")));
+        //     return;
+        // }
         self.charts_view.reset_scroll();
         self.charts_view.clear();
         let page = self.current_page;
         let search = self.search_str.clone();
-        let order = {
+        let (order_field, rev) = {
             let (order, mut rev) = ORDERS[self.current_order];
             let order = match order {
                 ChartOrder::Default => {
                     rev ^= true;
-                    "updated"
+                    "DateUpdated"
                 }
-                ChartOrder::Name => "name",
-                ChartOrder::Rating => "rating",
+                ChartOrder::Name => "Title",
+                ChartOrder::Rating => "Rating",
             };
-            if rev {
-                format!("-{order}")
-            } else {
-                order.to_owned()
-            }
+            (order, rev)
         };
-        let tags = self
-            .tags
-            .tags
-            .tags()
-            .iter()
-            .cloned()
-            .chain(self.tags.unwanted.as_ref().unwrap().tags().iter().map(|it| format!("-{it}")))
-            .join(",");
-        let division = self.tags.division;
-        let rating_range = format!("{},{}", self.rating.rate.score as f32 / 10., self.rating.rate_upper.as_ref().unwrap().score as f32 / 10.);
         let popular = matches!(self.chosen, ChartListType::Popular);
-        let typ = match self.chosen {
-            ChartListType::Ranked => 0,
-            ChartListType::Special => 1,
-            ChartListType::Unstable => 2,
-            _ => -1,
-        };
+        let chosen = self.chosen;
         let by_me = if self.tags.show_me {
             get_data().me.as_ref().map(|it| it.id)
         } else {
             None
         };
-        let show_unreviewed = self.tags.show_unreviewed;
-        let show_stabilize = self.tags.show_stabilize;
+        let tags_include = self.tags.tags.tags().to_vec();
+        let tags_exclude = self.tags.unwanted.as_ref().map(|t| t.tags().to_vec()).unwrap_or_default();
+        let rating_low = self.rating.rate.score;
+        let rating_high = self.rating.rate_upper.as_ref().map(|r| r.score);
         self.online_task = Some(Task::new(async move {
             let mut q = Client::query::<Chart>();
             if popular {
-                q = q.suffix("/popular");
+                q = q.order("playCount").query("desc", "true");
             } else {
-                q = q.search(search).order(order).tags(tags).query("rating", rating_range);
+                q = q.search(search).order(order_field);
+                if rev {
+                    q = q.query("desc", "true");
+                }
+            }
+            match chosen {
+                ChartListType::Ranked => {
+                    q = q.query("isRanked", "true");
+                }
+                ChartListType::Unstable => {
+                    q = q.query("isRanked", "false");
+                }
+                // ChartListType::Special => {
+                //     q = q.query("isRanked", "false").query("isHidden", "true").query("isLocked", "true");
+                // }
+                _ => {}
             }
             if let Some(me) = by_me {
-                q = q.query("uploader", me.to_string());
+                q = q.query("ownerId", me.to_string());
             }
-            if show_stabilize {
-                q = q.query("stableRequest", "true");
-            } else if show_unreviewed {
-                q = q.query("reviewed", "false").query("stableRequest", "false");
+            if !tags_include.is_empty() || !tags_exclude.is_empty() {
+                q = q.tags(tags_include, tags_exclude);
+            }
+            q = q.query("minRating", rating_low.to_string());
+            if let Some(high) = rating_high {
+                q = q.query("maxRating", high.to_string());
             }
             let (remote_charts, count) = q
-                .query("type", typ.to_string())
-                .query("division", division)
                 .page(page)
                 .page_num(PAGE_NUM)
                 .send()
@@ -293,7 +291,7 @@ impl Page for LibraryPage {
         }
         let to_type = [
             (&mut self.btn_ranked, ChartListType::Ranked),
-            (&mut self.btn_special, ChartListType::Special),
+            // (&mut self.btn_special, ChartListType::Special),
             (&mut self.btn_unstable, ChartListType::Unstable),
             (&mut self.btn_popular, ChartListType::Popular),
         ]
@@ -334,7 +332,7 @@ impl Page for LibraryPage {
                     return Ok(true);
                 }
             }
-            ChartListType::Ranked | ChartListType::Special | ChartListType::Unstable => {
+            ChartListType::Ranked | ChartListType::Unstable => { // ChartListType::Special
                 if !self.search_str.is_empty() && self.search_clr_btn.touch(touch) {
                     button_hit();
                     self.search_str.clear();
@@ -435,7 +433,7 @@ impl Page for LibraryPage {
                 [
                     (&mut self.btn_local, tl!("local"), ChartListType::Local),
                     (&mut self.btn_ranked, ttl!("chart-ranked"), ChartListType::Ranked),
-                    (&mut self.btn_special, ttl!("chart-special"), ChartListType::Special),
+                    // (&mut self.btn_special, ttl!("chart-special"), ChartListType::Special),
                     (&mut self.btn_unstable, ttl!("chart-unstable"), ChartListType::Unstable),
                     (&mut self.btn_popular, tl!("popular"), ChartListType::Popular),
                 ]
@@ -455,7 +453,7 @@ impl Page for LibraryPage {
                     self.import_btn.render_text(ui, r, t, c.a, tl!("import"), 0.6, false);
                 });
             }
-            ChartListType::Ranked | ChartListType::Special | ChartListType::Unstable => {
+            ChartListType::Ranked | ChartListType::Unstable => { // ChartListType::Special
                 s.render_fader(ui, |ui, c| {
                     let empty = self.search_str.is_empty();
                     let w = 0.53;

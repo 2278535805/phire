@@ -14,6 +14,7 @@ uploading-avatar = Загрузка
 
 load-record-failed = Failed to load records
 
+user-id = UID: { $id }
 last-login = Был(а) в сети { $time }
 badge-admin = Админ
 badge-sponsor = Спонсор

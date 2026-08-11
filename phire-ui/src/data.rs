@@ -20,6 +20,7 @@ fn default_score_total() -> u32 {
 #[serde(rename_all = "camelCase")]
 pub struct BriefChartInfo {
     pub id: Option<i32>,
+    pub guid: Option<String>,
     pub uploader: Option<Ptr<User>>,
     pub name: String,
     pub level: String,
@@ -40,20 +41,26 @@ pub struct BriefChartInfo {
 
 impl BriefChartInfo {
     pub fn from_chart(chart: &Chart) -> Self {
+        let name = chart
+            .title
+            .clone()
+            .or_else(|| chart.song.as_ref().map(|s| s.title.clone()))
+            .unwrap_or_default();
         Self {
-            id: Some(chart.id),
-            uploader: Some(chart.uploader.clone()),
-            name: chart.name.clone(),
+            id: None,
+            guid: Some(chart.id.clone()),
+            uploader: Some(Ptr::new(chart.owner_id.to_string())),
+            name,
             level: chart.level.clone(),
             difficulty: chart.difficulty,
             intro: chart.description.clone().unwrap_or_default(),
-            charter: chart.charter.clone(),
-            composer: chart.composer.clone(),
-            illustrator: chart.illustrator.clone(),
+            charter: crate::client::parse_author_name(&chart.author_name),
+            composer: chart.song.as_ref().and_then(|s| s.author_name.clone()).unwrap_or_default(),
+            illustrator: chart.illustrator.clone().unwrap_or_default(),
             score_total: 1_000_000,
-            created: Some(chart.created),
-            updated: Some(chart.updated),
-            chart_updated: Some(chart.chart_updated),
+            created: chart.date_created,
+            updated: chart.date_updated,
+            chart_updated: chart.date_file_updated,
             has_unlock: false,
         }
     }
@@ -63,7 +70,8 @@ impl From<ChartInfo> for BriefChartInfo {
     fn from(info: ChartInfo) -> Self {
         Self {
             id: info.id,
-            uploader: info.uploader.map(Ptr::new),
+            guid: info.guid,
+            uploader: info.uploader.map(|id| Ptr::new(id.to_string())),
             name: info.name,
             level: info.level,
             difficulty: info.difficulty,
