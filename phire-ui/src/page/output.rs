@@ -274,6 +274,7 @@ impl Page for OutputPage {
         #[cfg(any(target_os = "android", target_os = "windows"))]
         if self.compat_btn.touch(touch, t) {
             let config = &mut get_data_mut().config;
+            config.audio_buffer_size = None;
             config.audio_compatibility ^= true;
             self.compat = config.audio_compatibility;
             self.rebuild_needed = true;
