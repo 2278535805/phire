@@ -1166,7 +1166,7 @@ impl SongScene {
                     alt: Some(if self.ldb_std {
                         format!("{:.2}%", it.inner.accuracy * 100.)
                     } else {
-                        format!("{:.2}%", it.inner.rks)
+                        format!("{:.2}", it.inner.rks)
                     }),
                     btn: &mut it.btn,
                 })
