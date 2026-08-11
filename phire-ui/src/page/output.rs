@@ -332,9 +332,7 @@ impl Page for OutputPage {
                 match audio.stream_info() { // TODO: clone()
                     #[cfg(target_os = "android")]
                     Oboe(info) => {
-                        if let Some(frames_per_burst) = info.frames_per_burst {
-                            self.base_buffer_size = Some(frames_per_burst as u32);
-                        }
+                        self.base_buffer_size = info.frames_per_burst.map(|f| f as u32);
                     },
                     #[cfg(target_os = "windows")]
                     Wasapi(info) => {
