@@ -57,6 +57,7 @@ logos = { workspace = true }
 ndk-sys = { workspace = true }
 ndk-context = { workspace = true }
 sasa = { workspace = true, default-features = false, features = ["oboe"] }
+openssl = { workspace = true }
 
 [target.'cfg(target_env = "ohos")'.dependencies]
 sasa = { workspace = true, default-features = false, features = ["ohos"] }

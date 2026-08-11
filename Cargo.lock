@@ -3404,6 +3404,7 @@ dependencies = [
  "objc",
  "objc-foundation",
  "once_cell",
+ "openssl",
  "phira-mp-client",
  "phira-mp-common",
  "phire",
