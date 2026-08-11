@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use super::{CharacterPage, LibraryPage, NextPage, Page, ResPackPage, SFader, SettingsPage, SharedState};
 use crate::{
-    client::{Client, LoginParams, User, UserManager, recv_raw}, dir, get_data, get_data_mut, icons::Icons, login::Login, save_data, scene::ProfileScene, sync_data
+    client::{download_play_configurations, Client, LoginParams, User, UserManager, recv_raw}, dir, get_data, get_data_mut, icons::Icons, login::Login, save_data, scene::ProfileScene, sync_data
 };
 use ::rand::{random, rng, Rng};
 use anyhow::Result;
@@ -65,6 +65,7 @@ impl HomePage {
                     token: &get_data().tokens.as_ref().unwrap().1,
                 })
                 .await?;
+                download_play_configurations().await?;
                 Client::get_me().await
             }))
         } else {

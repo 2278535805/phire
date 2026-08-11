@@ -1,12 +1,17 @@
 phire::tl_file!("play-config");
 
 use super::{Page, SharedState};
-use crate::{get_data, get_data_mut, save_data};
-use anyhow::Result;
+use crate::{
+    client::{sync_active_play_config, Client},
+    data::PlayConfig,
+    get_data, get_data_mut, save_data,
+};
+use anyhow::{Context, Result};
 use macroquad::prelude::*;
 use phire::{
-    ext::{semi_black, RectExt},
-    ui::{DRectButton, Scroll, Slider, Ui},
+    ext::{poll_future, semi_black, semi_white, LocalTask, RectExt},
+    scene::{request_input, return_input, take_input},
+    ui::{LoadingParams, DRectButton, RectButton, Scroll, Slider, Ui},
 };
 use std::borrow::Cow;
 
@@ -26,20 +31,34 @@ fn calculate_rks_factor(perfect_ms: f64, good_ms: f64) -> f64 {
 
 pub struct PlayConfigurationPage {
     scroll: Scroll,
+    config_btns: Vec<DRectButton>,
+    add_btn: DRectButton,
+    title_btn: RectButton,
     perfect_slider: Slider,
     good_slider: Slider,
     bad_slider: Slider,
+    delete_btn: DRectButton,
     reset_btn: DRectButton,
+    save_btn: DRectButton,
+    saving: bool,
+    sync_task: LocalTask<Result<()>>,
 }
 
 impl PlayConfigurationPage {
     pub fn new() -> Self {
         Self {
             scroll: Scroll::new(),
-            perfect_slider: Slider::new(0.001..0.2, 0.001),
-            good_slider: Slider::new(0.001..0.3, 0.001),
-            bad_slider: Slider::new(0.001..0.5, 0.001),
+            config_btns: (0..get_data().play_configs.len()).map(|_| DRectButton::new()).collect(),
+            add_btn: DRectButton::new(),
+            title_btn: RectButton::new(),
+            perfect_slider: Slider::new(0.005..0.150, 0.001),
+            good_slider: Slider::new(0.010..0.300, 0.001),
+            bad_slider: Slider::new(0.020..0.600, 0.001),
+            delete_btn: DRectButton::new(),
             reset_btn: DRectButton::new(),
+            save_btn: DRectButton::new(),
+            saving: false,
+            sync_task: None,
         }
     }
 }
@@ -50,7 +69,8 @@ impl Page for PlayConfigurationPage {
     }
 
     fn exit(&mut self) -> Result<()> {
-        save_data()
+        save_data()?;
+        Ok(())
     }
 
     fn touch(&mut self, touch: &Touch, s: &mut SharedState) -> Result<bool> {
@@ -58,7 +78,64 @@ impl Page for PlayConfigurationPage {
         if self.scroll.touch(touch, t) {
             return Ok(true);
         }
-        let config = &mut get_data_mut().config;
+        {
+            let data = get_data_mut();
+            for (i, btn) in self.config_btns.iter_mut().enumerate() {
+                if btn.touch(touch, t) {
+                    data.active_play_config = Some(i);
+                    return Ok(true);
+                }
+            }
+        }
+        if self.add_btn.touch(touch, t) {
+            let data = get_data_mut();
+            let index = data.play_configs.len();
+            data.play_configs.push(PlayConfig {
+                name: format!("{} {index}", tl!("new-config")),
+                ..PlayConfig::default()
+            });
+            data.active_play_config = Some(index);
+            self.config_btns.push(DRectButton::new());
+            return Ok(true);
+        }
+        if self.title_btn.touch(touch) {
+            let name = get_data().active_play_config().map(|it| it.name.clone()).unwrap_or_default();
+            request_input("play-config-rename", &name, tl!("rename"));
+            return Ok(true);
+        }
+        if self.delete_btn.touch(touch, t) {
+            let data = get_data_mut();
+            let index = data.active_play_config.unwrap_or(0);
+            let id = data.play_configs[index].id.clone();
+            data.play_configs.remove(index);
+            if data.play_configs.is_empty() {
+                data.play_configs.push(PlayConfig::default());
+                data.active_play_config = Some(0);
+            } else {
+                data.active_play_config = Some(index.min(data.play_configs.len() - 1));
+            }
+            let len = data.play_configs.len();
+            self.config_btns.resize(len, DRectButton::new());
+            if let Some(id) = id {
+                if get_data().tokens.is_some() {
+                    self.sync_task = Some(Box::pin(async move {
+                        Client::delete_play_configuration(&id).await.context(tl!("delete-failed"))
+                    }));
+                }
+            }
+            return Ok(true);
+        }
+        if self.save_btn.touch(touch, t) {
+            save_data()?;
+            if get_data().tokens.is_some() {
+                self.saving = true;
+                self.sync_task = Some(Box::pin(async move {
+                    sync_active_play_config().await.context(tl!("sync-failed")).map(|_| ())
+                }));
+            }
+            return Ok(true);
+        }
+        let config = get_data_mut().active_play_config_mut().expect("no play configuration");
         let mut perfect = config.perfect_judgment as f32;
         if self.perfect_slider.touch(touch, t, &mut perfect).is_some() {
             config.perfect_judgment = perfect.max(0.001) as f64;
@@ -94,6 +171,24 @@ impl Page for PlayConfigurationPage {
 
     fn update(&mut self, s: &mut SharedState) -> Result<()> {
         self.scroll.update(s.t);
+        if let Some((id, text)) = take_input() {
+            if id == "play-config-rename" {
+                let data = get_data_mut();
+                if let Some(config) = data.active_play_config_mut() {
+                    if !text.trim().is_empty() {
+                        config.name = text;
+                    }
+                }
+                save_data()?;
+            } else {
+                return_input(id, text);
+            }
+        }
+        if let Some(res) = self.sync_task.as_mut().and_then(|task| poll_future(task.as_mut())) {
+            self.sync_task = None;
+            self.saving = false;
+            res?;
+        }
         Ok(())
     }
 
@@ -125,7 +220,42 @@ impl Page for PlayConfigurationPage {
                     let rh = ITEM_HEIGHT * 2. / 3.;
                     let rr = Rect::new(cx + cw - 0.3, (ITEM_HEIGHT - rh) / 2., 0.26, rh);
 
-                    let config = &get_data().config;
+                    let data = get_data();
+                    let active = data.active_play_config;
+                    let play_configs = &data.play_configs;
+                    {
+                        let btn_h = 0.08;
+                        let btn_w = cw / (play_configs.len() + 1) as f32;
+                        let by = (ITEM_HEIGHT - btn_h) / 2.;
+                        for (i, btn) in self.config_btns.iter_mut().enumerate() {
+                            let r = Rect::new(cx + i as f32 * btn_w, by, btn_w - 0.01, btn_h);
+                            let tag = if play_configs[i].id.is_some() { tl!("cloud-tag") } else { tl!("local-tag") };
+                            let name = format!("{} - {}", play_configs[i].name, tag);
+                            btn.render_text(ui, r, t, c.a, name.as_str(), 0.4, active == Some(i));
+                        }
+                        let r = Rect::new(cx + play_configs.len() as f32 * btn_w, by, btn_w - 0.01, btn_h);
+                        self.add_btn.render_text(ui, r, t, c.a, tl!("add-config"), 0.4, false);
+                        ui.dy(ITEM_HEIGHT);
+                        h += ITEM_HEIGHT;
+                    }
+                    {
+                        let name = active.and_then(|i| play_configs.get(i)).map(|it| {
+                            let tag = if it.id.is_some() { tl!("cloud-tag") } else { tl!("local-tag") };
+                            format!("{} - {}", it.name, tag)
+                        });
+                        let r = Rect::new(cx + cw * 0.15, (ITEM_HEIGHT - 0.1) / 2., cw * 0.7, 0.1);
+                        self.title_btn.set(ui, r);
+                        ui.text(name.unwrap_or_default())
+                            .pos(cx + cw / 2., ITEM_HEIGHT / 2.)
+                            .anchor(0.5, 0.5)
+                            .no_baseline()
+                            .size(0.65)
+                            .color(c)
+                            .draw();
+                        ui.dy(ITEM_HEIGHT);
+                        h += ITEM_HEIGHT;
+                    }
+                    let config = data.active_play_config().expect("no play configuration");
                     item! {
                         render_title(ui, c, cx, tl!("perfect"), None);
                         self.perfect_slider
@@ -153,8 +283,26 @@ impl Page for PlayConfigurationPage {
                             .draw();
                     }
                     item! {
-                        let r = Rect::new(cx + cw * 0.2, (ITEM_HEIGHT - 0.08) / 2., cw * 0.6, 0.08);
-                        self.reset_btn.render_text(ui, r, t, c.a, tl!("reset"), 0.5, false);
+                        let bh = 0.08;
+                        let by = (ITEM_HEIGHT - bh) / 2.;
+                        let gap = 0.02;
+                        let bw = (cw - gap * 2.) / 3.;
+                        self.delete_btn.render_text(ui, Rect::new(cx, by, bw, bh), t, c.a, tl!("delete"), 0.5, false);
+                        self.reset_btn
+                            .render_text(ui, Rect::new(cx + bw + gap, by, bw, bh), t, c.a, tl!("reset"), 0.5, false);
+                        let save_r = Rect::new(cx + (bw + gap) * 2., by, bw, bh);
+                        if self.saving {
+                            self.save_btn.render_text(ui, save_r, t, c.a, "", 0.5, false);
+                            ui.loading(
+                                save_r.center().x,
+                                save_r.center().y,
+                                t,
+                                semi_white(c.a),
+                                LoadingParams { radius: 0.03, width: 0.008, ..Default::default() },
+                            );
+                        } else {
+                            self.save_btn.render_text(ui, save_r, t, c.a, tl!("save"), 0.5, false);
+                        }
                     }
                     (w, h)
                 });

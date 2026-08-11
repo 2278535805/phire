@@ -719,15 +719,11 @@ impl ChartList {
         }
         item! {
             render_title(ui, c, tl!("item-play-config"), Some(tl!("item-play-config-sub")));
-            self.play_config_btn.render_text(
-                ui,
-                rr,
-                t,
-                c.a,
-                format!("{:.0}ms / {:.0}ms", config.perfect_judgment * 1000., config.good_judgment * 1000.),
-                0.4,
-                false,
-            );
+            let text = get_data()
+                .active_play_config()
+                .map(|it| format!("{:.0}/{:.0}/{:.0}", it.perfect_judgment * 1000., it.good_judgment * 1000., it.bad_judgment * 1000.))
+                .unwrap_or_default();
+            self.play_config_btn.render_text(ui, rr, t, c.a, text, 0.4, false);
         }
         (w, h)
     }

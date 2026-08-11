@@ -3,7 +3,7 @@ phire::tl_file!("song");
 use super::{confirm_delete, confirm_dialog, fs_from_path, render_ldb, LdbDisplayItem, ProfileScene};
 use crate::{
     charts_view::NEED_UPDATE,
-    client::{basic_client_builder, recv_raw, Chart, Client, Permission, Ptr, Record, ResponseDto, UserManager, CLIENT_TOKEN},
+    client::{basic_client_builder, download_play_configurations, recv_raw, Chart, Client, Permission, Ptr, Record, ResponseDto, UserManager, CLIENT_TOKEN},
     data::{BriefChartInfo, LocalChart},
     dir, get_data, get_data_mut,
     icons::Icons,
@@ -967,6 +967,18 @@ impl SongScene {
                 rks: it.rks,
             });
             #[cfg(feature = "closed")]
+            let configuration_id = if chart_guid.is_some() && get_data().tokens.is_some() && rated {
+                download_play_configurations().await?;
+                get_data().active_play_config().and_then(|it| it.id.clone())
+            } else {
+                None
+            };
+            if let Some(pc) = get_data().active_play_config() {
+                config.perfect_judgment = pc.perfect_judgment;
+                config.good_judgment = pc.good_judgment;
+                config.bad_judgment = pc.bad_judgment;
+            }
+            #[cfg(feature = "closed")]
             let upload_fn: Option<UploadFn> = if chart_guid.is_some() && get_data().tokens.is_some() && rated {
                 let chart_id = chart_guid.unwrap();
                 let player_id = get_data().me.as_ref().map(|it| it.id).unwrap();
@@ -981,11 +993,13 @@ impl SongScene {
                 let refresh: Arc<dyn Fn() -> Task<()> + Send + Sync> = {
                     let session_task = session_task.clone();
                     let chart_id = chart_id.clone();
+                    let configuration_id = configuration_id.clone();
                     Arc::new(move || {
                         let chart_id = chart_id.clone();
+                        let configuration_id = configuration_id.clone();
                         let session_task = session_task.clone();
                         Task::new(async move {
-                            *session_task.lock().unwrap() = Some((start_play(chart_id).await.map_err(|e| e.to_string()), SystemTime::now()));
+                            *session_task.lock().unwrap() = Some((start_play(chart_id, configuration_id).await.map_err(|e| e.to_string()), SystemTime::now()));
                         })
                     })
                 };
