@@ -34,6 +34,8 @@ item-opt = Cải thiện hiệu năng
 item-opt-sub = Nâng cao hiệu suất nhưng sẽ gây ra các hành vi không đúng
 item-speed = Tốc độ
 item-note-size = Kích thước nốt
+item-play-config = Cài đặt phán đoán
+item-play-config-sub = Tùy chỉnh cửa sổ phán đoán Perfect / Good / Bad
 
 item-touch-debug = Gỡ lỗi chạm
 item-touch-debug-sub = Hiển thị điểm chạm

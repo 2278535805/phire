@@ -31,6 +31,8 @@ item-auto-latency-sub = 实时估算设备延时并调整
 item-music = 音乐音量
 item-sfx = 音效音量
 item-bgm = BGM 音量
+item-high-precision-hit-effect = 高精度打击音效
+item-high-precision-hit-effect-sub = AUTOPLAY 启用时激活与音乐时钟绑定的高精度打击音效
 item-cali = 调整延迟
 item-audio-offset = 音频偏移
 item-judge-offset = 判定偏移
@@ -51,6 +53,8 @@ item-aggressive-particle-sub = 采用激进的优化策略，提升性能但可�
 item-speed = 速度
 item-note-size = 音符大小
 item-render-extra = 显示额外内容 (着色器/特效)
+item-play-config = 判定设置
+item-play-config-sub = 自定义 Perfect / Good / Bad 判定窗口
 
 item-chart-debug-line = 谱面调试 - 判定线
 item-chart-debug-line-sub = 显示判定线属性

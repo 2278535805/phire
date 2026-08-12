@@ -31,6 +31,8 @@ item-auto-latency-sub = Dynamically estimate and adjust device latency in real t
 item-music = Music volume
 item-sfx = Sound effect volume
 item-bgm = BGM volume
+item-high-precision-hit-effect = High Precision Hit Effect
+item-high-precision-hit-effect-sub = Enables music-clock-synced high precision hit sounds when AUTOPLAY is on
 item-cali = Adjust offset
 item-audio-offset = Audio Offset
 item-judge-offset = Judge Offset
@@ -51,6 +53,8 @@ item-aggressive-particle-sub = Uses aggressive optimization strategy to improve 
 item-speed = Speed
 item-note-size = Note size
 item-render-extra = Enable Extra (Shader/Effect)
+item-play-config = Judgment Settings
+item-play-config-sub = Customize Perfect / Good / Bad judgment windows
 
 item-chart-debug-line = Chart Debug Mode - Line
 item-chart-debug-line-sub = Display line properties

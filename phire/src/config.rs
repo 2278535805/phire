@@ -85,6 +85,7 @@ pub struct Config {
     pub volume_music: f32,
     pub volume_sfx: f32,
     pub volume_bgm: f32,
+    pub high_precision_sfx: bool,
     pub watermark: String,
     pub roman: bool,
     pub chinese: bool,
@@ -95,6 +96,10 @@ pub struct Config {
     // for compatibility
     pub autoplay: Option<bool>,
     pub autoplay_judge_offset: f64,
+
+    pub perfect_judgment: f64,
+    pub good_judgment: f64,
+    pub bad_judgment: f64,
 
     pub render_line: bool,
     pub render_line_extra: bool,
@@ -177,6 +182,7 @@ impl Default for Config {
             volume_music: 1.0,
             volume_sfx: 0.0,
             volume_bgm: 1.0,
+            high_precision_sfx: true,
             watermark: "".to_string(),
             roman: false,
             chinese: false,
@@ -186,6 +192,10 @@ impl Default for Config {
 
             autoplay: None,
             autoplay_judge_offset: 0.,
+
+            perfect_judgment: 0.08,
+            good_judgment: 0.16,
+            bad_judgment: 0.22,
 
             render_line: true,
             render_line_extra: true,

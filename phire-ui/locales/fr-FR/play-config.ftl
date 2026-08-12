@@ -1,0 +1,20 @@
+label = Réglages du jugement
+
+perfect = Jugement Perfect
+perfect-sub = Fenêtre de temps pour Perfect
+good = Jugement Good
+good-sub = Fenêtre de temps pour Good
+bad = Jugement Bad
+bad-sub = Fenêtre de temps pour Bad
+rks-factor = Coefficient RKS
+rks-factor-sub = Un jugement plus large réduit le coefficient RKS
+reset = Réinitialiser
+save = Enregistrer
+delete = Supprimer
+delete-failed = Échec de la suppression de la configuration
+rename = Renommer
+add-config = Nouveau
+new-config = Config
+cloud-tag = Cloud
+local-tag = Local
+sync-failed = Échec de la synchronisation de la configuration

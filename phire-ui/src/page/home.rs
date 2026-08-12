@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use super::{CharacterPage, LibraryPage, NextPage, Page, ResPackPage, SFader, SettingsPage, SharedState};
 use crate::{
-    client::{Client, LoginParams, User, UserManager, recv_raw}, dir, get_data, get_data_mut, icons::Icons, login::Login, save_data, scene::ProfileScene, sync_data
+    client::{download_play_configurations, Client, LoginParams, User, UserManager, recv_raw}, dir, get_data, get_data_mut, icons::Icons, login::Login, save_data, scene::ProfileScene, sync_data
 };
 use ::rand::{random, rng, Rng};
 use anyhow::Result;
@@ -65,6 +65,7 @@ impl HomePage {
                     token: &get_data().tokens.as_ref().unwrap().1,
                 })
                 .await?;
+                download_play_configurations().await?;
                 Client::get_me().await
             }))
         } else {
@@ -281,6 +282,14 @@ impl Page for HomePage {
             (&form.illu, form.position)
         });
         s.render_fader(ui, |ui, c| {
+            let screen_rect = ui.screen_rect();
+            let max_bottom = screen_rect.bottom() - screen_rect.h * 0.1;
+            let clamp_bottom = |mut r: Rect| {
+                if r.bottom() > max_bottom {
+                    r.h -= r.bottom() - max_bottom;
+                }
+                r
+            };
             if let Some((Some(illu), pos)) = char_data {
                 let time_y = (t * 0.5).sin() * 0.02;
                 let r = Rect::new(
@@ -290,9 +299,9 @@ impl Page for HomePage {
                     pos.3
                 );
                 ui.fill_rect(r, (Texture2D::clone(illu), r, ScaleType::Inside, c));
-                self.char_btn.set(ui, r);
+                self.char_btn.set(ui, clamp_bottom(r));
             } else {
-                self.char_btn.set(ui, ui.screen_rect());
+                self.char_btn.set(ui, clamp_bottom(screen_rect));
             }
         });
 

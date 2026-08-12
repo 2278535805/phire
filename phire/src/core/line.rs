@@ -3,7 +3,7 @@ use crate::{
     config::Mods,
     core::{anim::AnimFloatF64, NoteKind},
     ext::{get_viewport, parse_alpha, NotNanExt, SafeTexture},
-    judge::{JudgeStatus, LIMIT_BAD},
+    judge::JudgeStatus,
     ui::Ui,
 };
 use macroquad::miniquad::RenderPass as MiniquadRenderPass;
@@ -457,7 +457,7 @@ impl JudgeLine {
                 clip_y_range: None,
             };
             if res.config.has_mod(Mods::FADE_OUT) {
-                config.invisible_time = LIMIT_BAD;
+                config.invisible_time = res.config.bad_judgment;
             }
             let mut line_set_debug_alpha = false;
             if alpha < 0.0 {

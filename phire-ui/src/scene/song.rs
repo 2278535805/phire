@@ -3,7 +3,7 @@ phire::tl_file!("song");
 use super::{confirm_delete, confirm_dialog, fs_from_path, render_ldb, LdbDisplayItem, ProfileScene};
 use crate::{
     charts_view::NEED_UPDATE,
-    client::{basic_client_builder, recv_raw, Chart, Client, Permission, Ptr, Record, ResponseDto, UserManager, CLIENT_TOKEN},
+    client::{basic_client_builder, recv_raw, sync_active_play_config, Chart, Client, Permission, Ptr, Record, ResponseDto, UserManager, CLIENT_TOKEN},
     data::{BriefChartInfo, LocalChart},
     dir, get_data, get_data_mut,
     icons::Icons,
@@ -966,6 +966,16 @@ impl SongScene {
                 id: it.id,
                 rks: it.rks,
             });
+            let configuration_id = if chart_guid.is_some() && get_data().tokens.is_some() && rated {
+                sync_active_play_config().await?
+            } else {
+                None
+            };
+            if let Some(pc) = get_data().active_play_config() {
+                config.perfect_judgment = pc.perfect_judgment;
+                config.good_judgment = pc.good_judgment;
+                config.bad_judgment = pc.bad_judgment;
+            }
             #[cfg(feature = "closed")]
             let upload_fn: Option<UploadFn> = if chart_guid.is_some() && get_data().tokens.is_some() && rated {
                 let chart_id = chart_guid.unwrap();
@@ -983,9 +993,10 @@ impl SongScene {
                     let chart_id = chart_id.clone();
                     Arc::new(move || {
                         let chart_id = chart_id.clone();
+                        let configuration_id = configuration_id.clone();
                         let session_task = session_task.clone();
                         Task::new(async move {
-                            *session_task.lock().unwrap() = Some((start_play(chart_id).await.map_err(|e| e.to_string()), SystemTime::now()));
+                            *session_task.lock().unwrap() = Some((start_play(chart_id, configuration_id).await.map_err(|e| e.to_string()), SystemTime::now()));
                         })
                     })
                 };
@@ -1152,7 +1163,7 @@ impl SongScene {
                     alt: Some(if self.ldb_std {
                         format!("{:.2}%", it.inner.accuracy * 100.)
                     } else {
-                        format!("{:.2}%", it.inner.rks)
+                        format!("{:.2}", it.inner.rks)
                     }),
                     btn: &mut it.btn,
                 })
@@ -2190,19 +2201,33 @@ impl Scene for SongScene {
         let r = Rect::new(1. - pad - w, ui.top - pad - w, w, w);
         let (r, _) = self.play_btn.render_shadow(ui, r, t, c.a, |_| semi_white(0.3 * c.a));
         let r = r.feather(-0.04);
-        ui.fill_rect(
-            r,
-            (
-                if self.local_path.is_some() {
-                    Texture2D::clone(&self.icons.play)
-                } else {
-                    Texture2D::clone(&self.icons.download)
-                },
-                r,
-                ScaleType::Fit,
+        if self.scene_task.is_some() {
+            ui.loading(
+                r.center().x,
+                r.center().y,
+                t,
                 c,
-            ),
-        );
+                LoadingParams {
+                    radius: 0.05,
+                    width: 0.014,
+                    ..Default::default()
+                },
+            );
+        } else {
+            ui.fill_rect(
+                r,
+                (
+                    if self.local_path.is_some() {
+                        Texture2D::clone(&self.icons.play)
+                    } else {
+                        Texture2D::clone(&self.icons.download)
+                    },
+                    r,
+                    ScaleType::Fit,
+                    c,
+                ),
+            );
+        }
 
         ui.scope(|ui| {
             ui.dx(1. - 0.03);

@@ -20,12 +20,9 @@ pub const UP_TOLERANCE: f64 = 0.05;
 pub const DIST_FACTOR: f64 = 0.2;
 const LATE_OFFSET: f64 = 0.13;
 
-pub fn play_sfx(sfx: &mut Sfx, config: &Config) {
-    if config.volume_sfx <= 1e-2 {
-        return;
-    }
+pub fn play_sfx(sfx: &mut Sfx, amplifier: f32) {
     let _ = sfx.play(PlaySfxParams {
-        amplifier: config.volume_sfx,
+        amplifier,
     });
 }
 
@@ -64,27 +61,39 @@ pub enum HitSound {
 
 impl HitSound {
     pub fn play(&self, res: &mut Resource) {
+        if res.config.volume_sfx < 1e-2 {
+            return;
+        }
         match self {
             HitSound::None => {}
             HitSound::Click => {
+                if res.config.high_precision_sfx && res.config.autoplay() {
+                    return;
+                }
                 if check_hitsound(&mut res.played_hitsounds_count, "click") {
-                    play_sfx(&mut res.sfx_click, &res.config)
+                    play_sfx(&mut res.sfx_click, res.config.volume_sfx)
                 }
             },
             HitSound::Flick => {
+                if res.config.high_precision_sfx && res.config.autoplay() {
+                    return;
+                }
                 if check_hitsound(&mut res.played_hitsounds_count, "flick") {
-                    play_sfx(&mut res.sfx_flick, &res.config)
+                    play_sfx(&mut res.sfx_flick, res.config.volume_sfx)
                 }
             },
             HitSound::Drag => {
+                if res.config.high_precision_sfx && res.config.autoplay() {
+                    return;
+                }
                 if check_hitsound(&mut res.played_hitsounds_count, "drag") {
-                    play_sfx(&mut res.sfx_drag, &res.config)
+                    play_sfx(&mut res.sfx_drag, res.config.volume_sfx)
                 }
             },
             HitSound::Custom(s) => {
                 if let Some(sfx) = res.extra_sfxs.get_mut(s) {
                     if check_hitsound(&mut res.played_hitsounds_count, s) {
-                        play_sfx(sfx, &res.config)
+                        play_sfx(sfx, res.config.volume_sfx)
                     }
                 }
             }
@@ -260,11 +269,11 @@ impl JudgeInner {
         }
     }
 
-    pub fn result(&self, track_complete: bool) -> PlayResult {
+    pub fn result(&self, track_complete: bool, limit_bad: f64) -> PlayResult {
         let early = self.good_diffs.iter().filter(|it| **it < 0.).count() as u32;
         let n = self.perfect_diffs.len() + self.good_diffs.len() + self.bad_diffs.len();
         let std = if n == 0 {
-            LIMIT_BAD as f32
+            limit_bad as f32
         } else {
             let n = n as f64;
             let all_diffs = self.perfect_diffs.iter().chain(self.good_diffs.iter()).chain(self.bad_diffs.iter());
@@ -305,6 +314,10 @@ pub struct Judge {
     pub trackers: FxHashMap<u64, FlickTracker>,
     pub last_time: f64,
 
+    pub limit_perfect: f64,
+    pub limit_good: f64,
+    pub limit_bad: f64,
+
     key_down_count: u32,
 
     pub(crate) inner: JudgeInner,
@@ -337,11 +350,21 @@ impl Judge {
             trackers: FxHashMap::with_capacity_and_hasher(16, Default::default()),
             last_time: 0.,
 
+            limit_perfect: LIMIT_PERFECT,
+            limit_good: LIMIT_GOOD,
+            limit_bad: LIMIT_BAD,
+
             key_down_count: 0,
 
             inner: JudgeInner::new(chart.lines.iter().map(|it| it.notes.iter().filter(|it| !it.fake).count() as u32).sum()),
             judgements: RefCell::new(Vec::new()),
         }
+    }
+
+    pub fn set_limits(&mut self, perfect: f64, good: f64, bad: f64) {
+        self.limit_perfect = perfect;
+        self.limit_good = good;
+        self.limit_bad = bad;
     }
 
     pub fn reset(&mut self) {
@@ -587,7 +610,7 @@ impl Judge {
                 continue;
             }
             let t = time_of(touch);
-            let mut closest = (None, x_diff_max, LIMIT_BAD, LIMIT_BAD + (x_diff_max / NOTE_WIDTH_RATIO_BASE - 1.).max(0.) * DIST_FACTOR, 0.);
+            let mut closest = (None, x_diff_max, self.limit_bad, self.limit_bad + (x_diff_max / NOTE_WIDTH_RATIO_BASE - 1.).max(0.) * DIST_FACTOR, 0.);
             for (line_id, ((line, pos), (idx, st))) in chart.lines.iter_mut().zip(pos.iter()).zip(self.notes.iter_mut()).enumerate() {
                 let Some(pos) = pos[id] else { continue; };
                 for id in &idx[*st..] {
@@ -612,9 +635,9 @@ impl Judge {
                     }
                     if dt.abs() >
                         if matches!(note.kind, NoteKind::Click) {
-                            LIMIT_BAD // LIMIT_BAD - LIMIT_PERFECT * (dist - 0.9).max(0.)
+                            self.limit_bad // LIMIT_BAD - LIMIT_PERFECT * (dist - 0.9).max(0.)
                         } else {
-                            LIMIT_GOOD
+                            self.limit_good
                         }
                     {
                         continue;
@@ -625,8 +648,8 @@ impl Judge {
                         (dist / NOTE_WIDTH_RATIO_BASE - 1.).max(0.) * DIST_FACTOR
                     };
                     let key = if matches!(note.kind, NoteKind::Flick | NoteKind::Drag) { // Low Priority
-                        dt.abs() + LIMIT_BAD
-                    } else if dt < -LIMIT_GOOD { // Prevent Late Bad
+                        dt.abs() + self.limit_bad
+                    } else if dt < -self.limit_good { // Prevent Late Bad
                         dt.abs()
                     } else if dt < 0.0 {
                         (dt + LATE_OFFSET).min(0.0).abs() // Protect Late Good
@@ -645,7 +668,7 @@ impl Judge {
                     x.set_time(t);
                     let judge_time = t - note.time;
                     matches!(note.kind, NoteKind::Drag | NoteKind::Flick)
-                        && (-LIMIT_GOOD..=LIMIT_BAD).contains(&judge_time)
+                        && (-self.limit_good..=self.limit_bad).contains(&judge_time)
                         && (x.now() - posx).abs() as f64 <= (x_diff_max - NOTE_WIDTH_RATIO_BASE) + NOTE_WIDTH_RATIO_BASE * note.judge_scale // note_dist <= x_diff_max
                         && !note.protected
                         && !note.fake
@@ -656,7 +679,7 @@ impl Judge {
                     continue;
                 }
                 if click {
-                    if dt > LIMIT_PERFECT {
+                    if dt > self.limit_perfect {
                         let mut any = false;
                         lines.iter_mut()
                             .flat_map(|line| line.notes.iter_mut())
@@ -677,20 +700,20 @@ impl Judge {
                         // debug!("reject by flick");
                         continue; // to next loop
                     }
-                    if dt <= LIMIT_GOOD || matches!(note.kind, NoteKind::Hold { .. }) {
+                    if dt <= self.limit_good || matches!(note.kind, NoteKind::Hold { .. }) {
                         match note.kind {
                             NoteKind::Click => {
                                 note.judge = JudgeStatus::Judged;
-                                judgements.push((if dt <= LIMIT_PERFECT { Judgement::Perfect } else { Judgement::Good }, line_id, id, Some(t)));
+                                judgements.push((if dt <= self.limit_perfect { Judgement::Perfect } else { Judgement::Good }, line_id, id, Some(t)));
                                 #[cfg(feature = "play")]
                                 if res.config.health_mode.is_some() {
                                     res.health.on_judge(Judgement::Perfect);
                                 }
                             }
                             NoteKind::Hold { .. } => {
-                                play_sfx(&mut res.sfx_click, &res.config);
-                                self.judgements.borrow_mut().push((t, line_id as _, id, Err(dt <= LIMIT_PERFECT)));
-                                note.judge = JudgeStatus::Hold(dt <= LIMIT_PERFECT, t, t, false, f64::INFINITY);
+                                play_sfx(&mut res.sfx_click, res.config.volume_sfx);
+                                self.judgements.borrow_mut().push((t, line_id as _, id, Err(dt <= self.limit_perfect)));
+                                note.judge = JudgeStatus::Hold(dt <= self.limit_perfect, t, t, false, f64::INFINITY);
                             }
                             _ => unreachable!(),
                         };
@@ -736,13 +759,13 @@ impl Judge {
             {
                 let note = &mut chart.lines[line_id].notes[id as usize];
                 let dt = (t - note.time).abs() / spd;
-                if dt <= if matches!(note.kind, NoteKind::Click) { LIMIT_BAD } else { LIMIT_GOOD } {
+                if dt <= if matches!(note.kind, NoteKind::Click) { self.limit_bad } else { self.limit_good } {
                     match note.kind {
                         NoteKind::Click => {
                             note.judge = JudgeStatus::Judged;
-                            let judge = if dt <= LIMIT_PERFECT {
+                            let judge = if dt <= self.limit_perfect {
                                     Judgement::Perfect
-                                } else if dt <= LIMIT_GOOD {
+                                } else if dt <= self.limit_good {
                                     Judgement::Good
                                 } else {
                                     Judgement::Bad
@@ -755,8 +778,8 @@ impl Judge {
                         }
                         NoteKind::Hold { .. } => {
                             note.hitsound.play(res);
-                            self.judgements.borrow_mut().push((t, line_id as _, id, Err(dt <= LIMIT_PERFECT)));
-                            note.judge = JudgeStatus::Hold(dt <= LIMIT_PERFECT, t, (t - note.time) / spd, false, f64::INFINITY);
+                            self.judgements.borrow_mut().push((t, line_id as _, id, Err(dt <= self.limit_perfect)));
+                            note.judge = JudgeStatus::Hold(dt <= self.limit_perfect, t, (t - note.time) / spd, false, f64::INFINITY);
                         }
                         _ => unreachable!(),
                     };
@@ -772,7 +795,7 @@ impl Judge {
                 let x_diff_max = (x_diff_max - NOTE_WIDTH_RATIO_BASE) + NOTE_WIDTH_RATIO_BASE * note.judge_scale;
                 if let NoteKind::Hold { end_time, .. } = &note.kind {
                     if let JudgeStatus::Hold(.., ref mut pre_judge, ref mut up_time) = note.judge {
-                        if (*end_time - t) / spd <= LIMIT_BAD {
+                        if (*end_time - t) / spd <= self.limit_bad {
                             *pre_judge = true;
                             continue;
                         }
@@ -801,7 +824,7 @@ impl Judge {
                 }
                 // process miss
                 let dt = (t - note.time) / spd;
-                if dt > LIMIT_BAD {
+                if dt > self.limit_bad {
                     note.judge = JudgeStatus::Judged;
                     judgements.push((Judgement::Miss, line_id, *id, None));
                     #[cfg(feature = "play")]
@@ -810,7 +833,7 @@ impl Judge {
                     }
                     continue;
                 }
-                if -dt > LIMIT_BAD {
+                if -dt > self.limit_bad {
                     break;
                 }
                 if !matches!(note.kind, NoteKind::Drag) && (self.key_down_count == 0 || !matches!(note.kind, NoteKind::Flick)) {
@@ -824,7 +847,7 @@ impl Judge {
                     || pos.iter().any(|it| {
                         it.is_some_and(|it| {
                             let dx = (it.x - x).abs() as f64;
-                            dx <= x_diff_max && dt <= (LIMIT_BAD - LIMIT_PERFECT * (dx - 0.9).max(0.))
+                            dx <= x_diff_max && dt <= (self.limit_bad - self.limit_perfect * (dx - 0.9).max(0.))
                         })
                     })
                 {
@@ -852,7 +875,7 @@ impl Judge {
                     }
                 }
                 // TODO adjust
-                let ghost_t = t + LIMIT_GOOD;
+                let ghost_t = t + self.limit_good;
                 if matches!(note.kind, NoteKind::Click) {
                     if ghost_t < note.time {
                         break;
@@ -966,9 +989,9 @@ impl Judge {
     fn auto_play_update(&mut self, res: &mut Resource, chart: &mut Chart) {
         let t = res.time - res.config.autoplay_judge_offset;
         let (judge_type, judge_type_hold, judge_time, fx_color) = if res.config.all_bad {
-            (Judgement::Bad, Judgement::Good, LIMIT_BAD, Color::new(0., 0., 0., 0.))
+            (Judgement::Bad, Judgement::Good, self.limit_bad, Color::new(0., 0., 0., 0.))
         } else if res.config.all_good {
-            (Judgement::Good, Judgement::Good, LIMIT_GOOD, res.res_pack.info.fx_good())
+            (Judgement::Good, Judgement::Good, self.limit_good, res.res_pack.info.fx_good())
         } else {
             (Judgement::Perfect, Judgement::Perfect, 0., res.res_pack.info.fx_perfect())
         };
@@ -1083,7 +1106,7 @@ impl Judge {
 
     #[inline]
     pub fn result(&self, track_complete: bool) -> PlayResult {
-        self.inner.result(track_complete)
+        self.inner.result(track_complete, self.limit_bad)
     }
 
     #[inline]

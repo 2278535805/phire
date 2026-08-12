@@ -18,8 +18,13 @@ pub use latency::LatencyPage;
 mod offset;
 pub use offset::OffsetPage;
 
+
 mod output;
 pub use output::OutputPage;
+
+mod play_configuration;
+pub use play_configuration::PlayConfigurationPage;
+
 
 mod respack;
 pub use respack::{ResPackItem, ResPackPage};

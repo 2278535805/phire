@@ -1,6 +1,7 @@
 phire::tl_file!("settings");
 
-use super::{LatencyPage, NextPage, OffsetPage, OutputPage, Page, SharedState};
+
+use super::{NextPage, OffsetPage, Page, PlayConfigurationPage, SharedState, LatencyPage};
 use crate::{get_data, get_data_mut, page::offset::OffsetMode, popup::ChooseButton, save_data, scene::BGM_VOLUME_UPDATED, sync_data, check_record_audio_permission, request_record_audio_permission};
 use anyhow::Result;
 use macroquad::prelude::*;
@@ -211,8 +212,10 @@ impl Page for SettingsPage {
     }
 
     fn next_page(&mut self) -> NextPage {
-        if matches!(self.chosen, SettingListType::Audio) {
-            return self.list_audio.next_page().unwrap_or_default();
+        match self.chosen {
+            SettingListType::Audio => return self.list_audio.next_page().unwrap_or_default(),
+            SettingListType::Chart => return self.list_chart.next_page().unwrap_or_default(),
+            _ => {}
         }
         NextPage::None
     }
@@ -453,6 +456,7 @@ struct AudioList {
     music_slider: Slider,
     sfx_slider: Slider,
     bgm_slider: Slider,
+    high_precision_sfx_btn: DRectButton,
     audio_offset_btn: DRectButton,
     judge_offset_btn: DRectButton,
 
@@ -472,6 +476,7 @@ impl AudioList {
             music_slider: Slider::new(0.0..2.0, 0.05),
             sfx_slider: Slider::new(0.0..2.0, 0.05),
             bgm_slider: Slider::new(0.0..2.0, 0.05),
+            high_precision_sfx_btn: DRectButton::new(),
             judge_offset_btn: DRectButton::new(),
             audio_offset_btn: DRectButton::new(),
             latency_btn: DRectButton::new(),
@@ -507,6 +512,10 @@ impl AudioList {
                 BGM_VOLUME_UPDATED.store(true, Ordering::Relaxed);
             }
             return Ok(wt);
+        }
+        if self.high_precision_sfx_btn.touch(touch, t) {
+            config.high_precision_sfx ^= true;
+            return Ok(Some(true));
         }
         if self.judge_offset_btn.touch(touch, t) {
             self.cali_task = Some(Box::pin(OffsetPage::new(OffsetMode::Judge)));
@@ -601,6 +610,10 @@ impl AudioList {
             self.bgm_slider.render(ui, rr, t, c, config.volume_bgm, format!("{:.2}", config.volume_bgm));
         }
         item! {
+            render_title(ui, c, tl!("item-high-precision-hit-effect"), Some(tl!("item-high-precision-hit-effect-sub")));
+            render_switch(ui, rr, t, c, &mut self.high_precision_sfx_btn, config.high_precision_sfx);
+        }
+        item! {
             render_title(ui, c, tl!("item-judge-offset"), None);
             self.judge_offset_btn.render_text(ui, rr, t, c.a, format!("{:.0}ms", config.judge_offset * 1000.), 0.5, true);
         }
@@ -634,6 +647,8 @@ struct ChartList {
     speed_slider: Slider,
     size_slider: Slider,
     render_extra_btn: DRectButton,
+    play_config_btn: DRectButton,
+    next_page: Option<NextPage>,
 }
 
 impl ChartList {
@@ -648,6 +663,8 @@ impl ChartList {
             speed_slider: Slider::new(0.1..2.0, 0.05),
             size_slider: Slider::new(0.0..5.0, 0.005),
             render_extra_btn: DRectButton::new(),
+            play_config_btn: DRectButton::new(),
+            next_page: None,
         }
     }
 
@@ -701,6 +718,10 @@ impl ChartList {
         if self.render_extra_btn.touch(touch, t) {
             config.render_extra ^= true;
             return Ok(Some(true));
+        }
+        if self.play_config_btn.touch(touch, t) {
+            self.next_page = Some(NextPage::Overlay(Box::new(PlayConfigurationPage::new())));
+            return Ok(Some(false));
         }
         Ok(None)
     }
@@ -759,7 +780,19 @@ impl ChartList {
             render_title(ui, c, tl!("item-render-extra"), None);
             render_switch(ui, rr, t, c, &mut self.render_extra_btn, config.render_extra);
         }
+        item! {
+            render_title(ui, c, tl!("item-play-config"), Some(tl!("item-play-config-sub")));
+            let text = get_data()
+                .active_play_config()
+                .map(|it| format!("{:.0}/{:.0}/{:.0}", it.perfect_judgment * 1000., it.good_judgment * 1000., it.bad_judgment * 1000.))
+                .unwrap_or_default();
+            self.play_config_btn.render_text(ui, rr, t, c.a, text, 0.4, false);
+        }
         (w, h)
+    }
+
+    pub fn next_page(&mut self) -> Option<NextPage> {
+        self.next_page.take()
     }
 }
 

@@ -1,15 +1,15 @@
 mod model;
 pub use model::*;
 
-use crate::{anti_addiction_action, get_data, get_data_mut, save_data};
+use crate::{anti_addiction_action, data::PlayConfig, get_data, get_data_mut, save_data};
 use anyhow::{anyhow, bail, Context, Result};
 use arc_swap::ArcSwap;
 use once_cell::sync::Lazy;
-use phire::{l10n::LANG_IDENTS, scene::SimpleRecord};
+use phire::{judge::{LIMIT_BAD, LIMIT_GOOD}, l10n::LANG_IDENTS, scene::SimpleRecord};
 use reqwest::{header, ClientBuilder, Method, RequestBuilder, Response, StatusCode};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use std::{borrow::Cow, marker::PhantomData, sync::Arc};
+use std::{borrow::Cow, collections::HashSet, marker::PhantomData, sync::Arc};
 
 pub static CLIENT_TOKEN: Lazy<ArcSwap<Option<String>>> = Lazy::new(|| ArcSwap::from_pointee(None));
 
@@ -272,6 +272,182 @@ impl Client {
     pub async fn upload_file(_name: &str, _bytes: Vec<u8>) -> Result<String> {
         bail!("upload_file not yet implemented for new API")
     }
+
+    pub async fn create_play_configuration(pc: &PlayConfig) -> Result<String> {
+        #[derive(Deserialize)]
+        struct Created {
+            id: String,
+        }
+        let resp: ResponseDto<Created> = recv_raw(Self::post("/player/configurations", &play_configuration_body(pc)))
+            .await?
+            .json()
+            .await?;
+        resp.data.map(|it| it.id).ok_or_else(|| anyhow!("no configuration id in response"))
+    }
+
+    pub async fn update_play_configuration(id: &str, pc: &PlayConfig) -> Result<()> {
+        let patch = serde_json::json!([
+            { "op": "replace", "path": "/name", "value": pc.name.clone() },
+            { "op": "replace", "path": "/perfectJudgment", "value": judgment_ms(pc.perfect_judgment) },
+            { "op": "replace", "path": "/goodJudgment", "value": judgment_ms(pc.good_judgment) },
+        ]);
+        recv_raw(Self::request(Method::PATCH, format!("/player/configurations/{id}")).json(&patch)).await?;
+        Ok(())
+    }
+
+    pub async fn delete_play_configuration(id: &str) -> Result<()> {
+        recv_raw(Self::delete(format!("/player/configurations/{id}"))).await?;
+        Ok(())
+    }
+}
+
+fn judgment_ms(seconds: f64) -> i32 {
+    (seconds * 1000.).round() as i32
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlayConfigurationDto {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub perfect_judgment: i32,
+    #[serde(default)]
+    pub good_judgment: i32,
+    #[serde(default)]
+    pub chart_mirroring: i32,
+    #[serde(default)]
+    pub aspect_ratio: Option<Vec<i32>>,
+    #[serde(default)]
+    pub note_size: f64,
+    #[serde(default)]
+    pub background_luminance: f64,
+    #[serde(default)]
+    pub background_blur: f64,
+    #[serde(default)]
+    pub simultaneous_note_hint: bool,
+    #[serde(default)]
+    pub fc_ap_indicator: bool,
+    #[serde(default)]
+    pub chart_offset: i32,
+    #[serde(default)]
+    pub hit_sound_volume: f64,
+    #[serde(default)]
+    pub music_volume: f64,
+}
+
+fn play_configuration_body(pc: &PlayConfig) -> PlayConfigurationDto {
+    PlayConfigurationDto {
+        id: None,
+        name: Some(pc.name.clone()),
+        perfect_judgment: judgment_ms(pc.perfect_judgment),
+        good_judgment: judgment_ms(pc.good_judgment),
+        chart_mirroring: 0,
+        aspect_ratio: None,
+        note_size: 1.0,
+        background_luminance: 0.5,
+        background_blur: 1.0,
+        simultaneous_note_hint: true,
+        fc_ap_indicator: true,
+        chart_offset: 0,
+        hit_sound_volume: 1.0,
+        music_volume: 1.0,
+    }
+}
+
+/// Creates the play configuration on the server if it has no id yet, otherwise
+/// patches the server with the current local values. Returns the configuration id.
+/// Must run before `start_play`, since the server computes rksFactor from the
+/// stored configuration when the record is submitted.
+pub async fn sync_active_play_config() -> Result<Option<String>> {
+    let Some(pc) = get_data().active_play_config() else {
+        return Ok(None);
+    };
+    let pc = pc.clone();
+    let id = match &pc.id {
+        Some(id) => {
+            Client::update_play_configuration(id, &pc).await?;
+            Some(id.clone())
+        }
+        None => Some(Client::create_play_configuration(&pc).await?),
+    };
+    if let Some(config) = get_data_mut().active_play_config_mut() {
+        config.id = id.clone();
+    }
+    save_data()?;
+    Ok(id)
+}
+
+pub async fn download_play_configurations() -> Result<()> {
+    let owner_id = get_data().me.as_ref().map(|it| it.id).unwrap_or_default();
+    download_play_configurations_with_owner(owner_id).await
+}
+
+/// Downloads the user's play configurations from the server and merges them
+/// into the local list (updates by id, appends new ones; configs missing on
+/// the server keep their values but become local-only by clearing the id).
+pub async fn download_play_configurations_with_owner(owner_id: i32) -> Result<()> {
+    let owner_id = owner_id.to_string();
+    let resp: ResponseDto<Vec<PlayConfigurationDto>> = recv_raw(
+        Client::get("/player/configurations")
+            .query(&[("page", "1"), ("perPage", "100"), ("rangeOwnerId", owner_id.as_str())]),
+    )
+    .await?
+    .json()
+    .await?;
+    let list = resp.data.unwrap_or_default();
+    let data = get_data_mut();
+    let ids: HashSet<&str> = list.iter().filter_map(|it| it.id.as_deref()).collect();
+    for local in &mut data.play_configs {
+        if local.id.as_deref().is_some_and(|id| !ids.contains(id)) {
+            local.id = None;
+        }
+    }
+    for server in list {
+        let Some(id) = server.id else { continue };
+        let name = server.name.clone().unwrap_or_default();
+        let (perfect, good) = (server.perfect_judgment as f64 / 1000., server.good_judgment as f64 / 1000.);
+        let bad = good * LIMIT_BAD / LIMIT_GOOD;
+        if let Some(local) = data.play_configs.iter_mut().find(|it| it.id.as_deref() == Some(id.as_str())) {
+            if !name.is_empty() {
+                local.name = name;
+            }
+            if (local.perfect_judgment - perfect).abs() > 1e-9 || (local.good_judgment - good).abs() > 1e-9 {
+                local.bad_judgment = good * LIMIT_BAD / LIMIT_GOOD;
+            }
+            local.perfect_judgment = perfect;
+            local.good_judgment = good;
+        } else if let Some(local) = data.play_configs.iter_mut().find(|it| it.id.is_none() && it.name == name) {
+            local.id = Some(id);
+            if (local.perfect_judgment - perfect).abs() > 1e-9 || (local.good_judgment - good).abs() > 1e-9 {
+                local.bad_judgment = good * LIMIT_BAD / LIMIT_GOOD;
+            }
+            local.perfect_judgment = perfect;
+            local.good_judgment = good;
+        } else {
+            data.play_configs.push(PlayConfig {
+                id: Some(id),
+                name,
+                perfect_judgment: perfect,
+                good_judgment: good,
+                bad_judgment: bad,
+            });
+        }
+    }
+    if data.play_configs.is_empty() {
+        data.play_configs.push(PlayConfig::default());
+    }
+    if let Some(index) = data.active_play_config {
+        if index >= data.play_configs.len() {
+            data.active_play_config = Some(0);
+        }
+    } else {
+        data.active_play_config = Some(0);
+    }
+    save_data()?;
+    Ok(())
 }
 
 #[must_use]
