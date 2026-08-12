@@ -3,7 +3,7 @@ phire::tl_file!("song");
 use super::{confirm_delete, confirm_dialog, fs_from_path, render_ldb, LdbDisplayItem, ProfileScene};
 use crate::{
     charts_view::NEED_UPDATE,
-    client::{basic_client_builder, download_play_configurations, recv_raw, Chart, Client, Permission, Ptr, Record, ResponseDto, UserManager, CLIENT_TOKEN},
+    client::{basic_client_builder, recv_raw, sync_active_play_config, Chart, Client, Permission, Ptr, Record, ResponseDto, UserManager, CLIENT_TOKEN},
     data::{BriefChartInfo, LocalChart},
     dir, get_data, get_data_mut,
     icons::Icons,
@@ -966,10 +966,8 @@ impl SongScene {
                 id: it.id,
                 rks: it.rks,
             });
-            #[cfg(feature = "closed")]
             let configuration_id = if chart_guid.is_some() && get_data().tokens.is_some() && rated {
-                download_play_configurations().await?;
-                get_data().active_play_config().and_then(|it| it.id.clone())
+                sync_active_play_config().await?
             } else {
                 None
             };
@@ -993,7 +991,6 @@ impl SongScene {
                 let refresh: Arc<dyn Fn() -> Task<()> + Send + Sync> = {
                     let session_task = session_task.clone();
                     let chart_id = chart_id.clone();
-                    let configuration_id = configuration_id.clone();
                     Arc::new(move || {
                         let chart_id = chart_id.clone();
                         let configuration_id = configuration_id.clone();
@@ -2201,19 +2198,33 @@ impl Scene for SongScene {
         let r = Rect::new(1. - pad - w, ui.top - pad - w, w, w);
         let (r, _) = self.play_btn.render_shadow(ui, r, t, c.a, |_| semi_white(0.3 * c.a));
         let r = r.feather(-0.04);
-        ui.fill_rect(
-            r,
-            (
-                if self.local_path.is_some() {
-                    Texture2D::clone(&self.icons.play)
-                } else {
-                    Texture2D::clone(&self.icons.download)
-                },
-                r,
-                ScaleType::Fit,
+        if self.scene_task.is_some() {
+            ui.loading(
+                r.center().x,
+                r.center().y,
+                t,
                 c,
-            ),
-        );
+                LoadingParams {
+                    radius: 0.05,
+                    width: 0.014,
+                    ..Default::default()
+                },
+            );
+        } else {
+            ui.fill_rect(
+                r,
+                (
+                    if self.local_path.is_some() {
+                        Texture2D::clone(&self.icons.play)
+                    } else {
+                        Texture2D::clone(&self.icons.download)
+                    },
+                    r,
+                    ScaleType::Fit,
+                    c,
+                ),
+            );
+        }
 
         ui.scope(|ui| {
             ui.dx(1. - 0.03);
