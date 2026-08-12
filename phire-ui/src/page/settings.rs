@@ -2,7 +2,7 @@ phire::tl_file!("settings");
 
 
 use super::{NextPage, OffsetPage, Page, PlayConfigurationPage, SharedState, LatencyPage};
-use crate::{get_data, get_data_mut, page::offset::OffsetMode, popup::ChooseButton, save_data, scene::BGM_VOLUME_UPDATED, sync_data, check_record_audio_permission, request_record_audio_permission};
+use crate::{get_data, get_data_mut, page::{OutputPage, offset::OffsetMode}, popup::ChooseButton, save_data, scene::BGM_VOLUME_UPDATED, sync_data};
 use anyhow::Result;
 use macroquad::prelude::*;
 use phire::{
@@ -13,6 +13,8 @@ use phire::{
     ui::{DRectButton, InlineInputBox, Scroll, Slider, Ui},
 };
 use std::{borrow::Cow, net::ToSocketAddrs, sync::atomic::Ordering};
+#[cfg(target_os = "android")]
+use crate::{check_record_audio_permission, request_record_audio_permission};
 
 const ITEM_HEIGHT: f32 = 0.15;
 
