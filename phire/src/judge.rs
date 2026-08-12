@@ -22,12 +22,9 @@ pub const UP_TOLERANCE: f64 = 0.05;
 pub const DIST_FACTOR: f64 = 0.2;
 const LATE_OFFSET: f64 = 0.13;
 
-pub fn play_sfx(sfx: &mut Sfx, config: &Config) {
-    if config.volume_sfx <= 1e-2 {
-        return;
-    }
+pub fn play_sfx(sfx: &mut Sfx, amplifier: f32) {
     let _ = sfx.play(PlaySfxParams {
-        amplifier: config.volume_sfx,
+        amplifier,
     });
 }
 
@@ -66,27 +63,39 @@ pub enum HitSound {
 
 impl HitSound {
     pub fn play(&self, res: &mut Resource) {
+        if res.config.volume_sfx < 1e-2 {
+            return;
+        }
         match self {
             HitSound::None => {}
             HitSound::Click => {
+                if res.config.high_precision_sfx && res.config.autoplay() {
+                    return;
+                }
                 if check_hitsound(&mut res.played_hitsounds_count, "click") {
-                    play_sfx(&mut res.sfx_click, &res.config)
+                    play_sfx(&mut res.sfx_click, res.config.volume_sfx)
                 }
             },
             HitSound::Flick => {
+                if res.config.high_precision_sfx && res.config.autoplay() {
+                    return;
+                }
                 if check_hitsound(&mut res.played_hitsounds_count, "flick") {
-                    play_sfx(&mut res.sfx_flick, &res.config)
+                    play_sfx(&mut res.sfx_flick, res.config.volume_sfx)
                 }
             },
             HitSound::Drag => {
+                if res.config.high_precision_sfx && res.config.autoplay() {
+                    return;
+                }
                 if check_hitsound(&mut res.played_hitsounds_count, "drag") {
-                    play_sfx(&mut res.sfx_drag, &res.config)
+                    play_sfx(&mut res.sfx_drag, res.config.volume_sfx)
                 }
             },
             HitSound::Custom(s) => {
                 if let Some(sfx) = res.extra_sfxs.get_mut(s) {
                     if check_hitsound(&mut res.played_hitsounds_count, s) {
-                        play_sfx(sfx, &res.config)
+                        play_sfx(sfx, res.config.volume_sfx)
                     }
                 }
             }
@@ -700,7 +709,7 @@ impl Judge {
                                 }
                             }
                             NoteKind::Hold { .. } => {
-                                play_sfx(&mut res.sfx_click, &res.config);
+                                play_sfx(&mut res.sfx_click, res.config.volume_sfx);
                                 self.judgements.borrow_mut().push((t, line_id as _, id, Err(dt <= self.limit_perfect)));
                                 note.judge = JudgeStatus::Hold(dt <= self.limit_perfect, t, t, false, f64::INFINITY);
                             }

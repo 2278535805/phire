@@ -452,6 +452,7 @@ struct AudioList {
     music_slider: Slider,
     sfx_slider: Slider,
     bgm_slider: Slider,
+    high_precision_sfx_btn: DRectButton,
     cali_btn: DRectButton,
     #[cfg(target_os = "android")]
     audio_compatibility_btn: DRectButton,
@@ -467,6 +468,7 @@ impl AudioList {
             music_slider: Slider::new(0.0..2.0, 0.05),
             sfx_slider: Slider::new(0.0..2.0, 0.05),
             bgm_slider: Slider::new(0.0..2.0, 0.05),
+            high_precision_sfx_btn: DRectButton::new(),
             cali_btn: DRectButton::new(),
             #[cfg(target_os = "android")]
             audio_compatibility_btn: DRectButton::new(),
@@ -499,6 +501,10 @@ impl AudioList {
                 BGM_VOLUME_UPDATED.store(true, Ordering::Relaxed);
             }
             return Ok(wt);
+        }
+        if self.high_precision_sfx_btn.touch(touch, t) {
+            config.high_precision_sfx ^= true;
+            return Ok(Some(true));
         }
         if self.cali_btn.touch(touch, t) {
             self.cali_task = Some(Box::pin(OffsetPage::new()));
@@ -556,6 +562,10 @@ impl AudioList {
         item! {
             render_title(ui, c, tl!("item-bgm"), None);
             self.bgm_slider.render(ui, rr, t, c, config.volume_bgm, format!("{:.2}", config.volume_bgm));
+        }
+        item! {
+            render_title(ui, c, tl!("item-high-precision-hit-effect"), Some(tl!("item-high-precision-hit-effect-sub")));
+            render_switch(ui, rr, t, c, &mut self.high_precision_sfx_btn, config.high_precision_sfx);
         }
         item! {
             render_title(ui, c, tl!("item-cali"), None);
