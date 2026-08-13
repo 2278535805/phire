@@ -188,7 +188,7 @@ impl Page for HomePage {
 
     fn update(&mut self, s: &mut SharedState) -> Result<()> {
         if !s.fader.transiting() {
-            phire::ui::UI_AUDIO.with(|it| it.borrow_mut().recover_if_needed())?;
+            let _ = phire::ui::UI_AUDIO.with(|it| it.borrow_mut().recover_if_needed());
         }
         let t = s.t;
         self.login.update(t)?;
