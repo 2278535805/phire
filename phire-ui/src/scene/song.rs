@@ -3,7 +3,7 @@ phire::tl_file!("song");
 use super::{confirm_delete, confirm_dialog, fs_from_path, render_ldb, LdbDisplayItem, ProfileScene};
 use crate::{
     charts_view::NEED_UPDATE,
-    client::{basic_client_builder, recv_raw, sync_active_play_config, Chart, Client, Permission, Ptr, Record, ResponseDto, UserManager, CLIENT_TOKEN},
+    client::{basic_client_builder, recv_raw, Chart, Client, Permission, Ptr, Record, ResponseDto, UserManager, CLIENT_TOKEN},
     data::{BriefChartInfo, LocalChart},
     dir, get_data, get_data_mut,
     icons::Icons,
@@ -28,8 +28,8 @@ use phire::{
     info::{ChartFormat, ChartInfo},
     judge::{icon_index, Judge},
     scene::{
-        request_input, return_input, show_error, show_message, take_input, BasicPlayer, GameMode, LoadingScene, LocalSceneTask, NextScene,
-        RecordUpdateState, Scene, SimpleRecord, UpdateFn, UploadFn,
+        request_input, return_input, show_error, show_message, take_input, BasicPlayer, GameMode, LoadingScene, LocalSceneTask,
+        NextScene, Scene, SimpleRecord, UpdateFn, UploadFn,
     },
     task::Task,
     time::TimeManager,
@@ -37,18 +37,33 @@ use phire::{
 };
 use reqwest::Method;
 use sasa::{AudioClip, Frame, Music, MusicParams};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize};
 use serde_json::json;
 use std::{
-    any::Any, borrow::Cow, collections::{HashMap, VecDeque, hash_map}, fs::File, io::{Cursor, Write}, path::Path, println, sync::{
-        Arc, Mutex, Weak, atomic::{AtomicBool, AtomicI32, Ordering},
-    }, thread_local, time::SystemTime,
+    any::Any, borrow::Cow, collections::{HashMap, VecDeque, hash_map},
+    fs::File,
+    io::{Cursor, Write},
+    path::Path,
+    sync::{
+        Arc,
+        Mutex,
+        Weak,
+        atomic::{AtomicBool, AtomicI32, Ordering}
+    },
+    thread_local,
 };
 use tokio::net::TcpStream;
 use tracing::warn;
 use uuid::Uuid;
 use walkdir::WalkDir;
 use zip::{write::FileOptions, CompressionMethod, ZipWriter};
+
+#[cfg(feature = "closed")]
+use crate::client::sync_active_play_config;
+#[cfg(feature = "closed")]
+use phire::scene::RecordUpdateState;
+#[cfg(feature = "closed")]
+use std::time::SystemTime;
 
 #[cfg(feature = "closed")]
 use crate::inner::*;
@@ -966,6 +981,7 @@ impl SongScene {
                 id: it.id,
                 rks: it.rks,
             });
+            #[cfg(feature = "closed")]
             let configuration_id = if chart_guid.is_some() && get_data().tokens.is_some() && rated {
                 sync_active_play_config().await?
             } else {
