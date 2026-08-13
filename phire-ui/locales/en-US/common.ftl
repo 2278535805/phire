@@ -15,3 +15,5 @@ chart-special = Special
 chart-unstable = Unstable
 
 list-empty = Nothing here
+
+start-audio-failed = Failed to play audio

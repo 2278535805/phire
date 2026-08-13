@@ -1,9 +1,10 @@
+crate::tl_file!("scene" tl);
 use crate::{
     config::Config,
     core::{Matrix, Point, Vector},
     ui::Ui,
 };
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 use image::DynamicImage;
 use lyon::{
     math::Box2D,
@@ -429,14 +430,16 @@ pub fn create_audio_manger(config: &Config) -> Result<AudioManager> {
         } else {
             true
         };
-        AudioManager::new(OboeBackend::new(OboeSettings {
+        let mut audio = AudioManager::new(OboeBackend::new(OboeSettings {
             buffer_size: config.audio_buffer_size,
             performance_mode: PerformanceMode::LowLatency,
             sharing_mode,
             usage,
             mmap,
             ..Default::default()
-        }))
+        }));
+        audio.start().context(tl!("start-audio-failed"))?;
+        Ok(audio)
     }
     #[cfg(target_os = "windows")]
     {
@@ -446,21 +449,24 @@ pub fn create_audio_manger(config: &Config) -> Result<AudioManager> {
         } else {
             ShareMode::Exclusive
         };
-        AudioManager::new(WasapiBackend::new(WasapiSettings {
+        let mut audio = AudioManager::new(WasapiBackend::new(WasapiSettings {
             buffer_size: config.audio_buffer_size,
             share_mode,
             stream_category: StreamCategory::Media,
             stream_option: Some(StreamOption::Raw),
             ..Default::default()
-        }))
+        }));
+        audio.start().context(tl!("start-audio-failed"))?;
+        Ok(audio)
     }
     #[cfg(not(any(target_os = "android", target_os = "windows")))]
     {
         use sasa::backend::cpal::*;
-        Ok(AudioManager::new(CpalBackend::new(CpalSettings {
+        let mut audio = AudioManager::new(CpalBackend::new(CpalSettings {
             buffer_size: config.audio_buffer_size,
-        }))
-        .expect("Failed to play sound"))
+        }));
+        audio.start().context(tl!("start-audio-failed"))?;
+        Ok(audio)
     }
 }
 

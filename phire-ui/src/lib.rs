@@ -19,7 +19,7 @@ mod scene;
 mod tags;
 mod uml;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use data::Data;
 use macroquad::prelude::*;
 use phire::{
@@ -29,7 +29,7 @@ use phire::{
     log,
     scene::{show_error, show_message},
     time::TimeManager,
-    ui::{FontArc, TextPainter},
+    ui::{FontArc, TextPainter, UI_AUDIO},
     Main,
 };
 use scene::MainScene;
@@ -212,6 +212,10 @@ async fn the_main() -> Result<()> {
     let mut painter = TextPainter::new(fonts);
 
     let mut main = Main::new(Box::new(MainScene::new().await?), TimeManager::default(), None).await?;
+
+    if let Err(err) = UI_AUDIO.with(|it| it.borrow_mut().start()).context(ttl!("start-audio-failed")) {
+        show_error(err);
+    }
 
     let tm = TimeManager::default();
 

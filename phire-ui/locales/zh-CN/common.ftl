@@ -15,3 +15,5 @@ chart-special = 特殊
 chart-unstable = 未上架
 
 list-empty = 空空如也
+
+start-audio-failed = 音频播放失败
