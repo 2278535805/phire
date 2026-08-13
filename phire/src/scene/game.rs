@@ -12,7 +12,7 @@ use super::{
 use crate::{
     bin::BinaryReader,
     config::{Config, Mods},
-    core::{BUFFER_SIZE, BadNote, Chart, ChartExtra, Effect, Point, Resource, UIElement, HitSound},
+    core::{MAX_SIZE, MAX_SIZE_LIMIT, BUFFER_SIZE, BadNote, Chart, ChartExtra, Effect, Point, Resource, UIElement, HitSound},
     ext::{RectExt, SafeTexture, draw_text_aligned, draw_text_aligned_opt_width, ease_in_out_quartic, get_audio_latency, parse_time, push_frame_time, screen_aspect, semi_white, validate_combo},
     fs::FileSystem,
     gyro::GYRO,
@@ -204,6 +204,42 @@ fn round_to_step(v: f64, step: f64) -> f64 {
     (v / step).round() * step
 }
 
+fn parse_note_list(time_list: Vec<f64>, mix_opt: bool) -> Vec<f64> {
+    let mut time_list = time_list;
+    time_list.sort_by(|a, b| {
+        let a = round_to_step(*a, 0.005);
+        let b = round_to_step(*b, 0.005);
+        a.total_cmp(&b)
+    });
+
+    if !mix_opt {
+        return time_list;
+    }
+
+    let step = 1. / 1000.;
+
+    let mut kept_sfx_list = Vec::with_capacity(time_list.len());
+    let mut last_t = 0.0;
+    let mut count = 0;
+
+    for &pos in time_list.iter() {
+        let round_pos = round_to_step(pos, step);
+        let is_new_group = round_pos != last_t;
+
+        if is_new_group {
+            last_t = round_pos;
+            count = 1;
+            kept_sfx_list.push(round_pos);
+        } else {
+            if count < 3 {
+                kept_sfx_list.push(round_pos);
+                count += 1;
+            }
+        }
+    }
+    kept_sfx_list
+}
+
 fn parse_sfx_list(sfx_list: Vec<f64>, mix_opt: bool) -> Vec<f64> {
     let mut sfx_list = sfx_list;
     sfx_list.sort_by(|a, b| {
@@ -212,25 +248,31 @@ fn parse_sfx_list(sfx_list: Vec<f64>, mix_opt: bool) -> Vec<f64> {
         a.total_cmp(&b)
     });
 
-    if !mix_opt {
-        return sfx_list;
-    }
+    let step = if mix_opt { 0.001 } else { 0.0005 };
 
     let mut kept_sfx_list = Vec::with_capacity(sfx_list.len());
     let mut last_t = 0.0;
     let mut count = 0;
 
     for &pos in sfx_list.iter() {
-        let pos = round_to_step(pos, 0.005);
-        let is_new_group = pos != last_t;
+        let round_pos = round_to_step(pos, step);
+        let is_new_group = round_pos != last_t;
 
         if is_new_group {
-            last_t = pos;
+            last_t = round_pos;
             count = 1;
-            kept_sfx_list.push(pos);
+            if mix_opt {
+                kept_sfx_list.push(round_pos);
+            } else {
+                kept_sfx_list.push(pos);
+            };
         } else {
             if count < 3 {
-                kept_sfx_list.push(pos);
+                if mix_opt {
+                    kept_sfx_list.push(round_pos);
+                } else {
+                    kept_sfx_list.push(pos);
+                };
                 count += 1;
             }
         }
@@ -254,6 +296,17 @@ fn offset_sfx_list(sfx_list: &mut (Vec<f64>, Vec<f64>, Vec<f64>), res: &mut Reso
     Ok(())
 }
 
+fn peak_density(times: &[f64]) -> usize {
+    let mut max = 0;
+    let mut r = 0;
+    for l in 0..times.len() {
+        let limit = times[l] + 0.5;
+        while r < times.len() && times[r] < limit { r += 1; }
+        if r - l > max { max = r - l; }
+        if r == times.len() { break; }
+    }
+    max
+}
 
 impl GameScene {
     pub const BEFORE_TIME: f64 = 0.7;
@@ -448,6 +501,59 @@ impl GameScene {
         judge.set_limits(config.perfect_judgment, config.good_judgment, config.bad_judgment);
 
         let info_offset = info.offset;
+        let offset = chart.offset + info_offset;
+
+        let (max_note, sfx_vec) = {
+            let sfx = config.high_precision_sfx && config.autoplay() && config.volume_sfx >= 1e-2;
+            let mut time_vec = Vec::with_capacity(chart.lines.iter().map(|line| line.notes.len()).sum());
+            let mut sfx_click_vec = Vec::new();
+            let mut sfx_drag_vec = Vec::new();
+            let mut sfx_flick_vec = Vec::new();
+            let t = if mode == GameMode::TweakOffset {
+                chart.offset + info_offset
+            } else {
+                offset
+            };
+            chart.lines.iter().for_each(|line| line.notes.iter().for_each(|note| {
+                time_vec.push(note.time + t);
+                if note.fake { return; }
+                if !sfx { return; }
+                match note.hitsound {
+                    HitSound::Click => sfx_click_vec.push(note.time + t),
+                    HitSound::Drag => sfx_drag_vec.push(note.time + t),
+                    HitSound::Flick => sfx_flick_vec.push(note.time + t),
+                    _ => {},
+                }
+            }));
+            time_vec = parse_note_list(time_vec, config.aggressive_note);
+            let max_note = (peak_density(&time_vec) + 64).clamp(MAX_SIZE, MAX_SIZE_LIMIT);
+            debug!("notes = {}, max_note = {}", time_vec.len(), max_note);
+            drop(time_vec);
+            if sfx {
+                sfx_click_vec = parse_sfx_list(sfx_click_vec, mode != GameMode::TweakOffset);
+                sfx_drag_vec = parse_sfx_list(sfx_drag_vec, mode != GameMode::TweakOffset);
+                sfx_flick_vec = parse_sfx_list(sfx_flick_vec, mode != GameMode::TweakOffset);
+                debug!(
+                    "Prepared {} click, {} drag, {} flick sfx",
+                    sfx_click_vec.len(), sfx_drag_vec.len(), sfx_flick_vec.len()
+                );
+            }
+            (
+                max_note,
+                if sfx { Some((sfx_click_vec, sfx_drag_vec, sfx_flick_vec)) } else { None }
+            )
+        };
+
+        let sfx_buffer_size = if let Some((sfx_click_vec, sfx_drag_vec, sfx_flick_vec)) = &sfx_vec {
+            Some((
+                (peak_density(sfx_click_vec) + 16).clamp(64, 3072),
+                (peak_density(sfx_drag_vec) + 16).clamp(64, 3072),
+                (peak_density(sfx_flick_vec) + 16).clamp(64, 3072),
+            ))
+        } else {
+            None
+        };
+
         let mut res = Resource::new(
             config,
             info,
@@ -456,6 +562,8 @@ impl GameScene {
             background,
             illustration,
             chart.extra.effects.is_empty() && effects.is_empty(),
+            max_note,
+            sfx_buffer_size,
         )
         .await
         .context("Failed to load resources")?;
@@ -464,7 +572,6 @@ impl GameScene {
             res.info.line_length *= 4000. / RPE_WIDTH / 6.;
         }
 
-        let offset = chart.offset + info_offset;
         let exercise_range = offset + res.config.play_start_time..res.track_length;
         
         // Prepare extra sfx from chart.hitsounds
@@ -477,43 +584,21 @@ impl GameScene {
 
         let music = Self::new_music(&mut res)?;
 
-        let sfx_vec = if res.config.high_precision_sfx && res.config.autoplay() && res.config.volume_sfx >= 1e-2 {
-            let mut sfx_click_vec = Vec::new();
-            let mut sfx_drag_vec = Vec::new();
-            let mut sfx_flick_vec = Vec::new();
-            let t = if mode == GameMode::TweakOffset {
-                chart.offset + info_offset
-            } else {
-                offset
-            };
-            chart.lines.iter().for_each(|line| line.notes.iter().for_each(|note| {
-                match note.hitsound {
-                    HitSound::Click => sfx_click_vec.push(note.time + t),
-                    HitSound::Drag => sfx_drag_vec.push(note.time + t),
-                    HitSound::Flick => sfx_flick_vec.push(note.time + t),
-                    _ => {},
-                }
-            }));
-            sfx_click_vec = parse_sfx_list(sfx_click_vec, mode != GameMode::TweakOffset);
-            sfx_drag_vec = parse_sfx_list(sfx_drag_vec, mode != GameMode::TweakOffset);
-            sfx_flick_vec = parse_sfx_list(sfx_flick_vec, mode != GameMode::TweakOffset);
-            debug!("Prepared {} click, {} drag, {} flick sfx", sfx_click_vec.len(), sfx_drag_vec.len(), sfx_flick_vec.len());
+        if let Some((sfx_click_vec, sfx_drag_vec, sfx_flick_vec)) = &sfx_vec {
             res.sfx_click.set_clock(music.clock())?;
             res.sfx_drag.set_clock(music.clock())?;
             res.sfx_flick.set_clock(music.clock())?;
-            res.sfx_click.schedule_play(&sfx_click_vec, PlaySfxParams {
+            res.sfx_click.schedule_play(sfx_click_vec, PlaySfxParams {
                 amplifier: res.config.volume_sfx,
             })?;
-            res.sfx_drag.schedule_play(&sfx_drag_vec, PlaySfxParams {
+            res.sfx_drag.schedule_play(sfx_drag_vec, PlaySfxParams {
                 amplifier: res.config.volume_sfx,
             })?;
-            res.sfx_flick.schedule_play(&sfx_flick_vec, PlaySfxParams {
+            res.sfx_flick.schedule_play(sfx_flick_vec, PlaySfxParams {
                 amplifier: res.config.volume_sfx,
             })?;
-            Some((sfx_click_vec, sfx_drag_vec, sfx_flick_vec))
-        } else {
-            None
         };
+
         Ok(Self {
             should_exit: false,
             next_scene: None,

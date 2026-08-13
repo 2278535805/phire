@@ -19,8 +19,14 @@ use rand_pcg::{
     rand_core::SeedableRng
 };
 use rustc_hash::FxHashMap;
-
-pub const MAX_SIZE: usize = 1024; // needs tweaking
+#[cfg(not(feature = "play"))]
+pub const MAX_SIZE: usize = 1024;
+#[cfg(feature = "play")]
+pub const MAX_SIZE: usize = 256;
+#[cfg(not(feature = "play"))]
+pub const MAX_SIZE_LIMIT: usize = 20480;
+#[cfg(feature = "play")]
+pub const MAX_SIZE_LIMIT: usize = 4096;
 pub static DPI_VALUE: AtomicU32 = AtomicU32::new(250);
 pub const BUFFER_SIZE: usize = 1024;
 pub const RNG_SEED: u64 = 0x7a_61_6b_6f;
@@ -563,6 +569,8 @@ impl Resource {
         background: SafeTexture,
         illustration: SafeTexture,
         has_no_effect: bool,
+        max_note: usize,
+        sfx_buffer_size: Option<(usize, usize, usize)>
     ) -> Result<Self> {
         macro_rules! load_tex {
             ($path:literal) => {
@@ -583,10 +591,10 @@ impl Resource {
         let music = AudioClip::new(fs.load_file(&info.music).await?)?;
         let music_length = music.length();
         let track_length = config.play_end_time.unwrap_or(music_length).min(music_length);
-        let buffer_size = Some(BUFFER_SIZE);
-        let sfx_click = audio.create_sfx(res_pack.sfx_click.clone(), buffer_size)?;
-        let sfx_drag = audio.create_sfx(res_pack.sfx_drag.clone(), buffer_size)?;
-        let sfx_flick = audio.create_sfx(res_pack.sfx_flick.clone(), buffer_size)?;
+        let (sfx_click_buffer, sfx_drag_buffer, sfx_flick_buffer) = sfx_buffer_size.unwrap_or((BUFFER_SIZE, BUFFER_SIZE, BUFFER_SIZE));
+        let sfx_click = audio.create_sfx(res_pack.sfx_click.clone(), Some(sfx_click_buffer))?;
+        let sfx_drag = audio.create_sfx(res_pack.sfx_drag.clone(), Some(sfx_drag_buffer))?;
+        let sfx_flick = audio.create_sfx(res_pack.sfx_flick.clone(), Some(sfx_flick_buffer))?;
         let frame_times: VecDeque<f64> = VecDeque::new();
 
         let aspect_ratio = config.aspect_ratio.unwrap_or(info.aspect_ratio);
@@ -612,7 +620,7 @@ impl Resource {
         #[cfg(feature = "play")]
         let health = Health::new(config.health_mode.clone().unwrap_or_default());
 
-        macroquad::window::gl_set_drawcall_buffer_capacity(MAX_SIZE * 4, MAX_SIZE * 6);
+        macroquad::window::gl_set_drawcall_buffer_capacity(max_note * 4, max_note * 6);
         Ok(Self {
             config,
             info,
