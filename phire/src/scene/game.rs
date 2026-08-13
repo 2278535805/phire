@@ -1054,7 +1054,7 @@ impl GameScene {
     }
 
     fn tweak_offset(&mut self, ui: &mut Ui, ita: bool, tm: &mut TimeManager) -> Result<()> {
-        let width = 0.55;
+        let width = 0.60;
         let height = 0.3;
         ui.scope(|ui| -> Result<()> {
             ui.dx(1. - width - 0.02);
@@ -1077,42 +1077,42 @@ impl GameScene {
                 .size(0.6)
                 .no_baseline()
                 .draw();
-            let d = 0.14;
+            let d = 0.18;
             let mut bpm_list = self.chart.bpm_list.borrow_mut();
             let beat = (15. / bpm_list.now_bpm(tm.now())).clamp(0.020, 0.500);
-            if ui.button("lg_sub", Rect::new(d, r.center().y, 0., 0.).feather(0.026), "-") && ita {
+            if ui.button("lg_sub", Rect::new(d, r.center().y, 0., 0.).feather(0.030), "-") && ita {
                 self.info_offset -= beat;
                 if let Some(sfx_vec) = &mut self.sfx_vec {
                     offset_sfx_list(sfx_vec, &mut self.res, -beat)?;
                 }
             }
-            if ui.button("lg_add", Rect::new(width - d, r.center().y, 0., 0.).feather(0.026), "+") && ita {
+            if ui.button("lg_add", Rect::new(width - d, r.center().y, 0., 0.).feather(0.030), "+") && ita {
                 self.info_offset += beat;
                 if let Some(sfx_vec) = &mut self.sfx_vec {
                     offset_sfx_list(sfx_vec, &mut self.res, beat)?;
                 }
             }
-            let d = 0.080;
-            if ui.button("sm_sub", Rect::new(d, r.center().y, 0., 0.).feather(0.022), "-") && ita {
+            let d = 0.11;
+            if ui.button("sm_sub", Rect::new(d, r.center().y, 0., 0.).feather(0.026), "-") && ita {
                 self.info_offset -= 0.010;
                 if let Some(sfx_vec) = &mut self.sfx_vec {
                     offset_sfx_list(sfx_vec, &mut self.res, -0.010)?;
                 }
             }
-            if ui.button("sm_add", Rect::new(width - d, r.center().y, 0., 0.).feather(0.022), "+") && ita {
+            if ui.button("sm_add", Rect::new(width - d, r.center().y, 0., 0.).feather(0.026), "+") && ita {
                 self.info_offset += 0.010;
                 if let Some(sfx_vec) = &mut self.sfx_vec {
                     offset_sfx_list(sfx_vec, &mut self.res, 0.010)?;
                 }
             }
-            let d = 0.03;
-            if ui.button("ti_sub", Rect::new(d, r.center().y, 0., 0.).feather(0.017), "-") && ita {
+            let d = 0.047;
+            if ui.button("ti_sub", Rect::new(d, r.center().y, 0., 0.).feather(0.023), "-") && ita {
                 self.info_offset -= 0.001;
                 if let Some(sfx_vec) = &mut self.sfx_vec {
                     offset_sfx_list(sfx_vec, &mut self.res, -0.001)?;
                 }
             }
-            if ui.button("ti_add", Rect::new(width - d, r.center().y, 0., 0.).feather(0.017), "+") && ita {
+            if ui.button("ti_add", Rect::new(width - d, r.center().y, 0., 0.).feather(0.023), "+") && ita {
                 self.info_offset += 0.001;
                 if let Some(sfx_vec) = &mut self.sfx_vec {
                     offset_sfx_list(sfx_vec, &mut self.res, 0.001)?;
@@ -1139,7 +1139,7 @@ impl GameScene {
         ui.scope(|ui| {
             ui.dx(1. - width * 0.97);
             ui.dy(ui.top - height * 0.75);
-            ui.slider(tl!("speed"), 0.1..2.0, 0.05, &mut self.res.config.speed, Some(0.36));
+            ui.slider(tl!("speed"), 0.1..2.0, 0.05, &mut self.res.config.speed, Some(0.40));
             if (tm.speed - self.res.config.speed as f64).abs() > 1e-3 {
                 reset_music_speed!(self, &mut self.res, tm);
                 tm.resume();
@@ -1329,7 +1329,7 @@ impl Scene for GameScene {
                             record_data,
                             record,
                         )?))),
-                        GameMode::TweakOffset => Some(NextScene::PopWithResult(Box::new(None::<f32>))),
+                        GameMode::TweakOffset => Some(NextScene::PopWithResult(Box::new(Some(self.info_offset)))),
                     };
                 }
                 self.res.alpha = 1. - (t / AFTER_TIME).clamp(0., 1.).powi(2) as f32;
