@@ -12,7 +12,7 @@ default = ["play"]
 closed = ["phire/closed"]
 chat = []
 aa = []
-play = []
+play = ["phire/play"]
 
 [dependencies]
 anyhow = { workspace = true }
@@ -32,7 +32,7 @@ md5 = { workspace = true }
 nalgebra = { workspace = true }
 once_cell = { workspace = true }
 pollster = { workspace = true }
-phire = { workspace = true }
+phire = { workspace = true, features = ["log", "video"] }
 rand = { workspace = true }
 regex = { workspace = true }
 reqwest = { workspace = true, features = ["json", "stream", "gzip", "charset", "http2", "system-proxy", "native-tls", "query"] }

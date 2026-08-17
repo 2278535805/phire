@@ -16,7 +16,7 @@ strip = true
 opt-level = 2
 
 [workspace.dependencies]
-phire = { path = "phire" }
+phire = { path = "phire", default-features = false }
 macroquad = { git = "https://github.com/2278535805/macroquad" }
 phira-mp-client = { git = "https://github.com/TeamFlos/phira-mp" }
 phira-mp-common = { git = "https://github.com/TeamFlos/phira-mp" }

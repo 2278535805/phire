@@ -813,7 +813,7 @@ struct OtherList {
     rotation_mode: DRectButton,
     #[cfg(feature = "play")]
     shake_play_mode_btn: DRectButton,
-
+    #[cfg(feature = "play")]
     health_mode_btn: DRectButton,
     health_mode_input: InlineInputBox,
 }
@@ -860,6 +860,7 @@ impl OtherList {
             return Ok(Some(false));
         }
 
+        #[cfg(feature = "play")]
         if self.health_mode_input.is_active() {
             if self.health_mode_input.touch(touch) {
                 let text = self.health_mode_input.confirm();
