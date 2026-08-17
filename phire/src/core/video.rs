@@ -1,8 +1,8 @@
 use super::Anim;
 use crate::ext::{source_of_image, ScaleType};
 use anyhow::Result;
-use macroquad::prelude::*;
-use macroquad::miniquad::{TextureFormat, TextureParams, TextureWrap};
+use macroquad::{miniquad::ShaderSource::Glsl, prelude::*};
+use miniquad::{TextureFormat, TextureParams};
 use prpr_avc::AVPixelFormat;
 use serde::Deserialize;
 use std::{cell::RefCell, io::Write};
@@ -57,6 +57,9 @@ pub struct Video {
     scale_type: ScaleType,
     alpha: Anim<f32>,
     dim: Anim<f32>,
+
+    frame_duration: f64,
+    last_frame_idx: i64,
 }
 
 fn new_tex(w: u32, h: u32, value: u8) -> Texture2D {
@@ -67,13 +70,7 @@ fn new_tex(w: u32, h: u32, value: u8) -> Texture2D {
             width: w,
             height: h,
             format: TextureFormat::Alpha,
-            kind: miniquad::TextureKind::Texture2D,
-            min_filter: FilterMode::Linear,
-            mag_filter: FilterMode::Linear,
-            mipmap_filter: miniquad::MipmapFilterMode::None,
-            allocate_mipmaps: false,
-            sample_count: 1,
-            wrap: TextureWrap::Clamp,
+            ..Default::default()
         },
     ))
 }
@@ -90,7 +87,10 @@ impl Video {
         let h = format.height as u32;
 
         let material = load_material(
-            ShaderSource::Glsl { vertex: shader::VERTEX, fragment: shader::FRAGMENT },
+            Glsl {
+                vertex: shader::VERTEX,
+                fragment: shader::FRAGMENT,
+            },
             MaterialParams {
                 pipeline_params: PipelineParams::default(),
                 uniforms: Vec::new(),
@@ -103,6 +103,8 @@ impl Video {
         material.set_texture("tex_y", tex_y.clone());
         material.set_texture("tex_u", tex_u.clone());
         material.set_texture("tex_v", tex_v.clone());
+        let frame_rate = video.frame_rate();
+        let frame_duration = if frame_rate.num > 0 { frame_rate.to_f64_inv() } else { 1.0 / 30.0 };
 
         Ok(Self {
             video,
@@ -119,6 +121,8 @@ impl Video {
             scale_type,
             alpha,
             dim,
+            frame_duration,
+            last_frame_idx: -1,
         })
     }
 
@@ -127,12 +131,19 @@ impl Video {
     }
 
     pub fn update(&mut self, t: f64) -> Result<()> {
-        if !(0f64..self.duration).contains(&(t - self.start_time)) {
+        let elapsed = t - self.start_time;
+        if !(0f64..self.duration).contains(&elapsed) {
             return Ok(());
         }
         self.alpha.set_time(t);
         self.dim.set_time(t);
-        self.video.seek(self.video.elapsed_to_timestamp(t - self.start_time));
+
+        // Throttle to video frame rate
+        let frame_idx = (elapsed / self.frame_duration).round() as i64;
+        if frame_idx != self.last_frame_idx {
+            self.last_frame_idx = frame_idx;
+            self.video.seek(self.video.elapsed_to_timestamp(elapsed));
+        }
 
         self.video.with_frame(|frame, pts| {
             if self.last_pts == pts {
@@ -144,9 +155,6 @@ impl Video {
             }
 
             VIDEO_BUFFERS.with_borrow_mut(|buf| {
-                buf[0].clear();
-                buf[1].clear();
-                buf[2].clear();
                 frame.get_data(0, &mut buf[0]);
                 frame.get_data_half(1, &mut buf[1]);
                 frame.get_data_half(2, &mut buf[2]);
@@ -163,6 +171,9 @@ impl Video {
 
     pub fn render(&self, t: f64, aspect_ratio: f32, color: Color, line_scale: Option<(f32, f32, u8, u8)>) {
         if !(0f64..self.duration).contains(&(t - self.start_time)) {
+            return;
+        }
+        if self.last_pts == -1 {
             return;
         }
         gl_use_material(&self.material);
@@ -236,6 +247,7 @@ impl Video {
 
     pub fn reset(&mut self) -> Result<()> {
         self.last_pts = -1;
+        self.last_frame_idx = -1;
         self.video.seek(0);
         Ok(())
     }
