@@ -34,6 +34,7 @@ impl Video {
             pix_fmt,
             ..stream_format.clone()
         };
+        let direct_format = stream_format.pix_fmt.0 == out_format.pix_fmt.0;
 
         let mut sws = SwsContext::new(stream_format.clone(), out_format.clone())?;
         let mut in_frame = AVFrame::new()?;
@@ -113,9 +114,15 @@ impl Video {
                             }
 
                             if !sent && current_ts >= ts {
-                                sws.scale(&in_frame, &mut out_frame);
+                                if !direct_format {
+                                    sws.scale(&in_frame, &mut out_frame);
+                                }
                                 let mut guard = frame.0.lock().unwrap();
-                                std::mem::swap(&mut guard.0, &mut out_frame);
+                                if direct_format {
+                                    std::mem::swap(&mut guard.0, &mut in_frame);
+                                } else {
+                                    std::mem::swap(&mut guard.0, &mut out_frame);
+                                }
                                 guard.1 = current_ts;
                                 guard.2 = false;
                                 frame.1.notify_all();
