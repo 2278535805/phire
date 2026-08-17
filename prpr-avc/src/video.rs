@@ -11,13 +11,14 @@ pub struct Video {
     stream_format: VideoStreamFormat,
     video_stream: AVStreamRef,
 
+    sync_time: bool,
     position: Arc<(Mutex<i64>, Condvar)>,
-    frame: Arc<Mutex<(AVFrame, i64)>>,
+    frame: Arc<(Mutex<(AVFrame, i64, bool)>, Condvar)>,
     decode_thread: Option<JoinHandle<()>>,
 }
 
 impl Video {
-    pub fn open(file: impl AsRef<str>, pix_fmt: AVPixelFormat) -> Result<Self> {
+    pub fn open(file: impl AsRef<str>, pix_fmt: AVPixelFormat, sync_time: bool) -> Result<Self> {
         let mut format_ctx = AVFormatContext::new()?;
         format_ctx.open_input(file.as_ref())?;
         format_ctx.find_stream_info()?;
@@ -45,7 +46,7 @@ impl Video {
         buf_frame.get_buffer()?;
 
         let position = Arc::new((Mutex::new(0), Condvar::new()));
-        let frame = Arc::new(Mutex::new((buf_frame, -1)));
+        let frame = Arc::new((Mutex::new((buf_frame, -1, false)), Condvar::new()));
 
         let video_index = video_stream.index();
 
@@ -92,7 +93,9 @@ impl Video {
                         }
 
                         if !format_ctx.read_frame(&mut packet)? {
-                            frame.lock().unwrap().1 = -1;
+                            let mut guard = frame.0.lock().unwrap();
+                            guard.2 = true;
+                            frame.1.notify_all();
                             continue;
                         }
 
@@ -111,9 +114,11 @@ impl Video {
 
                             if !sent && current_ts >= ts {
                                 sws.scale(&in_frame, &mut out_frame);
-                                let mut guard = frame.lock().unwrap();
+                                let mut guard = frame.0.lock().unwrap();
                                 std::mem::swap(&mut guard.0, &mut out_frame);
                                 guard.1 = current_ts;
+                                guard.2 = false;
+                                frame.1.notify_all();
                                 sent = true;
                             }
                         }
@@ -122,7 +127,9 @@ impl Video {
 
                 if let Err(e) = run() {
                     error!("decode error: {e:?}");
-                    frame.lock().unwrap().1 = -1;
+                    let mut guard = frame.0.lock().unwrap();
+                    guard.2 = true;
+                    frame.1.notify_all();
                 }
             }
         });
@@ -131,6 +138,7 @@ impl Video {
             stream_format,
             video_stream,
 
+            sync_time,
             frame,
             position,
             decode_thread: Some(decode_thread),
@@ -162,17 +170,28 @@ impl Video {
         let mut guard = self.position.0.lock().unwrap();
         *guard = timestamp;
         self.position.1.notify_one();
+        drop(guard);
+        if !self.sync_time {
+            return;
+        }
+        let mut frame = self.frame.0.lock().unwrap();
+        while frame.1 < timestamp && !frame.2 {
+            frame = self.frame.1.wait(frame).unwrap();
+        }
     }
 
     pub fn with_frame<R>(&self, mut f: impl FnMut(&AVFrame, i64) -> R) -> R {
-        let guard = self.frame.lock().unwrap();
+        let guard = self.frame.0.lock().unwrap();
         f(&guard.0, guard.1)
     }
 }
 
 impl Drop for Video {
     fn drop(&mut self) {
-        self.seek(i64::MAX);
+        let mut guard = self.position.0.lock().unwrap();
+        *guard = i64::MAX;
+        self.position.1.notify_one();
+        drop(guard);
         if let Some(handle) = self.decode_thread.take() {
             handle.join().unwrap();
         }

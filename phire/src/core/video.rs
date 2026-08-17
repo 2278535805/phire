@@ -8,6 +8,11 @@ use serde::Deserialize;
 use std::{cell::RefCell, io::Write};
 use tempfile::NamedTempFile;
 
+#[cfg(feature = "play")]
+const SYNC_TIME: bool = false;
+#[cfg(not(feature = "play"))]
+const SYNC_TIME: bool = true;
+
 thread_local! {
     static VIDEO_BUFFERS: RefCell<[Vec<u8>; 3]> = RefCell::default();
 }
@@ -78,7 +83,7 @@ impl Video {
         let mut video_file = NamedTempFile::new()?;
         video_file.write_all(&data)?;
         drop(data);
-        let video = prpr_avc::Video::open(video_file.path().as_os_str().to_str().unwrap(), AVPixelFormat::YUV420P)?;
+        let video = prpr_avc::Video::open(video_file.path().as_os_str().to_str().unwrap(), AVPixelFormat::YUV420P, SYNC_TIME)?;
         let duration = video.duration();
         let format = video.stream_format();
         let w = format.width as u32;
