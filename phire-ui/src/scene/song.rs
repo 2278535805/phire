@@ -343,6 +343,7 @@ impl SongScene {
         } else {
             chart.illu
         };
+        illu.notify();
         let record = get_data()
             .charts
             .iter()
