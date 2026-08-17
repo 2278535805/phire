@@ -54,20 +54,23 @@ pub struct Video {
     dim: Anim<f32>,
 }
 
-fn new_tex(w: u32, h: u32) -> Texture2D {
+fn new_tex(w: u32, h: u32, value: u8) -> Texture2D {
     let ctx = unsafe { get_internal_gl() }.quad_context;
-    Texture2D::from_miniquad_texture(ctx.new_render_texture(TextureParams {
-        width: w,
-        height: h,
-        format: TextureFormat::Alpha,
-        kind: miniquad::TextureKind::Texture2D,
-        min_filter: FilterMode::Linear,
-        mag_filter: FilterMode::Linear,
-        mipmap_filter: miniquad::MipmapFilterMode::None,
-        allocate_mipmaps: false,
-        sample_count: 1,
-        wrap: TextureWrap::Clamp,
-    }))
+    Texture2D::from_miniquad_texture(ctx.new_texture_from_data_and_format(
+        &vec![value; w as usize * h as usize],
+        TextureParams {
+            width: w,
+            height: h,
+            format: TextureFormat::Alpha,
+            kind: miniquad::TextureKind::Texture2D,
+            min_filter: FilterMode::Linear,
+            mag_filter: FilterMode::Linear,
+            mipmap_filter: miniquad::MipmapFilterMode::None,
+            allocate_mipmaps: false,
+            sample_count: 1,
+            wrap: TextureWrap::Clamp,
+        },
+    ))
 }
 
 impl Video {
@@ -89,9 +92,9 @@ impl Video {
                 textures: vec!["tex_y".to_owned(), "tex_u".to_owned(), "tex_v".to_owned()],
             },
         )?;
-        let tex_y = new_tex(w, h);
-        let tex_u = new_tex(w / 2, h / 2);
-        let tex_v = new_tex(w / 2, h / 2);
+        let tex_y = new_tex(w, h, 16);
+        let tex_u = new_tex(w / 2, h / 2, 128);
+        let tex_v = new_tex(w / 2, h / 2, 128);
         material.set_texture("tex_y", tex_y.clone());
         material.set_texture("tex_u", tex_u.clone());
         material.set_texture("tex_v", tex_v.clone());
