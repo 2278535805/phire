@@ -45,6 +45,7 @@ extern "C" {
     pub fn av_frame_unref(frame: *mut AVFrame);
     pub fn av_frame_get_buffer(frame: *mut AVFrame, align: ::std::os::raw::c_int) -> ::std::os::raw::c_int;
     pub fn av_rescale_rnd(a: i64, b: i64, c: i64, r: AVRounding) -> i64;
+    pub fn av_opt_set_int(obj: *mut c_void, name: *const ::std::os::raw::c_char, val: i64, search_flags: ::std::os::raw::c_int) -> ::std::os::raw::c_int;
 }
 
 #[link(name = "avcodec", kind = "static")]
