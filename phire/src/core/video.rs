@@ -8,6 +8,11 @@ use serde::Deserialize;
 use std::{cell::RefCell, io::Write};
 use tempfile::NamedTempFile;
 
+#[cfg(feature = "play")]
+const SYNC_TIME: bool = false;
+#[cfg(not(feature = "play"))]
+const SYNC_TIME: bool = true;
+
 thread_local! {
     static VIDEO_BUFFERS: RefCell<[Vec<u8>; 3]> = RefCell::default();
 }
@@ -57,9 +62,10 @@ pub struct Video {
     last_frame_idx: i64,
 }
 
-fn new_tex(w: u32, h: u32) -> Texture2D {
+fn new_tex(w: u32, h: u32, value: u8) -> Texture2D {
     let ctx = unsafe { get_internal_gl() }.quad_context;
-    Texture2D::from_miniquad_texture(ctx.new_render_texture(
+    Texture2D::from_miniquad_texture(ctx.new_texture_from_data_and_format(
+        &vec![value; w as usize * h as usize],
         TextureParams {
             width: w,
             height: h,
@@ -74,7 +80,7 @@ impl Video {
         let mut video_file = NamedTempFile::new()?;
         video_file.write_all(&data)?;
         drop(data);
-        let video = prpr_avc::Video::open(video_file.path().as_os_str().to_str().unwrap(), AVPixelFormat::YUV420P)?;
+        let video = prpr_avc::Video::open(video_file.path().as_os_str().to_str().unwrap(), AVPixelFormat::YUV420P, SYNC_TIME)?;
         let duration = video.duration();
         let format = video.stream_format();
         let w = format.width as u32;
@@ -91,9 +97,9 @@ impl Video {
                 textures: vec!["tex_y".to_owned(), "tex_u".to_owned(), "tex_v".to_owned()],
             },
         )?;
-        let tex_y = new_tex(w, h);
-        let tex_u = new_tex(w / 2, h / 2);
-        let tex_v = new_tex(w / 2, h / 2);
+        let tex_y = new_tex(w, h, 16);
+        let tex_u = new_tex(w / 2, h / 2, 128);
+        let tex_v = new_tex(w / 2, h / 2, 128);
         material.set_texture("tex_y", tex_y.clone());
         material.set_texture("tex_u", tex_u.clone());
         material.set_texture("tex_v", tex_v.clone());

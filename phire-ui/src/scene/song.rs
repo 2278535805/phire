@@ -343,6 +343,7 @@ impl SongScene {
         } else {
             chart.illu
         };
+        illu.notify();
         let record = get_data()
             .charts
             .iter()
@@ -852,7 +853,7 @@ impl SongScene {
         #[cfg(feature = "closed")]
         let rated = {
             let config = &get_data().config;
-            !config.offline_mode && chart_guid.is_some() && !mods.contains(Mods::AUTOPLAY) && mode != GameMode::TweakOffset && (config.speed - 1.0).abs() <= 1e-3
+            !config.offline_mode && chart_guid.is_some() && !mods.contains(Mods::AUTOPLAY) && !mods.contains(Mods::FULL_SCREEN_JUDGE) && mode != GameMode::TweakOffset && (config.speed - 1.0).abs() <= 1e-3
         };
         #[cfg(not(feature = "closed"))]
         let rated = false;

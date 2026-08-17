@@ -68,6 +68,8 @@ impl AVCodecContext {
         unsafe {
             let mut ptr = OwnedPtr::new(ffi::avcodec_alloc_context3(codec.0)).ok_or(Error::AllocationFailed)?;
             handle(ffi::avcodec_parameters_to_context(ptr.0, par.0))?;
+            ptr.as_mut().thread_count = 0;
+            ptr.as_mut().thread_type = ffi::FF_THREAD_FRAME | ffi::FF_THREAD_SLICE;
             let _guard = expected.map(|pix_fmt| {
                 let guard = EXPECTED_PIX_FMT_EDIT.lock().unwrap();
                 EXPECTED_PIX_FMT.store(pix_fmt.0, Ordering::SeqCst);

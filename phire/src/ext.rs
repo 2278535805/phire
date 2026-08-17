@@ -11,7 +11,7 @@ use lyon::{
     path::{builder::BorderRadii, Path, Winding},
 };
 use macroquad::prelude::*;
-use macroquad::miniquad::{gl::GLenum, BlendFactor, BlendState, BlendValue, CompareFunc, Equation, PrimitiveType, StencilFaceState, StencilOp, StencilState};
+use macroquad::miniquad::{BlendFactor, BlendState, BlendValue, CompareFunc, Equation, PrimitiveType, StencilFaceState, StencilOp, StencilState};
 use once_cell::sync::Lazy;
 use ordered_float::{Float, NotNan};
 use regex::Regex;
@@ -92,24 +92,15 @@ impl SafeTexture {
     }
 
     pub fn with_mipmap(self) -> Self {
-        let macroquad::miniquad::RawId::OpenGl(id) = unsafe { get_internal_gl().quad_context.texture_raw_id(self.0 .0.raw_miniquad_id()) };
-        unsafe {
-            use macroquad::miniquad::gl::*;
-            glBindTexture(GL_TEXTURE_2D, id);
-            glGenerateMipmap(GL_TEXTURE_2D);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR as _);
-        }
+        let ctx = unsafe { get_internal_gl() }.quad_context;
+        ctx.texture_generate_mipmaps(self.0 .0.raw_miniquad_id());
+        ctx.texture_set_filter(self.0 .0.raw_miniquad_id(), FilterMode::Linear, miniquad::MipmapFilterMode::Linear);
         self
     }
 
-    pub fn with_filter(self, filter: GLenum) -> Self{
-        let macroquad::miniquad::RawId::OpenGl(id) = unsafe { get_internal_gl().quad_context.texture_raw_id(self.0 .0.raw_miniquad_id()) };
-        unsafe {
-            use macroquad::miniquad::gl::*;
-            glBindTexture(GL_TEXTURE_2D, id);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filter as _);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filter as _);
-        }
+    pub fn with_filter(self, filter: FilterMode) -> Self{
+        let ctx = unsafe { get_internal_gl() }.quad_context;
+        ctx.texture_set_filter(self.0 .0.raw_miniquad_id(), filter, miniquad::MipmapFilterMode::None);
         self
     }
 

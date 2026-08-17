@@ -138,6 +138,8 @@ pub struct AVCodec {
 }
 pub const AV_ERROR_MAX_STRING_SIZE: u32 = 64;
 pub const SWS_BICUBIC: u32 = 4;
+pub const FF_THREAD_FRAME: i32 = 1;
+pub const FF_THREAD_SLICE: i32 = 2;
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]

@@ -33,6 +33,8 @@ use phire::{
     Main,
 };
 use scene::MainScene;
+#[cfg(not(feature = "play"))]
+use std::collections::VecDeque;
 use std::sync::{mpsc, Mutex};
 use tracing::{error, info};
 
