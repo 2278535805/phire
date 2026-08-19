@@ -16,6 +16,11 @@ use phire::{
 use std::borrow::Cow;
 
 const ITEM_HEIGHT: f32 = 0.15;
+const BAD_JUDGMENT_RATIO: f64 = 1.125;
+
+fn bad_judgment(good_judgment: f64) -> f64 {
+    good_judgment * BAD_JUDGMENT_RATIO
+}
 
 fn calculate_rks_factor(perfect_ms: f64, good_ms: f64) -> f64 {
     let x = 0.8 * perfect_ms + 0.225 * good_ms;
@@ -36,7 +41,6 @@ pub struct PlayConfigurationPage {
     title_btn: RectButton,
     perfect_slider: Slider,
     good_slider: Slider,
-    bad_slider: Slider,
     delete_btn: DRectButton,
     reset_btn: DRectButton,
     save_btn: DRectButton,
@@ -53,7 +57,6 @@ impl PlayConfigurationPage {
             title_btn: RectButton::new(),
             perfect_slider: Slider::new(0.005..0.150, 0.001),
             good_slider: Slider::new(0.010..0.300, 0.001),
-            bad_slider: Slider::new(0.020..0.600, 0.001),
             delete_btn: DRectButton::new(),
             reset_btn: DRectButton::new(),
             save_btn: DRectButton::new(),
@@ -142,28 +145,19 @@ impl Page for PlayConfigurationPage {
             if config.good_judgment <= config.perfect_judgment {
                 config.good_judgment = config.perfect_judgment + 0.001;
             }
-            if config.bad_judgment <= config.good_judgment {
-                config.bad_judgment = config.good_judgment + 0.001;
-            }
+            config.bad_judgment = bad_judgment(config.good_judgment);
             return Ok(true);
         }
         let mut good = config.good_judgment as f32;
         if self.good_slider.touch(touch, t, &mut good).is_some() {
             config.good_judgment = good.max(config.perfect_judgment as f32 + 0.001) as f64;
-            if config.bad_judgment <= config.good_judgment {
-                config.bad_judgment = config.good_judgment + 0.001;
-            }
-            return Ok(true);
-        }
-        let mut bad = config.bad_judgment as f32;
-        if self.bad_slider.touch(touch, t, &mut bad).is_some() {
-            config.bad_judgment = bad.max(config.good_judgment as f32 + 0.001) as f64;
+            config.bad_judgment = bad_judgment(config.good_judgment);
             return Ok(true);
         }
         if self.reset_btn.touch(touch, t) {
             config.perfect_judgment = 0.08;
             config.good_judgment = 0.16;
-            config.bad_judgment = 0.22;
+            config.bad_judgment = bad_judgment(config.good_judgment);
             return Ok(true);
         }
         Ok(false)
@@ -171,6 +165,9 @@ impl Page for PlayConfigurationPage {
 
     fn update(&mut self, s: &mut SharedState) -> Result<()> {
         self.scroll.update(s.t);
+        if let Some(config) = get_data_mut().active_play_config_mut() {
+            config.bad_judgment = bad_judgment(config.good_judgment);
+        }
         if let Some((id, text)) = take_input() {
             if id == "play-config-rename" {
                 let data = get_data_mut();
@@ -268,8 +265,14 @@ impl Page for PlayConfigurationPage {
                     }
                     item! {
                         render_title(ui, c, cx, tl!("bad"), None);
-                        self.bad_slider
-                            .render(ui, rr, t, c, config.bad_judgment as f32, format!("{:.0}ms", config.bad_judgment * 1000.));
+                        let bad_judgment = bad_judgment(config.good_judgment);
+                        ui.text(format!("{:.0}ms", bad_judgment * 1000.))
+                            .pos(cx + cw - 0.04, ITEM_HEIGHT / 2.)
+                            .anchor(1., 0.5)
+                            .no_baseline()
+                            .color(c)
+                            .size(0.6)
+                            .draw();
                     }
                     item! {
                         render_title(ui, c, cx, tl!("rks-factor"), Some(tl!("rks-factor-sub")));
