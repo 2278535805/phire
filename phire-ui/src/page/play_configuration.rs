@@ -143,14 +143,14 @@ impl Page for PlayConfigurationPage {
         if self.perfect_slider.touch(touch, t, &mut perfect).is_some() {
             config.perfect_judgment = perfect.max(0.001) as f64;
             if config.good_judgment <= config.perfect_judgment {
-                config.good_judgment = config.perfect_judgment + 0.001;
+                config.good_judgment = config.perfect_judgment + 0.005;
             }
             config.bad_judgment = bad_judgment(config.good_judgment);
             return Ok(true);
         }
         let mut good = config.good_judgment as f32;
         if self.good_slider.touch(touch, t, &mut good).is_some() {
-            config.good_judgment = good.max(config.perfect_judgment as f32 + 0.001) as f64;
+            config.good_judgment = good.max(config.perfect_judgment as f32 + 0.005) as f64;
             config.bad_judgment = bad_judgment(config.good_judgment);
             return Ok(true);
         }
