@@ -36,6 +36,8 @@ item-opt = 激進優化
 item-opt-sub = 採用激進的優化策略，提升性能但可能導致部分譜面顯示出錯
 item-speed = 音符流速
 item-note-size = 音符大小
+item-play-config = 判定設定
+item-play-config-sub = 自訂 Perfect / Good / Bad 判定視窗
 
 item-chart-debug = 譜面調試
 item-chart-debug-sub = 顯示判定線編號和朝向

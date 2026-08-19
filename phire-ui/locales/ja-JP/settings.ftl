@@ -23,5 +23,7 @@ item-dhint-sub = 多点タップサポートがオンになります
 item-opt = 積極的な最適化
 item-opt-sub = パフォーマンスが向上しますが、不正な動作を引き起こす可能性があります
 item-note-size = Note size
+item-play-config = 判定設定
+item-play-config-sub = Perfect / Good / Bad の判定窓をカスタマイズ
 
 load-cali-failed = オーディオの読み込みに失敗しました

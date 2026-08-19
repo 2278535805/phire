@@ -8,16 +8,18 @@ use phire::{
 };
 
 pub struct Rate {
-    pub score: i16,
+    pub score: f32,
+    pub max: f32,
 
     touch_x: Option<f32>,
     touch_rect: Rect,
 }
 
 impl Rate {
-    pub fn new() -> Self {
+    pub fn new(max: f32) -> Self {
         Self {
-            score: 0,
+            score: 0.,
+            max,
 
             touch_x: None,
             touch_rect: Rect::default(),
@@ -44,29 +46,18 @@ impl Rate {
             let tw = s * 2.5 + pad * 2.;
             self.touch_rect = ui.rect_to_global(Rect::new(-tw, s / 2., tw * 2., s));
             if let Some(x) = self.touch_x {
-                let rw = (x - self.touch_rect.x) / self.touch_rect.w * tw * 2. + pad;
-                let index = (rw / (pad + s)) as i16;
-                let rem = rw - index as f32 * (pad + s);
-                self.score = index * 2;
-                if rem > pad / 2. {
-                    self.score += 1;
-                    if rem > pad + s / 2. {
-                        self.score += 1;
-                    }
-                }
-                self.score = self.score.clamp(0, 10);
+                let pct = ((x - self.touch_rect.x) / self.touch_rect.w).clamp(0., 1.);
+                self.score = pct * self.max;
             }
+            let star_val = self.max / 5.;
             for i in 0..5 {
                 let pos = (i as f32 - 2.) * (pad + s);
                 let r = Rect::new(pos, s / 2., 0., 0.).feather(s / 2.);
-                if self.score >= (i + 1) * 2 {
-                    ui.fill_rect(r, (Texture2D::clone(icon_star), r, ScaleType::Fit, c));
-                } else {
-                    ui.fill_rect(r, (Texture2D::clone(icon_star), r, ScaleType::Fit, cc));
-                    if self.score == i * 2 + 1 {
-                        let hr = Rect { w: r.w / 2., ..r };
-                        ui.fill_rect(hr, (Texture2D::clone(icon_star), r, ScaleType::Fit, c));
-                    }
+                let filled = (self.score / star_val - i as f32).clamp(0., 1.);
+                ui.fill_rect(r, (Texture2D::clone(icon_star), r, ScaleType::Fit, cc));
+                if filled > 0. {
+                    let fr = Rect { w: r.w * filled, ..r };
+                    ui.fill_rect(fr, (Texture2D::clone(icon_star), r, ScaleType::Fit, c));
                 }
             }
         });
@@ -104,8 +95,8 @@ impl RateDialog {
             confirmed: None,
             show_tags: false,
 
-            rate: Rate::new(),
-            rate_upper: if range { Some(Rate::new()) } else { None },
+            rate: Rate::new(5.),
+            rate_upper: if range { Some(Rate::new(5.)) } else { None },
         }
     }
 
@@ -141,7 +132,7 @@ impl RateDialog {
                 return true;
             }
             if self.btn_confirm.touch(touch, t) {
-                if self.rate.score != 0 {
+                if self.rate.score > 0. {
                     self.confirmed = Some(true);
                 }
                 return true;

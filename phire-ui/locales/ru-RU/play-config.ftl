@@ -1,0 +1,20 @@
+label = Настройка судейства
+
+perfect = Perfect судейство
+perfect-sub = Окно времени для Perfect
+good = Good судейство
+good-sub = Окно времени для Good
+bad = Bad судейство
+bad-sub = Окно времени для Bad
+rks-factor = RKS коэффициент
+rks-factor-sub = Чем шире судейство, тем ниже RKS коэффициент
+reset = Сбросить
+save = Сохранить
+delete = Удалить
+delete-failed = Не удалось удалить конфигурацию
+rename = Переименовать
+add-config = Новый
+new-config = Конфиг
+cloud-tag = Облако
+local-tag = Локально
+sync-failed = Не удалось синхронизировать конфигурацию
