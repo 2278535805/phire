@@ -4,7 +4,7 @@ use std::{
     time::Duration,
 };
 
-const BASE_URL: &str = "https://github.com/TeamFlos/prpr-avc-ffmpeg/releases/download";
+const BASE_URL: &str = "https://github.com/2278535805/prpr-avc-ffmpeg/releases/download";
 const EXPECTED_LIBS: &[&str] = &["libavcodec.a", "libavformat.a", "libavutil.a", "libswresample.a", "libswscale.a"];
 
 fn main() {
