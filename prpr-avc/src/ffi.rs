@@ -12,6 +12,11 @@ pub const AV_CHANNEL_LAYOUT_STEREO: AVChannelLayout = AVChannelLayout {
 };
 
 pub const AV_SAMPLE_FMT_FLT: AVSampleFormat = 3;
+pub const AV_SAMPLE_FMT_FLTP: AVSampleFormat = 8;
+pub const AV_CODEC_ID_H264: AVCodecID = 27;
+pub const AV_CODEC_ID_AAC: AVCodecID = 86018;
+pub const AV_CODEC_FLAG_GLOBAL_HEADER: i32 = 1 << 22;
+pub const AVIO_FLAG_WRITE: i32 = 2;
 
 pub const AV_ROUND_UP: AVRounding = 0;
 
@@ -28,6 +33,18 @@ extern "C" {
         options: *mut *mut c_void,
     ) -> ::std::os::raw::c_int;
     pub fn avformat_find_stream_info(ic: *mut AVFormatContext, options: *mut *mut c_void) -> ::std::os::raw::c_int;
+    pub fn avformat_alloc_output_context2(
+        ctx: *mut *mut AVFormatContext,
+        oformat: *const c_void,
+        format_name: *const ::std::os::raw::c_char,
+        filename: *const ::std::os::raw::c_char,
+    ) -> ::std::os::raw::c_int;
+    pub fn avformat_new_stream(s: *mut AVFormatContext, c: *const AVCodec) -> *mut AVStream;
+    pub fn avformat_write_header(s: *mut AVFormatContext, options: *mut *mut c_void) -> ::std::os::raw::c_int;
+    pub fn av_interleaved_write_frame(s: *mut AVFormatContext, pkt: *mut AVPacket) -> ::std::os::raw::c_int;
+    pub fn av_write_trailer(s: *mut AVFormatContext) -> ::std::os::raw::c_int;
+    pub fn avio_open(s: *mut *mut AVIOContext, url: *const ::std::os::raw::c_char, flags: ::std::os::raw::c_int) -> ::std::os::raw::c_int;
+    pub fn avio_closep(s: *mut *mut AVIOContext) -> ::std::os::raw::c_int;
     pub fn av_read_frame(s: *mut AVFormatContext, pkt: *mut AVPacket) -> ::std::os::raw::c_int;
     pub fn av_seek_frame(
         s: *mut AVFormatContext,
@@ -44,13 +61,22 @@ extern "C" {
     pub fn av_frame_free(frame: *mut *mut AVFrame);
     pub fn av_frame_unref(frame: *mut AVFrame);
     pub fn av_frame_get_buffer(frame: *mut AVFrame, align: ::std::os::raw::c_int) -> ::std::os::raw::c_int;
+    pub fn av_frame_make_writable(frame: *mut AVFrame) -> ::std::os::raw::c_int;
     pub fn av_rescale_rnd(a: i64, b: i64, c: i64, r: AVRounding) -> i64;
-    pub fn av_opt_set_int(obj: *mut c_void, name: *const ::std::os::raw::c_char, val: i64, search_flags: ::std::os::raw::c_int) -> ::std::os::raw::c_int;
+    pub fn av_opt_set_int(
+        obj: *mut c_void,
+        name: *const ::std::os::raw::c_char,
+        val: i64,
+        search_flags: ::std::os::raw::c_int,
+    ) -> ::std::os::raw::c_int;
+    pub fn av_packet_rescale_ts(pkt: *mut AVPacket, tb_src: AVRational, tb_dst: AVRational);
 }
 
 #[link(name = "avcodec", kind = "static")]
 extern "C" {
     pub fn avcodec_find_decoder(id: AVCodecID) -> *mut AVCodec;
+    pub fn avcodec_find_encoder(id: AVCodecID) -> *mut AVCodec;
+    pub fn avcodec_find_encoder_by_name(name: *const ::std::os::raw::c_char) -> *mut AVCodec;
     pub fn avcodec_alloc_context3(codec: *const AVCodec) -> *mut AVCodecContext;
     pub fn avcodec_free_context(avctx: *mut *mut AVCodecContext);
     pub fn avcodec_parameters_to_context(codec: *mut AVCodecContext, par: *const AVCodecParameters) -> ::std::os::raw::c_int;
@@ -60,6 +86,9 @@ extern "C" {
     pub fn av_packet_unref(pkt: *mut AVPacket);
     pub fn avcodec_send_packet(avctx: *mut AVCodecContext, avpkt: *const AVPacket) -> ::std::os::raw::c_int;
     pub fn avcodec_receive_frame(avctx: *mut AVCodecContext, frame: *mut AVFrame) -> ::std::os::raw::c_int;
+    pub fn avcodec_send_frame(avctx: *mut AVCodecContext, frame: *const AVFrame) -> ::std::os::raw::c_int;
+    pub fn avcodec_receive_packet(avctx: *mut AVCodecContext, avpkt: *mut AVPacket) -> ::std::os::raw::c_int;
+    pub fn avcodec_parameters_from_context(par: *mut AVCodecParameters, codec: *const AVCodecContext) -> ::std::os::raw::c_int;
     pub fn avcodec_default_get_format(s: *mut AVCodecContext, fmt: *const AVPixelFormat) -> AVPixelFormat;
     pub fn avcodec_flush_buffers(avctx: *mut AVCodecContext);
 }

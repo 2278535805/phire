@@ -1,6 +1,6 @@
 phire::tl_file!("song");
 
-use super::{confirm_delete, confirm_dialog, fs_from_path, render_ldb, LdbDisplayItem, ProfileScene};
+use super::{confirm_delete, confirm_dialog, fs_from_path, render_ldb, LdbDisplayItem, ProfileScene, RenderScene};
 use crate::{
     charts_view::NEED_UPDATE,
     client::{basic_client_builder, recv_raw, Chart, Client, Permission, Ptr, Record, ResponseDto, UserManager, CLIENT_TOKEN},
@@ -28,7 +28,7 @@ use phire::{
     info::{ChartFormat, ChartInfo},
     judge::{icon_index, Judge},
     scene::{
-        request_input, return_input, show_error, show_message, take_input, BasicPlayer, GameMode, LoadingScene, LocalSceneTask,
+        request_input, request_save_file, return_input, show_error, show_message, take_file, take_input, BasicPlayer, GameMode, LoadingScene, LocalSceneTask,
         NextScene, Scene, SimpleRecord, UpdateFn, UploadFn,
     },
     task::Task,
@@ -240,6 +240,7 @@ pub struct SongScene {
     need_show_menu: bool,
     should_delete: Arc<AtomicBool>,
     menu_options: Vec<&'static str>,
+    render_path: Option<String>,
 
     info_edit: Option<ChartInfoEdit>,
     edit_btn: RectButton,
@@ -424,6 +425,7 @@ impl SongScene {
             need_show_menu: false,
             should_delete: Arc::new(AtomicBool::default()),
             menu_options: Vec::new(),
+            render_path: None,
 
             info_edit: None,
             edit_btn: RectButton::new(),
@@ -775,6 +777,9 @@ impl SongScene {
         }
         if self.info.id.is_some() {
             self.menu_options.push("rate");
+        }
+        if self.local_path.is_some() {
+            self.menu_options.push("render");
         }
         if let Some(local_path) = &self.local_path {
             self.menu_options.push("exercise");
@@ -1608,6 +1613,20 @@ impl Scene for SongScene {
     }
 
     fn update(&mut self, tm: &mut TimeManager) -> Result<()> {
+        #[cfg(not(target_arch = "wasm32"))]
+        if let Some((id, file)) = take_file() {
+            if id == "render" {
+                if let Some(path) = self.local_path.clone() {
+                    self.render_path = Some(file);
+                    let _ = path;
+                }
+            } else {
+                phire::scene::return_file(id, file);
+            }
+        }
+        if let (Some(path), Some(local_path)) = (self.render_path.take(), self.local_path.clone()) {
+            self.next_scene = Some(NextScene::Overlay(Box::new(RenderScene::new(local_path, path))));
+        }
         UI_AUDIO.with(|it| it.borrow_mut().recover_if_needed())?;
         let t = tm.now() as f32;
         self.menu.update(t);
@@ -1766,6 +1785,9 @@ impl Scene for SongScene {
                 }
                 "unlock" => {
                     self.launch(GameMode::Normal, true)?;
+                }
+                "render" => {
+                    request_save_file("render", "phire-render.mp4");
                 }
                 "review-approve" => {
                     let id = self.info.id.unwrap();

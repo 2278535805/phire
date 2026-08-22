@@ -115,7 +115,7 @@ impl Video {
 
                             if !sent && current_ts >= ts {
                                 if !direct_format {
-                                    sws.scale(&in_frame, &mut out_frame);
+                                    sws.scale(&in_frame, &mut out_frame)?;
                                 }
                                 let mut guard = frame.0.lock().unwrap();
                                 if direct_format {

@@ -42,6 +42,33 @@ impl AVCodecRef {
             }
         }
     }
+
+    pub fn find_encoder(id: ffi::AVCodecID) -> Result<Self> {
+        unsafe {
+            let ptr = ffi::avcodec_find_encoder(id);
+            if ptr.is_null() {
+                Err(Error::EncoderNotFound(id))
+            } else {
+                Ok(Self(ptr))
+            }
+        }
+    }
+
+    pub fn find_encoder_by_name(name: &str) -> Result<Self> {
+        let name = std::ffi::CString::new(name).map_err(|_| Error::InvalidPath)?;
+        unsafe {
+            let ptr = ffi::avcodec_find_encoder_by_name(name.as_ptr());
+            if ptr.is_null() {
+                Err(Error::EncoderNotFound(ffi::AV_CODEC_ID_H264))
+            } else {
+                Ok(Self(ptr))
+            }
+        }
+    }
+
+    pub(crate) fn raw(&self) -> *const ffi::AVCodec {
+        self.0
+    }
 }
 
 static EXPECTED_PIX_FMT_EDIT: Mutex<()> = Mutex::new(());
@@ -64,6 +91,13 @@ unsafe extern "C" fn get_format(s: *mut ffi::AVCodecContext, fmt: *const ffi::AV
 #[repr(transparent)]
 pub struct AVCodecContext(OwnedPtr<ffi::AVCodecContext>);
 impl AVCodecContext {
+    pub(crate) fn new_unconfigured(codec: AVCodecRef) -> Result<Self> {
+        unsafe {
+            let ptr = OwnedPtr::new(ffi::avcodec_alloc_context3(codec.0)).ok_or(Error::AllocationFailed)?;
+            Ok(Self(ptr))
+        }
+    }
+
     pub fn new(codec: AVCodecRef, par: AVCodecParamsRef, expected: Option<AVPixelFormat>) -> Result<Self> {
         unsafe {
             let mut ptr = OwnedPtr::new(ffi::avcodec_alloc_context3(codec.0)).ok_or(Error::AllocationFailed)?;
@@ -115,6 +149,30 @@ impl AVCodecContext {
     pub fn flush_buffers(&mut self) {
         unsafe {
             ffi::avcodec_flush_buffers(self.0 .0);
+        }
+    }
+
+    pub(crate) fn raw_mut(&mut self) -> *mut ffi::AVCodecContext {
+        self.0 .0
+    }
+
+    pub(crate) fn raw(&self) -> *const ffi::AVCodecContext {
+        self.0 .0
+    }
+
+    pub fn send_frame(&mut self, frame: Option<&AVFrame>) -> Result<()> {
+        unsafe { handle(ffi::avcodec_send_frame(self.0 .0, frame.map_or(std::ptr::null(), |it| it.0 .0))) }
+    }
+
+    pub fn receive_packet(&mut self, packet: &mut AVPacket) -> Result<bool> {
+        unsafe {
+            match handle(ffi::avcodec_receive_packet(self.0 .0, packet.0 .0)) {
+                Err(Error::TryAgain) | Err(Error::EndOfFile) => Ok(false),
+                x => {
+                    x?;
+                    Ok(true)
+                }
+            }
         }
     }
 }

@@ -18,6 +18,9 @@ pub use profile::ProfileScene;
 mod unlock;
 pub use unlock::UnlockScene;
 
+mod render;
+pub use render::{RenderScene};
+
 use crate::{client::UserManager, data::LocalChart, dir, get_data, page::Fader};
 use anyhow::{bail, Context, Result};
 use phire::{

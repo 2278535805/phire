@@ -13,6 +13,15 @@ pub enum Error {
     #[error("failed to allocate")]
     AllocationFailed,
 
+    #[error("invalid output path")]
+    InvalidPath,
+
+    #[error("invalid video format")]
+    InvalidVideoFormat,
+
+    #[error("invalid video frame")]
+    InvalidVideoFrame,
+
     #[error("no video stream found")]
     NoVideoStream,
 
@@ -21,6 +30,9 @@ pub enum Error {
 
     #[error("decoder not found for codec id {0}")]
     DecoderNotFound(ffi::AVCodecID),
+
+    #[error("encoder not found for codec id {0}")]
+    EncoderNotFound(ffi::AVCodecID),
 
     #[error("end of file")]
     EndOfFile,

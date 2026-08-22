@@ -129,7 +129,13 @@ pub fn request_password(id: impl Into<String>, text: &str, title: impl Into<Stri
     let title = title.into();
     request_input_full(id, text, true, title.as_str(), "");
 }
-pub fn request_input_full(id: impl Into<String>, #[allow(unused_variables)] text: &str, #[allow(unused_variables)] is_password: bool, #[allow(unused_variables)] title: &str, #[allow(unused_variables)] hint: &str) {
+pub fn request_input_full(
+    id: impl Into<String>,
+    #[allow(unused_variables)] text: &str,
+    #[allow(unused_variables)] is_password: bool,
+    #[allow(unused_variables)] title: &str,
+    #[allow(unused_variables)] hint: &str,
+) {
     *INPUT_TEXT.lock().unwrap() = (Some(id.into()), None);
     cfg_if! {
         if #[cfg(target_os = "android")] {
@@ -294,6 +300,42 @@ pub fn request_file(id: impl Into<String>) {
             CHOSEN_FILE.lock().unwrap().1 = rfd::FileDialog::new().pick_file().map(|it| it.display().to_string());
         }
     }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub fn request_save_file(id: impl Into<String>, name: &str) {
+    *CHOSEN_FILE.lock().unwrap() = (Some(id.into()), None);
+    cfg_if! {
+        if #[cfg(target_os = "android")] {
+            unsafe {
+                let env = miniquad::native::attach_jni_env();
+                let ctx = ndk_context::android_context().context();
+                let class = (**env).GetObjectClass.unwrap()(env, ctx);
+                let method = (**env).GetMethodID.unwrap()(env, class, b"saveFile\0".as_ptr() as _, b"(Ljava/lang/String;)V\0".as_ptr() as _);
+                let name = std::ffi::CString::new(name).unwrap();
+                let jname = (**env).NewStringUTF.unwrap()(env, name.as_ptr());
+                (**env).CallVoidMethod.unwrap()(env, ctx, method, jname);
+            }
+        } else {
+            CHOSEN_FILE.lock().unwrap().1 = rfd::FileDialog::new().set_file_name(name).save_file().map(|it| it.display().to_string());
+        }
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub fn finish_save_file(path: &str) {
+    #[cfg(target_os = "android")]
+    unsafe {
+        let env = miniquad::native::attach_jni_env();
+        let ctx = ndk_context::android_context().context();
+        let class = (**env).GetObjectClass.unwrap()(env, ctx);
+        let method = (**env).GetMethodID.unwrap()(env, class, b"finishRenderedFile\0".as_ptr() as _, b"(Ljava/lang/String;)V\0".as_ptr() as _);
+        let path = std::ffi::CString::new(path).unwrap();
+        let jpath = (**env).NewStringUTF.unwrap()(env, path.as_ptr());
+        (**env).CallVoidMethod.unwrap()(env, ctx, method, jpath);
+    }
+    #[cfg(not(target_os = "android"))]
+    let _ = path;
 }
 
 #[cfg(not(target_arch = "wasm32"))]

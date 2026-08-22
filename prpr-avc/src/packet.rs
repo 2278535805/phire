@@ -23,6 +23,18 @@ impl AVPacket {
         unsafe { self.0.as_ref().duration }
     }
 
+    pub(crate) fn raw_mut(&mut self) -> *mut crate::ffi::AVPacket {
+        self.0 .0
+    }
+
+    pub fn set_stream_index(&mut self, index: i32) {
+        unsafe { self.0.as_mut().stream_index = index }
+    }
+
+    pub fn rescale_ts(&mut self, src: crate::ffi::AVRational, dst: crate::ffi::AVRational) {
+        unsafe { crate::ffi::av_packet_rescale_ts(self.0 .0, src, dst) }
+    }
+
     pub fn unref(&mut self) {
         unsafe { ffi::av_packet_unref(self.0.as_mut()) }
     }

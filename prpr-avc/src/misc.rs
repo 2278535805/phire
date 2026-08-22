@@ -39,6 +39,7 @@ pub struct AVPixelFormat(pub ffi::AVPixelFormat);
 impl AVPixelFormat {
     pub const YUV420P: AVPixelFormat = AVPixelFormat(0);
     pub const RGB24: AVPixelFormat = AVPixelFormat(2);
+    pub const RGBA: AVPixelFormat = AVPixelFormat(26);
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

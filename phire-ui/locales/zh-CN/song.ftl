@@ -29,6 +29,13 @@ rate = 评分
 exercise = 练习
 offset = 调整延迟
 unlock = 播放解锁动画
+render = 渲染视频
+render-resolution = 选择分辨率
+render-resolution-msg = 请选择导出视频的分辨率
+render-fps = 选择帧率
+render-fps-msg = 请选择导出视频的帧率
+render-bitrate = 选择比特率
+render-bitrate-msg = 请选择导出视频的比特率
 
 edit-cancel = 取消
 edit-save = 保存

@@ -29,6 +29,13 @@ rate = Rate
 exercise = Exercise
 offset = Adjust offset
 unlock = View Unlock Video
+render = Render video
+render-resolution = Select resolution
+render-resolution-msg = Select the output video resolution
+render-fps = Select frame rate
+render-fps-msg = Select the output video frame rate
+render-bitrate = Select bitrate
+render-bitrate-msg = Select the output video bitrate
 
 edit-cancel = Cancel
 edit-save = Save
