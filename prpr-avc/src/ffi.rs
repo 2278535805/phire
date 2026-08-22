@@ -69,6 +69,19 @@ extern "C" {
         val: i64,
         search_flags: ::std::os::raw::c_int,
     ) -> ::std::os::raw::c_int;
+    pub fn av_opt_set(
+        obj: *mut c_void,
+        name: *const ::std::os::raw::c_char,
+        val: *const ::std::os::raw::c_char,
+        search_flags: ::std::os::raw::c_int,
+    ) -> ::std::os::raw::c_int;
+    pub fn av_dict_set(
+        pm: *mut *mut c_void,
+        key: *const ::std::os::raw::c_char,
+        value: *const ::std::os::raw::c_char,
+        flags: ::std::os::raw::c_int,
+    ) -> ::std::os::raw::c_int;
+    pub fn av_dict_free(pm: *mut *mut c_void);
     pub fn av_packet_rescale_ts(pkt: *mut AVPacket, tb_src: AVRational, tb_dst: AVRational);
 }
 

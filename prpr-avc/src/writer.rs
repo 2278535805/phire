@@ -27,7 +27,7 @@ pub struct VideoWriter {
 }
 
 impl VideoWriter {
-    pub fn new(path: impl AsRef<str>, width: i32, height: i32, fps: i32, bitrate: i64) -> Result<Self> {
+    pub fn new(path: impl AsRef<str>, width: i32, height: i32, fps: i32, crf: i32) -> Result<Self> {
         if width <= 0 || height <= 0 || fps <= 0 || width % 2 != 0 || height % 2 != 0 {
             return Err(Error::InvalidVideoFormat);
         }
@@ -55,11 +55,16 @@ impl VideoWriter {
             (*ctx).pix_fmt = AVPixelFormat::YUV420P.0;
             (*ctx).time_base = time_base;
             (*ctx).framerate = ffi::AVRational { num: fps, den: 1 };
-            (*ctx).bit_rate = bitrate.max(1);
+            (*ctx).bit_rate = 0;
             (*ctx).gop_size = fps.saturating_mul(2);
             (*ctx).max_b_frames = 0;
             (*ctx).flags |= ffi::AV_CODEC_FLAG_GLOBAL_HEADER;
-            handle(ffi::avcodec_open2(ctx, encoder.raw(), null_mut()))?;
+            let crf = CString::new(crf.to_string()).map_err(|_| Error::InvalidPath)?;
+            let mut options = null_mut();
+            handle(ffi::av_dict_set(&mut options, c"crf".as_ptr(), crf.as_ptr(), 0))?;
+            let result = handle(ffi::avcodec_open2(ctx, encoder.raw(), &mut options));
+            ffi::av_dict_free(&mut options);
+            result?;
 
             let ctx = audio_codec.raw_mut();
             (*ctx).codec_type = 1;

@@ -18,6 +18,7 @@ use sasa::{AudioClip, Frame};
 const WIDTH: u32 = 1280;
 const HEIGHT: u32 = 720;
 const FPS: u32 = 60;
+const VIDEO_CRF: i32 = 28;
 
 pub struct RenderScene {
     output: PathBuf,
@@ -229,7 +230,7 @@ impl Scene for RenderScene {
                         self.started_at = Some(Instant::now());
                         self.last_progress_at = self.started_at;
                         self.audio = music;
-                        let writer = VideoWriter::new(self.output.to_string_lossy(), WIDTH as _, HEIGHT as _, FPS as _, 8_000_000)?;
+                        let writer = VideoWriter::new(self.output.to_string_lossy(), WIDTH as _, HEIGHT as _, FPS as _, VIDEO_CRF)?;
                         self.writer = Some(writer);
                         let mut scene: Box<dyn Scene> = Box::new(scene);
                         scene.enter(&mut self.render_tm, self.target.clone())?;
