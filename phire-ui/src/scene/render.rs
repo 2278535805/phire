@@ -4,7 +4,7 @@ use anyhow::Result;
 use macroquad::prelude::*;
 use phire::{
     config::Mods,
-    core::{create_render_target_rgba8, AsyncYuvReadback, Chart, HitSound, MSRenderTarget, ResourcePack, VideoWriter},
+    core::{AsyncRgbaReadback, Chart, HitSound, MSRenderTarget, ResourcePack, VideoWriter},
     ext::{poll_future, LocalTask},
     fs,
     scene::{BasicPlayer, GameMode, LoadingScene, NextScene, Scene},
@@ -20,108 +20,10 @@ const HEIGHT: u32 = 720;
 const FPS: u32 = 60;
 const VIDEO_CRF: i32 = 28;
 
-const YUV_VERTEX_SHADER: &str = r#"#version 130
-in vec3 position;
-in vec2 texcoord;
-out vec2 fragTexCoord;
-void main() {
-    gl_Position = vec4(position, 1.0);
-    fragTexCoord = texcoord;
-}"#;
-
-const YUV_FRAGMENT_SHADER: &str = r#"#version 130
-in vec2 fragTexCoord;
-uniform sampler2D screenTexture;
-uniform ivec2 screenSize;
-uniform ivec2 targetSize;
-uniform bool uFlipY;
-out vec4 outColor;
-
-vec3 getPixel(int x, int y) {
-    return texelFetch(screenTexture, ivec2(x, y), 0).xyz;
-}
-
-float getY(int x, int y) {
-    return dot(getPixel(x, y), vec3(0.299, 0.587, 0.114));
-}
-
-float getU(int x, int y) {
-    vec3 pixel = (
-        getPixel(x, y)
-        + getPixel(x, y + 1)
-        + getPixel(x + 1, y)
-        + getPixel(x + 1, y + 1)
-    ) * 0.25;
-    return dot(pixel, vec3(-0.168736, -0.331264, 0.5)) + 0.5;
-}
-
-float getV(int x, int y) {
-    vec3 pixel = (
-        getPixel(x, y)
-        + getPixel(x, y + 1)
-        + getPixel(x + 1, y)
-        + getPixel(x + 1, y + 1)
-    ) * 0.25;
-    return dot(pixel, vec3(0.5, -0.418688, -0.081312)) + 0.5;
-}
-
-float getYI(int index) {
-    return getY(index % screenSize.x, index / screenSize.x);
-}
-
-float getUI(int index) {
-    return getU((index % (screenSize.x / 2)) * 2, index / (screenSize.x / 2) * 2);
-}
-
-float getVI(int index) {
-    return getV((index % (screenSize.x / 2)) * 2, index / (screenSize.x / 2) * 2);
-}
-
-void main() {
-    int w = screenSize.x;
-    int h = screenSize.y;
-    ivec2 curr_pos = ivec2(fragTexCoord * vec2(targetSize));
-    if (!uFlipY) curr_pos.y = h - curr_pos.y - 1;
-    int byte_index = (curr_pos.x + curr_pos.y * w) * 4;
-
-    int y_bytes = w * h;
-    int uv_bytes = y_bytes / 4;
-
-    if (byte_index < y_bytes) {
-        int pixel_index = byte_index;
-        outColor = vec4(
-            getYI(pixel_index),
-            getYI(pixel_index + 1),
-            getYI(pixel_index + 2),
-            getYI(pixel_index + 3)
-        );
-    } else if (byte_index < y_bytes + uv_bytes) {
-        int pixel_index = byte_index - y_bytes;
-        outColor = vec4(
-            getUI(pixel_index),
-            getUI(pixel_index + 1),
-            getUI(pixel_index + 2),
-            getUI(pixel_index + 3)
-        );
-    } else if (byte_index < y_bytes + uv_bytes * 2) {
-        int pixel_index = byte_index - y_bytes - uv_bytes;
-        outColor = vec4(
-            getVI(pixel_index),
-            getVI(pixel_index + 1),
-            getVI(pixel_index + 2),
-            getVI(pixel_index + 3)
-        );
-    } else {
-        outColor = vec4(0.0);
-    }
-}"#;
-
 pub struct RenderScene {
     output: PathBuf,
     target: Option<RenderTarget>,
     msaa: Option<MSRenderTarget>,
-    yuv_target: Option<RenderTarget>,
-    yuv_material: Option<Material>,
     load: LocalTask<Result<(LoadingScene, f64, Vec<Frame>)>>,
     scene: Option<Box<dyn Scene>>,
     writer: Option<VideoWriter>,
@@ -130,7 +32,7 @@ pub struct RenderScene {
     frame: u64,
     total_frames: u64,
     pixels: Vec<u8>,
-    readback: Option<AsyncYuvReadback>,
+    readback: Option<AsyncRgbaReadback>,
     readback_frames: VecDeque<u64>,
     next_scene: Option<NextScene>,
     render_time: Rc<RefCell<f64>>,
@@ -193,8 +95,6 @@ impl RenderScene {
             output: output.into(),
             target: None,
             msaa: None,
-            yuv_target: None,
-            yuv_material: None,
             load,
             scene: None,
             writer: None,
@@ -320,26 +220,7 @@ impl Scene for RenderScene {
     fn enter(&mut self, _tm: &mut TimeManager, _target: Option<RenderTarget>) -> Result<()> {
         let msaa = MSRenderTarget::new((WIDTH, HEIGHT), 1);
         self.target = Some(msaa.output());
-        let yuv_height = (HEIGHT * 3).div_ceil(8);
-        let yuv_target = create_render_target_rgba8(WIDTH, yuv_height);
-        let material = load_material(
-            ShaderSource::Glsl { vertex: YUV_VERTEX_SHADER, fragment: YUV_FRAGMENT_SHADER },
-            MaterialParams {
-                uniforms: vec![
-                    UniformDesc::new("screenSize", UniformType::Int2),
-                    UniformDesc::new("targetSize", UniformType::Int2),
-                    UniformDesc::new("uFlipY", UniformType::Int1),
-                ],
-                textures: vec!["screenTexture".to_owned()],
-                ..Default::default()
-            },
-        )?;
-        material.set_uniform("screenSize", [WIDTH as i32, HEIGHT as i32]);
-        material.set_uniform("targetSize", [WIDTH as i32, yuv_height as i32]);
-        material.set_uniform("uFlipY", 1i32);
-        self.yuv_target = Some(yuv_target);
-        self.yuv_material = Some(material);
-        self.readback = Some(AsyncYuvReadback::new_yuv(WIDTH, HEIGHT));
+        self.readback = Some(AsyncRgbaReadback::new(WIDTH, HEIGHT));
         self.msaa = Some(msaa);
         Ok(())
     }
@@ -390,19 +271,7 @@ impl Scene for RenderScene {
             unsafe {
                 get_internal_gl().flush();
             }
-            let yuv_target = self.yuv_target.as_ref().unwrap();
-            let material = self.yuv_material.as_ref().unwrap();
-            material.set_texture("screenTexture", target.texture.clone());
-            set_camera(&Camera2D {
-                zoom: vec2(1.0, 1.0),
-                render_target: Some(yuv_target.clone()),
-                ..Default::default()
-            });
-            gl_use_material(material);
-            draw_rectangle(-1.0, -1.0, 2.0, 2.0, WHITE);
-            gl_use_default_material();
-            unsafe { get_internal_gl().flush(); }
-            let pixels = self.readback.as_mut().and_then(|readback| readback.read(yuv_target.clone()));
+            let pixels = self.readback.as_mut().and_then(|readback| readback.read(target.clone()));
             self.readback_frames.push_back(self.frame);
             if let Some(writer) = self.writer.as_mut() {
                 if let Some(pixels) = pixels {
@@ -413,7 +282,7 @@ impl Scene for RenderScene {
                         writer.write_audio(&self.audio[self.audio_cursor..audio_end])?;
                         self.audio_cursor = audio_end;
                     }
-                    writer.write_yuv420p(&self.pixels, frame as i64)?;
+                    writer.write_rgba(&self.pixels, WIDTH as i32 * 4, frame as i64)?;
                 }
             }
         }
@@ -466,7 +335,7 @@ impl Scene for RenderScene {
                             }
                             self.audio_cursor = audio_end;
                         }
-                        if let Err(error) = writer.write_yuv420p(&self.pixels, frame as i64) {
+                        if let Err(error) = writer.write_rgba(&self.pixels, WIDTH as i32 * 4, frame as i64) {
                             return NextScene::PopWithResult(Box::new(anyhow::Error::from(error)));
                         }
                     }

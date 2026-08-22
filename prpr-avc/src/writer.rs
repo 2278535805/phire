@@ -207,45 +207,6 @@ impl VideoWriter {
         self.drain_packets()
     }
 
-    pub fn write_yuv420p(&mut self, data: &[u8], pts: i64) -> Result<()> {
-        let width = self.input_format.width as usize;
-        let height = self.input_format.height as usize;
-        let y_size = width * height;
-        let uv_size = y_size / 4;
-        if data.len() < y_size + uv_size * 2 {
-            return Err(Error::InvalidVideoFrame);
-        }
-        self.frame.make_writable()?;
-        self.frame.set_video_format(&VideoStreamFormat {
-            width: width as i32,
-            height: height as i32,
-            pix_fmt: AVPixelFormat::YUV420P,
-        });
-        unsafe {
-            let frame = self.frame.0.as_mut();
-            for (index, plane_size) in [y_size, uv_size, uv_size].into_iter().enumerate() {
-                let source_offset = match index {
-                    0 => 0,
-                    1 => y_size,
-                    _ => y_size + uv_size,
-                };
-                let row_width = if index == 0 { width } else { width / 2 };
-                let row_count = if index == 0 { height } else { height / 2 };
-                for row in 0..row_count {
-                    std::ptr::copy_nonoverlapping(
-                        data.as_ptr().add(source_offset + row * row_width),
-                        frame.data[index].add(row * frame.linesize[index] as usize),
-                        row_width,
-                    );
-                }
-                let _ = plane_size;
-            }
-        }
-        self.frame.set_pts(pts);
-        self.codec.send_frame(Some(&self.frame))?;
-        self.drain_packets()
-    }
-
     fn drain_packets(&mut self) -> Result<()> {
         while self.codec.receive_packet(&mut self.packet)? {
             unsafe {

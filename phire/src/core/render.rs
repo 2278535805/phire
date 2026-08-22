@@ -60,8 +60,6 @@ pub struct AsyncRgbaReadback {
     size: usize,
 }
 
-pub type AsyncYuvReadback = AsyncRgbaReadback;
-
 impl AsyncRgbaReadback {
     pub fn new(width: u32, height: u32) -> Self {
         let mut pbos = [0; 5];
@@ -76,10 +74,6 @@ impl AsyncRgbaReadback {
             glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
         }
         Self { pbos, next: 0, pending: 0, width: width as _, height: height as _, size }
-    }
-
-    pub fn new_yuv(width: u32, height: u32) -> Self {
-        Self::new(width, (height * 3).div_ceil(8))
     }
 
     pub fn read(&mut self, target: RenderTarget) -> Option<Vec<u8>> {
@@ -170,26 +164,6 @@ fn create_render_target_rgb8(width: u32, height: u32, sample_count: i32) -> Rend
             color_texture: Texture2D::from_miniquad_texture(result_texture_id),
             depth_texture: None,
             render_pass: std::sync::Arc::new(render_pass),
-        },
-    }
-}
-
-pub fn create_render_target_rgba8(width: u32, height: u32) -> RenderTarget {
-    let gl = unsafe { get_internal_gl() };
-    let texture = gl.quad_context.new_render_texture(miniquad::TextureParams {
-        width,
-        height,
-        format: miniquad::TextureFormat::RGBA8,
-        sample_count: 1,
-        ..Default::default()
-    });
-    let pass = gl.quad_context.new_render_pass(texture, None);
-    RenderTarget {
-        texture: Texture2D::from_miniquad_texture(texture),
-        render_pass: macroquad::texture::RenderPass {
-            color_texture: Texture2D::from_miniquad_texture(texture),
-            depth_texture: None,
-            render_pass: std::sync::Arc::new(pass),
         },
     }
 }
