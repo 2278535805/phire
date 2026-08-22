@@ -59,6 +59,8 @@ impl VideoWriter {
             (*ctx).gop_size = fps.saturating_mul(2);
             (*ctx).max_b_frames = 0;
             (*ctx).flags |= ffi::AV_CODEC_FLAG_GLOBAL_HEADER;
+            handle(ffi::av_opt_set_int(ctx.cast(), c"threads".as_ptr(), 0, 0))?;
+            handle(ffi::av_opt_set_int(ctx.cast(), c"thread_type".as_ptr(), (ffi::FF_THREAD_FRAME | ffi::FF_THREAD_SLICE) as i64, 0))?;
             let crf = CString::new(crf.to_string()).map_err(|_| Error::InvalidPath)?;
             let mut options = null_mut();
             handle(ffi::av_dict_set(&mut options, c"crf".as_ptr(), crf.as_ptr(), 0))?;
@@ -75,6 +77,8 @@ impl VideoWriter {
             (*ctx).time_base = audio_time_base;
             (*ctx).bit_rate = 320_000;
             (*ctx).flags |= ffi::AV_CODEC_FLAG_GLOBAL_HEADER;
+            handle(ffi::av_opt_set_int(ctx.cast(), c"threads".as_ptr(), 0, 0))?;
+            handle(ffi::av_opt_set_int(ctx.cast(), c"thread_type".as_ptr(), (ffi::FF_THREAD_FRAME | ffi::FF_THREAD_SLICE) as i64, 0))?;
             handle(ffi::avcodec_open2(ctx, audio_encoder.raw(), null_mut()))?;
         }
 
