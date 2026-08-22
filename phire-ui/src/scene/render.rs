@@ -67,7 +67,7 @@ impl RenderScene {
             let music_length = music.len() as f64 / 48_000.0;
             let before_time = if config.enter_animation { phire::scene::GameScene::BEFORE_DURATION } else { 0.0 };
             let play_end = config.play_end_time.unwrap_or(music_length).min(music_length);
-            let duration = (before_time + play_end / config.speed.max(f32::EPSILON) as f64 - config.play_start_time / config.speed.max(f32::EPSILON) as f64 - (chart.offset + info.offset)).max(0.0);
+            let duration = before_time + play_end / config.speed.max(f32::EPSILON) as f64 - config.play_start_time / config.speed.max(f32::EPSILON) as f64 + chart.offset + info.offset;
             let respack = ResourcePack::from_path(config.res_pack_path.as_ref()).await?;
             let audio = mix_audio(
                 &chart,
