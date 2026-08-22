@@ -4,7 +4,7 @@ use anyhow::Result;
 use macroquad::prelude::*;
 use phire::{
     config::Mods,
-    core::{read_render_target_rgba8, Chart, HitSound, MSRenderTarget, ResourcePack, VideoWriter},
+    core::{AsyncRgbaReadback, Chart, HitSound, MSRenderTarget, ResourcePack, VideoWriter},
     ext::{poll_future, LocalTask},
     fs,
     scene::{BasicPlayer, GameMode, LoadingScene, NextScene, Scene},
@@ -12,7 +12,7 @@ use phire::{
     ui::Ui,
     ui::DRectButton,
 };
-use std::{cell::RefCell, path::PathBuf, rc::Rc, time::Instant};
+use std::{cell::RefCell, collections::VecDeque, path::PathBuf, rc::Rc, time::Instant};
 use sasa::{AudioClip, Frame};
 
 const WIDTH: u32 = 1280;
@@ -32,6 +32,8 @@ pub struct RenderScene {
     frame: u64,
     total_frames: u64,
     pixels: Vec<u8>,
+    readback: Option<AsyncRgbaReadback>,
+    readback_frames: VecDeque<u64>,
     next_scene: Option<NextScene>,
     render_time: Rc<RefCell<f64>>,
     render_tm: TimeManager,
@@ -101,6 +103,8 @@ impl RenderScene {
             frame: 0,
             total_frames: 0,
             pixels: Vec::new(),
+            readback: None,
+            readback_frames: VecDeque::new(),
             next_scene: None,
             render_time,
             render_tm,
@@ -216,6 +220,7 @@ impl Scene for RenderScene {
     fn enter(&mut self, _tm: &mut TimeManager, _target: Option<RenderTarget>) -> Result<()> {
         let msaa = MSRenderTarget::new((WIDTH, HEIGHT), 1);
         self.target = Some(msaa.output());
+        self.readback = Some(AsyncRgbaReadback::new(WIDTH, HEIGHT));
         self.msaa = Some(msaa);
         Ok(())
     }
@@ -266,14 +271,19 @@ impl Scene for RenderScene {
             unsafe {
                 get_internal_gl().flush();
             }
-            read_render_target_rgba8(target.clone(), (WIDTH, HEIGHT), &mut self.pixels);
+            let pixels = self.readback.as_mut().and_then(|readback| readback.read(target.clone()));
+            self.readback_frames.push_back(self.frame);
             if let Some(writer) = self.writer.as_mut() {
-                let audio_end = ((self.frame + 1) as usize * 48_000 / FPS as usize).min(self.audio.len());
-                if audio_end > self.audio_cursor {
-                    writer.write_audio(&self.audio[self.audio_cursor..audio_end])?;
-                    self.audio_cursor = audio_end;
+                if let Some(pixels) = pixels {
+                    self.pixels = pixels;
+                    let frame = self.readback_frames.pop_front().unwrap_or(self.frame);
+                    let audio_end = ((frame + 1) as usize * 48_000 / FPS as usize).min(self.audio.len());
+                    if audio_end > self.audio_cursor {
+                        writer.write_audio(&self.audio[self.audio_cursor..audio_end])?;
+                        self.audio_cursor = audio_end;
+                    }
+                    writer.write_rgba(&self.pixels, WIDTH as i32 * 4, frame as i64)?;
                 }
-                writer.write_rgba(&self.pixels, WIDTH as i32 * 4, self.frame as i64)?;
             }
         }
         set_camera(&ui.camera());
@@ -313,7 +323,23 @@ impl Scene for RenderScene {
             return next_scene;
         }
         if self.total_frames > 0 && self.frame >= self.total_frames {
-            if let Some(writer) = self.writer.take() {
+            if let Some(mut writer) = self.writer.take() {
+                if let Some(readback) = self.readback.as_mut() {
+                    for pixels in readback.drain() {
+                        self.pixels = pixels;
+                        let frame = self.readback_frames.pop_front().unwrap_or(self.frame);
+                        let audio_end = ((frame + 1) as usize * 48_000 / FPS as usize).min(self.audio.len());
+                        if audio_end > self.audio_cursor {
+                            if let Err(error) = writer.write_audio(&self.audio[self.audio_cursor..audio_end]) {
+                                return NextScene::PopWithResult(Box::new(anyhow::Error::from(error)));
+                            }
+                            self.audio_cursor = audio_end;
+                        }
+                        if let Err(error) = writer.write_rgba(&self.pixels, WIDTH as i32 * 4, frame as i64) {
+                            return NextScene::PopWithResult(Box::new(anyhow::Error::from(error)));
+                        }
+                    }
+                }
                 if let Err(error) = writer.finish() {
                     return NextScene::PopWithResult(Box::new(anyhow::Error::from(error)));
                 }
