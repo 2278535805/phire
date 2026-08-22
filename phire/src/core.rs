@@ -29,7 +29,7 @@ mod object;
 pub use object::{CtrlObject, Object};
 
 mod render;
-pub use render::{copy_fbo, internal_id, read_render_target_rgba8, AsyncRgbaReadback, MSRenderTarget};
+pub use render::{copy_fbo, internal_id, read_render_target_rgba8, MSRenderTarget};
 
 mod resource;
 pub use resource::{NoteStyle, ParticleEmitter, ResPackInfo, Resource, ResourcePack, SfxMap, MAX_SIZE, MAX_SIZE_LIMIT, BUFFER_SIZE, DPI_VALUE};

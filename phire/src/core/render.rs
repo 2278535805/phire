@@ -3,7 +3,6 @@ use macroquad::{
     texture::{RenderTarget, Texture2D},
     window::get_internal_gl,
 };
-use std::ptr::null_mut;
 
 pub struct MSRenderTarget {
     dim: (u32, u32),
@@ -48,81 +47,6 @@ pub fn read_render_target_rgba8(target: RenderTarget, dim: (u32, u32), output: &
             .begin_pass(Some(target.render_pass.raw_miniquad_id()), miniquad::PassAction::Nothing);
         miniquad::gl::glReadPixels(0, 0, dim.0 as i32, dim.1 as i32, miniquad::gl::GL_RGBA, miniquad::gl::GL_UNSIGNED_BYTE, output.as_mut_ptr() as _);
         gl.quad_context.end_render_pass();
-    }
-}
-
-pub struct AsyncRgbaReadback {
-    pbos: [GLuint; 5],
-    next: usize,
-    pending: usize,
-    width: i32,
-    height: i32,
-    size: usize,
-}
-
-impl AsyncRgbaReadback {
-    pub fn new(width: u32, height: u32) -> Self {
-        let mut pbos = [0; 5];
-        let size = width as usize * height as usize * 4;
-        unsafe {
-            use miniquad::gl::*;
-            glGenBuffers(pbos.len() as _, pbos.as_mut_ptr());
-            for pbo in pbos {
-                glBindBuffer(GL_PIXEL_PACK_BUFFER, pbo);
-                glBufferData(GL_PIXEL_PACK_BUFFER, size as _, null_mut(), GL_STREAM_READ);
-            }
-            glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
-        }
-        Self { pbos, next: 0, pending: 0, width: width as _, height: height as _, size }
-    }
-
-    pub fn read(&mut self, target: RenderTarget) -> Option<Vec<u8>> {
-        let result = if self.pending == self.pbos.len() - 1 {
-            let oldest = (self.next + self.pbos.len() - self.pending) % self.pbos.len();
-            self.map(oldest)
-        } else {
-            None
-        };
-        unsafe {
-            use miniquad::gl::*;
-            glBindFramebuffer(GL_READ_FRAMEBUFFER, get_fbo(&target));
-            glBindBuffer(GL_PIXEL_PACK_BUFFER, self.pbos[self.next]);
-            glReadPixels(0, 0, self.width, self.height, GL_RGBA, GL_UNSIGNED_BYTE, null_mut());
-            glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
-        }
-        self.next = (self.next + 1) % self.pbos.len();
-        self.pending = (self.pending + 1).min(self.pbos.len() - 1);
-        result
-    }
-
-    fn map(&self, index: usize) -> Option<Vec<u8>> {
-        unsafe {
-            use miniquad::gl::*;
-            glBindBuffer(GL_PIXEL_PACK_BUFFER, self.pbos[index]);
-            let ptr = glMapBuffer(GL_PIXEL_PACK_BUFFER, 0x88B8) as *const u8;
-            let result = (!ptr.is_null()).then(|| std::slice::from_raw_parts(ptr, self.size).to_vec());
-            glUnmapBuffer(GL_PIXEL_PACK_BUFFER);
-            glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
-            result
-        }
-    }
-
-    pub fn drain(&mut self) -> Vec<Vec<u8>> {
-        let mut result = Vec::with_capacity(self.pending);
-        while self.pending > 0 {
-            let oldest = (self.next + self.pbos.len() - self.pending) % self.pbos.len();
-            if let Some(data) = self.map(oldest) {
-                result.push(data);
-            }
-            self.pending -= 1;
-        }
-        result
-    }
-}
-
-impl Drop for AsyncRgbaReadback {
-    fn drop(&mut self) {
-        unsafe { miniquad::gl::glDeleteBuffers(self.pbos.len() as _, self.pbos.as_ptr()); }
     }
 }
 
