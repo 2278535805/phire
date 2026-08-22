@@ -261,7 +261,10 @@ impl Scene for RenderScene {
         let time = self.frame as f64 / FPS as f64;
         *self.render_time.borrow_mut() = time;
         self.render_tm.seek_to(time);
-        scene.render(&mut self.render_tm, ui)?;
+        {
+            let mut capture_ui = Ui::new(ui.text_painter, Some((0, 0, WIDTH as i32, HEIGHT as i32)));
+            scene.render(&mut self.render_tm, &mut capture_ui)?;
+        }
         if let Some(target) = &self.target {
             unsafe {
                 get_internal_gl().flush();
