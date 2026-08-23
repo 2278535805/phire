@@ -41,6 +41,12 @@ render-invalid-resolution = 分辨率无效，请输入偶数宽高，例如 192
 render-invalid-fps = 帧率无效，请输入 1 到 240
 render-invalid-quality = CRF 无效，请输入 0 到 51
 
+replay = 回放
+replay-select = 选择上次游玩的回放方式
+replay-preview = 预览回放
+replay-export = 导出视频
+replaying = 回放中
+
 edit-cancel = 取消
 edit-save = 保存
 edit-saving = 保存中

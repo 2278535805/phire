@@ -41,6 +41,12 @@ render-invalid-resolution = Invalid resolution. Enter even dimensions such as 19
 render-invalid-fps = Invalid frame rate. Enter a value from 1 to 240
 render-invalid-quality = Invalid CRF. Enter a value from 0 to 51
 
+replay = Replay
+replay-select = Choose how to replay your last play
+replay-preview = Preview replay
+replay-export = Export video
+replaying = REPLAYING
+
 edit-cancel = Cancel
 edit-save = Save
 edit-saving = Saving

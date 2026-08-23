@@ -5,7 +5,7 @@ use crate::{
     ext::{draw_illustration, draw_parallelogram, draw_text_aligned, draw_text_aligned_opt, draw_text_aligned_opt_width, poll_future, LocalTask, SafeTexture, BLACK_TEXTURE},
     fs::FileSystem,
     info::{ChartFormat, ChartInfo},
-    judge::Judge,
+    judge::{Judge, ReplayData},
     task::Task,
     time::TimeManager,
     ui::Ui,
@@ -85,6 +85,7 @@ impl LoadingScene {
         player: Option<BasicPlayer>,
         upload_fn: Option<UploadFn>,
         update_fn: Option<UpdateFn>,
+        replay: Option<ReplayData>,
     ) -> Result<Self> {
         let background = match Self::load_background(&mut fs, config, &info.illustration).await {
             Ok((ill, bg)) => Some((ill, bg)),
@@ -105,7 +106,7 @@ impl LoadingScene {
 
             info.tip = Some(tips.choose(&mut rng()).unwrap().to_owned());
         }
-        let future = Box::pin(GameScene::new(preload_chart, mode, info.clone(), config.clone(), fs, player, background.clone(), illustration.clone(), upload_fn, update_fn));
+        let future = Box::pin(GameScene::new(preload_chart, mode, info.clone(), config.clone(), fs, player, background.clone(), illustration.clone(), upload_fn, update_fn, replay));
         let charter = Regex::new(r"\[!:[0-9]+:([^:]*)\]").unwrap().replace_all(&info.charter, "$1").to_string();
 
         Ok(Self {

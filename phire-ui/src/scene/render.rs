@@ -9,13 +9,20 @@ use phire::{
     core::{read_render_target_rgba8, Chart, HitSound, MSRenderTarget, ResourcePack, VideoWriter},
     ext::{poll_future, LocalTask},
     fs,
-    scene::{BasicPlayer, GameMode, LoadingScene, NextScene, Scene},
+    scene::{BasicPlayer, GameMode, LAST_REPLAY, LoadingScene, NextScene, Scene},
     time::TimeManager,
     ui::{DRectButton, InlineInputBox, Ui},
 };
 use phire::ext::{semi_black, RectExt};
+use phire::judge::{ReplayData, ReplayHit};
 use std::{cell::RefCell, path::PathBuf, rc::Rc, time::Instant};
 use sasa::{AudioClip, Frame};
+
+#[derive(PartialEq, Clone, Copy)]
+pub enum RenderMode {
+    Export,
+    Preview,
+}
 
 fn dialog_rect() -> Rect {
     let hw = 0.45;
@@ -164,6 +171,7 @@ pub struct RenderScene {
     render_fps: f64,
     cancel_button: DRectButton,
     cancelled: bool,
+    pub mode: RenderMode,
 }
 
 impl RenderScene {
@@ -201,6 +209,7 @@ impl RenderScene {
                 chart.offset + info.offset,
                 config.speed as f64,
                 before_time,
+                None,
             );
             config.volume_music = 0.0;
             config.volume_sfx = 0.0;
@@ -209,7 +218,7 @@ impl RenderScene {
                 id: it.id,
                 rks: it.rks,
             });
-            let loading = LoadingScene::new(Some((chart, format)), GameMode::Normal, info, &config, fs, player, None, None).await?;
+            let loading = LoadingScene::new(Some((chart, format)), GameMode::Normal, info, &config, fs, player, None, None, None).await?;
             Ok((loading, duration, audio))
         }));
         Self {
@@ -237,6 +246,88 @@ impl RenderScene {
             render_fps: 0.0,
             cancel_button: DRectButton::new(),
             cancelled: false,
+            mode: RenderMode::Export,
+        }
+    }
+
+    /// Creates a replay scene. When `output` is `Some`, the replay is exported to a video file;
+    /// otherwise it runs as a real-time preview with audible music.
+    pub fn new_replay(path: String, output: Option<String>, resolution: (u32, u32), fps: u32, crf: i32) -> Self {
+        let preview = output.is_none();
+        let render_time = Rc::new(RefCell::new(0.0));
+        let mut render_tm = TimeManager::manual(Box::new({
+            let render_time = Rc::clone(&render_time);
+            move || *render_time.borrow()
+        }));
+        render_tm.speed = 1.0;
+        let load: LocalTask<Result<(LoadingScene, f64, Vec<Frame>)>> = Some(Box::pin(async move {
+            let replay = LAST_REPLAY.lock().unwrap().clone().map(|(_, data)| data);
+            let Some(replay) = replay else {
+                anyhow::bail!("no replay recorded");
+            };
+            let mut fs = fs_from_path(&path)?;
+            let info = fs::load_info(fs.as_mut()).await?;
+            let mut config = get_data().config.clone();
+            config.enter_animation = false;
+            let (chart, format) = phire::scene::GameScene::load_chart(fs.as_mut(), &info, &config).await?;
+            let (music, sample_rate) = AudioClip::decode(fs.load_file(&info.music).await?)?;
+            let music = resample_audio(&music, sample_rate);
+            let music_length = music.len() as f64 / 48_000.0;
+            let before_time = if config.enter_animation { phire::scene::GameScene::BEFORE_DURATION } else { 0.0 };
+            let play_end = config.play_end_time.unwrap_or(music_length).min(music_length);
+            let duration = before_time + play_end / config.speed.max(f32::EPSILON) as f64 - config.play_start_time / config.speed.max(f32::EPSILON) as f64 + chart.offset + info.offset;
+            let respack = ResourcePack::from_path(config.res_pack_path.as_ref()).await?;
+            let audio = mix_audio(
+                &chart,
+                &respack,
+                music,
+                config.volume_music,
+                config.volume_sfx,
+                duration,
+                config.play_start_time,
+                chart.offset + info.offset,
+                config.speed as f64,
+                before_time,
+                Some(&replay.hits),
+            );
+            if !preview {
+                config.volume_music = 0.0;
+                config.volume_sfx = 0.0;
+            }
+            let player = get_data().me.as_ref().map(|it| BasicPlayer {
+                avatar: crate::client::UserManager::get_avatar(it.id).flatten(),
+                id: it.id,
+                rks: it.rks,
+            });
+            let loading = LoadingScene::new(Some((chart, format)), GameMode::Replay, info, &config, fs, player, None, None, Some(replay)).await?;
+            Ok((loading, duration, audio))
+        }));
+        Self {
+            width: resolution.0,
+            height: resolution.1,
+            fps,
+            crf,
+            output: output.unwrap_or_default().into(),
+            target: None,
+            msaa: None,
+            load,
+            scene: None,
+            writer: None,
+            audio: Vec::new(),
+            audio_cursor: 0,
+            frame: 0,
+            total_frames: 0,
+            pixels: Vec::new(),
+            next_scene: None,
+            render_time,
+            render_tm,
+            started_at: None,
+            last_progress_frame: 0,
+            last_progress_at: None,
+            render_fps: 0.0,
+            cancel_button: DRectButton::new(),
+            cancelled: false,
+            mode: if preview { RenderMode::Preview } else { RenderMode::Export },
         }
     }
 }
@@ -270,6 +361,7 @@ fn mix_audio(
     chart_offset: f64,
     speed: f64,
     before_time: f64,
+    replay_hits: Option<&[ReplayHit]>,
 ) -> Vec<Frame> {
     let sample_rate = 48_000usize;
     let output_len = (duration.max(0.) * sample_rate as f64).ceil() as usize;
@@ -304,22 +396,39 @@ fn mix_audio(
         .map(|(name, clip)| (name.clone(), resample_audio(clip.frames(), clip.sample_rate())))
         .collect();
 
-    for line in &chart.lines {
-        for note in &line.notes {
-            if note.fake {
-                continue;
-            }
-            let clip = match &note.hitsound {
-                HitSound::Click => Some(click.as_slice()),
-                HitSound::Drag => Some(drag.as_slice()),
-                HitSound::Flick => Some(flick.as_slice()),
-                HitSound::Custom(name) => custom.iter().find(|(key, _)| key == name).map(|(_, clip)| clip.as_slice()),
-                HitSound::None => None,
+    if let Some(hits) = replay_hits {
+        // place sfx strictly by the recorded hit moments
+        let speed_time_ratio = if speed.abs() < f64::EPSILON { 1.0 } else { 1.0 / speed };
+        for hit in hits {
+            let clip: Option<&[Frame]> = match hit.kind.as_str() {
+                "click" => Some(click.as_slice()),
+                "drag" => Some(drag.as_slice()),
+                "flick" => Some(flick.as_slice()),
+                name => custom.iter().find(|(key, _)| key == name).map(|(_, clip)| clip.as_slice()),
             };
             if let Some(clip) = clip {
-                let speed_time_ratio = if speed.abs() < f64::EPSILON { 1.0 } else { 1.0 / speed };
-                let position = ((before_time + chart_offset + note.time * speed_time_ratio - play_start_time * speed_time_ratio) * sample_rate as f64).round() as isize;
+                let position = ((before_time + chart_offset + hit.time * speed_time_ratio - play_start_time * speed_time_ratio) * sample_rate as f64).round() as isize;
                 place(&mut output, clip, position, volume_sfx);
+            }
+        }
+    } else {
+        for line in &chart.lines {
+            for note in &line.notes {
+                if note.fake {
+                    continue;
+                }
+                let clip = match &note.hitsound {
+                    HitSound::Click => Some(click.as_slice()),
+                    HitSound::Drag => Some(drag.as_slice()),
+                    HitSound::Flick => Some(flick.as_slice()),
+                    HitSound::Custom(name) => custom.iter().find(|(key, _)| key == name).map(|(_, clip)| clip.as_slice()),
+                    HitSound::None => None,
+                };
+                if let Some(clip) = clip {
+                    let speed_time_ratio = if speed.abs() < f64::EPSILON { 1.0 } else { 1.0 / speed };
+                    let position = ((before_time + chart_offset + note.time * speed_time_ratio - play_start_time * speed_time_ratio) * sample_rate as f64).round() as isize;
+                    place(&mut output, clip, position, volume_sfx);
+                }
             }
         }
     }
@@ -341,30 +450,36 @@ impl Scene for RenderScene {
     }
 
     fn enter(&mut self, _tm: &mut TimeManager, _target: Option<RenderTarget>) -> Result<()> {
+        if self.mode == RenderMode::Preview {
+            return Ok(());
+        }
         let msaa = MSRenderTarget::new((self.width, self.height), 1);
         self.target = Some(msaa.output());
         self.msaa = Some(msaa);
         Ok(())
     }
 
-    fn update(&mut self, _tm: &mut TimeManager) -> Result<()> {
+    fn update(&mut self, tm: &mut TimeManager) -> Result<()> {
+        let preview = self.mode == RenderMode::Preview;
         if let Some(load) = self.load.as_mut() {
             if let Some(result) = poll_future(load.as_mut()) {
                 self.load = None;
                 match result {
                     Ok((scene, duration, music)) => {
-                        self.total_frames = (duration * self.fps as f64).ceil() as u64;
-                        self.started_at = Some(Instant::now());
-                        self.last_progress_at = self.started_at;
-                        self.audio = music;
-                        let writer = VideoWriter::new(
-                            self.output.to_string_lossy(),
-                            self.width as _,
-                            self.height as _,
-                            self.fps as _,
-                            self.crf,
-                        )?;
-                        self.writer = Some(writer);
+                        if !preview {
+                            self.total_frames = (duration * self.fps as f64).ceil() as u64;
+                            self.started_at = Some(Instant::now());
+                            self.last_progress_at = self.started_at;
+                            self.audio = music;
+                            let writer = VideoWriter::new(
+                                self.output.to_string_lossy(),
+                                self.width as _,
+                                self.height as _,
+                                self.fps as _,
+                                self.crf,
+                            )?;
+                            self.writer = Some(writer);
+                        }
                         let mut scene: Box<dyn Scene> = Box::new(scene);
                         scene.enter(&mut self.render_tm, self.target.clone())?;
                         self.scene = Some(scene);
@@ -374,6 +489,23 @@ impl Scene for RenderScene {
             }
         }
         if let Some(scene) = self.scene.as_mut() {
+            if preview {
+                scene.update(tm)?;
+                match scene.next_scene(tm) {
+                    NextScene::Replace(mut replacement) => {
+                        replacement.enter(tm, self.target.clone())?;
+                        self.scene = Some(replacement);
+                    }
+                    NextScene::Pop | NextScene::PopN(_) => {
+                        self.next_scene = Some(NextScene::Pop);
+                    }
+                    NextScene::PopWithResult(result) => {
+                        self.next_scene = Some(NextScene::PopWithResult(result));
+                    }
+                    _ => {}
+                }
+                return Ok(());
+            }
             let time = self.frame as f64 / self.fps as f64;
             *self.render_time.borrow_mut() = time;
             self.render_tm.seek_to(time);
@@ -386,11 +518,26 @@ impl Scene for RenderScene {
         Ok(())
     }
 
-    fn render(&mut self, _tm: &mut TimeManager, ui: &mut Ui) -> Result<()> {
+    fn render(&mut self, tm: &mut TimeManager, ui: &mut Ui) -> Result<()> {
         let Some(scene) = self.scene.as_mut() else {
             ui.text("Loading").pos(0., 0.).anchor(0.5, 0.5).size(0.5).draw();
             return Ok(());
         };
+        if self.mode == RenderMode::Preview {
+            scene.render(tm, ui)?;
+            set_camera(&ui.camera());
+            let top = ui.top;
+            let cancel_rect = Rect::new(-0.92, top - 0.16, 0.24, 0.10);
+            self.cancel_button
+                .render_text(ui, cancel_rect, 0.0, 1.0, ttl!("cancel"), 0.65, true);
+            ui.text(tl!("replaying"))
+                .anchor(1., 0.5)
+                .pos(0.92, top - 0.11)
+                .size(0.48)
+                .color(Color { a: 0.6, ..WHITE })
+                .draw();
+            return Ok(());
+        }
         let time = self.frame as f64 / self.fps as f64;
         *self.render_time.borrow_mut() = time;
         self.render_tm.seek_to(time);

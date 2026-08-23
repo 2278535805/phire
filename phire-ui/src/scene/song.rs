@@ -251,6 +251,9 @@ pub struct SongScene {
     render_path: Option<String>,
     render_config_dialog: RenderConfigDialog,
     render_config: Option<((u32, u32), u32, i32)>,
+    replay_export: bool,
+    replay_preview: Arc<AtomicBool>,
+    replay_export_request: Arc<AtomicBool>,
 
     info_edit: Option<ChartInfoEdit>,
     edit_btn: RectButton,
@@ -438,6 +441,9 @@ impl SongScene {
             render_path: None,
             render_config_dialog: RenderConfigDialog::new(),
             render_config: None,
+            replay_export: false,
+            replay_preview: Arc::new(AtomicBool::default()),
+            replay_export_request: Arc::new(AtomicBool::default()),
 
             info_edit: None,
             edit_btn: RectButton::new(),
@@ -792,6 +798,14 @@ impl SongScene {
         }
         if self.local_path.is_some() {
             self.menu_options.push("render");
+            if phire::scene::LAST_REPLAY
+                .lock()
+                .unwrap()
+                .as_ref()
+                .is_some_and(|(name, _)| *name == self.info.name)
+            {
+                self.menu_options.push("replay");
+            }
         }
         if let Some(local_path) = &self.local_path {
             self.menu_options.push("exercise");
@@ -1088,7 +1102,7 @@ impl SongScene {
                     .await
                     .map(|it| NextScene::Overlay(Box::new(it)))
             } else {
-                LoadingScene::new(None, mode, info, &config, fs, player, upload_fn, update_fn)
+                LoadingScene::new(None, mode, info, &config, fs, player, upload_fn, update_fn, None)
                     .await
                     .map(|it| NextScene::Overlay(Box::new(it)))
             }
@@ -1641,7 +1655,19 @@ impl Scene for SongScene {
         }
         if let (Some(path), Some(local_path)) = (self.render_path.take(), self.local_path.clone()) {
             let (resolution, fps, crf) = self.render_config.take().unwrap_or(((1280, 720), 60, 24));
-            self.next_scene = Some(NextScene::Overlay(Box::new(RenderScene::new(local_path, path, resolution, fps, crf))));
+            if std::mem::take(&mut self.replay_export) {
+                self.next_scene = Some(NextScene::Overlay(Box::new(RenderScene::new_replay(local_path, Some(path), resolution, fps, crf))));
+            } else {
+                self.next_scene = Some(NextScene::Overlay(Box::new(RenderScene::new(local_path, path, resolution, fps, crf))));
+            }
+        }
+        if let Some(local_path) = self.local_path.clone() {
+            if self.replay_preview.swap(false, Ordering::SeqCst) {
+                self.next_scene = Some(NextScene::Overlay(Box::new(RenderScene::new_replay(local_path, None, (0, 0), 60, 24))));
+            } else if self.replay_export_request.swap(false, Ordering::SeqCst) {
+                self.replay_export = true;
+                self.render_config_dialog.show();
+            }
         }
         self.render_config_dialog.update();
         if let Some(result) = self.render_config_dialog.result.take() {
@@ -1810,7 +1836,22 @@ impl Scene for SongScene {
                     self.launch(GameMode::Normal, true)?;
                 }
                 "render" => {
+                    self.replay_export = false;
                     self.render_config_dialog.show();
+                }
+                "replay" => {
+                    let preview_flag = Arc::clone(&self.replay_preview);
+                    let export_flag = Arc::clone(&self.replay_export_request);
+                    Dialog::plain(tl!("replay"), tl!("replay-select"))
+                        .buttons(vec![ttl!("cancel").into_owned(), tl!("replay-preview").into_owned(), tl!("replay-export").into_owned()])
+                        .listener(move |id| {
+                            if id == 1 {
+                                preview_flag.store(true, Ordering::SeqCst);
+                            } else if id == 2 {
+                                export_flag.store(true, Ordering::SeqCst);
+                            }
+                        })
+                        .show();
                 }
                 "review-approve" => {
                     let id = self.info.id.unwrap();

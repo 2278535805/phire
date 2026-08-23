@@ -1,15 +1,16 @@
 use crate::{
     config::Config, core::{BadNote, Chart, NOTE_WIDTH_RATIO_BASE, Note, NoteKind, Point, Resource, Vector}, ext::{NotNanExt, get_frame_latency, get_viewport},
 };
+use anyhow::Result;
 use macroquad::prelude::{
     utils::{register_input_subscriber, repeat_all_miniquad_input},
     *,
 };
 use macroquad::miniquad::{EventHandler, MouseButton};
 use once_cell::sync::Lazy;
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use sasa::{PlaySfxParams, Sfx};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::{cell::RefCell, collections::HashMap, num::FpCategory};
 
 pub const FLICK_SPEED_THRESHOLD: f32 = 0.8;
@@ -118,6 +119,110 @@ fn check_hitsound(map: &mut HashMap<String, u8, rustc_hash::FxBuildHasher>, sfx:
     } else {
         false
     }
+}
+
+pub const REPLAY_VERSION: u32 = 1;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ReplayPhase {
+    Started,
+    Moved,
+    Stationary,
+    Ended,
+    Cancelled,
+}
+
+impl From<TouchPhase> for ReplayPhase {
+    fn from(value: TouchPhase) -> Self {
+        match value {
+            TouchPhase::Started => Self::Started,
+            TouchPhase::Moved => Self::Moved,
+            TouchPhase::Stationary => Self::Stationary,
+            TouchPhase::Ended => Self::Ended,
+            TouchPhase::Cancelled => Self::Cancelled,
+        }
+    }
+}
+
+impl From<ReplayPhase> for TouchPhase {
+    fn from(value: ReplayPhase) -> Self {
+        match value {
+            ReplayPhase::Started => Self::Started,
+            ReplayPhase::Moved => Self::Moved,
+            ReplayPhase::Stationary => Self::Stationary,
+            ReplayPhase::Ended => Self::Ended,
+            ReplayPhase::Cancelled => Self::Cancelled,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct ReplayTouch {
+    pub id: u64,
+    pub phase: ReplayPhase,
+    pub position: [f32; 2],
+    /// `None` means the event time is not precisely known (same frame as the touch state)
+    pub time: Option<f64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReplayFrame {
+    /// raw `res.time` snapshot when this frame was recorded
+    pub time: f64,
+    pub touches: Vec<ReplayTouch>,
+    pub keys_down: u32,
+    /// touch ids whose flick got triggered this frame
+    pub flicks: Vec<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReplayHit {
+    pub time: f64,
+    pub kind: String,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ReplayData {
+    pub version: u32,
+    /// playback speed used during recording
+    pub speed: f32,
+    pub frames: Vec<ReplayFrame>,
+    pub hits: Vec<ReplayHit>,
+}
+
+impl ReplayData {
+    pub fn to_json(&self) -> Result<String> {
+        Ok(serde_json::to_string(self)?)
+    }
+
+    pub fn from_json(s: &str) -> Result<Self> {
+        let data: Self = serde_json::from_str(s)?;
+        if data.version != REPLAY_VERSION {
+            anyhow::bail!("unsupported replay version {}", data.version);
+        }
+        Ok(data)
+    }
+
+    pub fn save(&self, path: &str) -> Result<()> {
+        std::fs::write(path, self.to_json()?)?;
+        Ok(())
+    }
+
+    pub fn load(path: &str) -> Result<Self> {
+        Self::from_json(&String::from_utf8(std::fs::read(path)?)?)
+    }
+}
+
+#[derive(Default)]
+pub struct ReplayRecorder {
+    pub frames: Vec<ReplayFrame>,
+}
+
+pub struct ReplayPlayer {
+    pub data: ReplayData,
+    pub frame_index: usize,
+    pub keys_down: u32,
+    pub current_touches: Vec<Touch>,
 }
 
 pub struct FlickTracker {
@@ -322,6 +427,9 @@ pub struct Judge {
 
     pub(crate) inner: JudgeInner,
     pub judgements: RefCell<Vec<(f64, u32, u32, Result<Judgement, bool>)>>,
+
+    pub replay_recorder: Option<ReplayRecorder>,
+    pub replay_player: Option<ReplayPlayer>,
 }
 
 static SUBSCRIBER_ID: Lazy<usize> = Lazy::new(register_input_subscriber);
@@ -358,7 +466,63 @@ impl Judge {
 
             inner: JudgeInner::new(chart.lines.iter().map(|it| it.notes.iter().filter(|it| !it.fake).count() as u32).sum()),
             judgements: RefCell::new(Vec::new()),
+
+            replay_recorder: None,
+            replay_player: None,
         }
+    }
+
+    pub fn start_recording(&mut self) {
+        self.replay_recorder = Some(ReplayRecorder::default());
+    }
+
+    /// Collects recorded frames and resolves hit sounds from the judgement log.
+    pub fn stop_recording(&mut self, chart: &Chart, speed: f32) -> ReplayData {
+        let recorder = self.replay_recorder.take().unwrap_or_default();
+        let mut hits: Vec<ReplayHit> = self
+            .judgements
+            .borrow()
+            .iter()
+            .filter_map(|(t, line_id, note_id, res)| {
+                let note = &chart.lines[*line_id as usize].notes[*note_id as usize];
+                if note.fake {
+                    return None;
+                }
+                let kind = match res {
+                    Err(_) => "click".to_owned(), // hold
+                    Ok(Judgement::Bad) | Ok(Judgement::Miss) => return None,
+                    Ok(_) => {
+                        if matches!(note.kind, NoteKind::Hold { .. }) {
+                            return None;
+                        }
+                        match &note.hitsound {
+                            HitSound::Click => "click".to_owned(),
+                            HitSound::Drag => "drag".to_owned(),
+                            HitSound::Flick => "flick".to_owned(),
+                            HitSound::Custom(name) => name.clone(),
+                            HitSound::None => return None,
+                        }
+                    }
+                };
+                Some(ReplayHit { time: *t, kind })
+            })
+            .collect();
+        hits.sort_by(|a, b| a.time.total_cmp(&b.time));
+        ReplayData {
+            version: REPLAY_VERSION,
+            speed,
+            frames: recorder.frames,
+            hits,
+        }
+    }
+
+    pub fn load_replay(&mut self, data: ReplayData) {
+        self.replay_player = Some(ReplayPlayer {
+            data,
+            frame_index: 0,
+            keys_down: 0,
+            current_touches: Vec::new(),
+        });
     }
 
     pub fn set_limits(&mut self, perfect: f64, good: f64, bad: f64) {
@@ -372,6 +536,14 @@ impl Judge {
         self.trackers.clear();
         self.inner.reset();
         self.judgements.borrow_mut().clear();
+        if let Some(recorder) = &mut self.replay_recorder {
+            recorder.frames.clear();
+        }
+        if let Some(player) = &mut self.replay_player {
+            player.frame_index = 0;
+            player.keys_down = 0;
+            player.current_touches.clear();
+        }
     }
 
     pub fn commit(&mut self, t: f64, what: Judgement, line_id: u32, note_id: u32, diff: f64) {
@@ -519,6 +691,7 @@ impl Judge {
             (guard.touches.clone(), guard.keys_down)
         });
         self.key_down_count = self.key_down_count.saturating_add_signed(TOUCHES.with(|it| it.borrow().key_delta));
+        let mut frame_flicks: Vec<u64> = Vec::new();
         {
             fn to_local(Vec2 { x, y }: Vec2) -> Point {
                 Point::new(x / screen_width() * 2. - 1., y / screen_height() * 2. - 1.)
@@ -550,7 +723,11 @@ impl Judge {
                     }
                     TouchPhase::Moved | TouchPhase::Stationary => {
                         if let Some(tracker) = self.trackers.get_mut(&id) {
+                            let was_flicked = tracker.flicked;
                             tracker.push(t, p);
+                            if !was_flicked && tracker.flicked {
+                                frame_flicks.push(id);
+                            }
                         }
                     }
                     TouchPhase::Ended | TouchPhase::Cancelled => {
@@ -570,6 +747,146 @@ impl Judge {
                 it
             })
             .collect();
+        if let Some(recorder) = &mut self.replay_recorder {
+            // normalize the aspect-dependent y back to screen-relative coordinates so
+            // replays render correctly on viewports with a different aspect ratio
+            let vp = get_viewport();
+            let ar = vp.2 as f32 / vp.3 as f32;
+            recorder.frames.push(ReplayFrame {
+                time: res.time,
+                touches: touches
+                    .iter()
+                    .map(|it| ReplayTouch {
+                        id: it.id,
+                        phase: it.phase.into(),
+                        position: [it.position.x, it.position.y * ar],
+                        time: if it.time.is_infinite() { None } else { Some(it.time) },
+                    })
+                    .collect(),
+                keys_down,
+                flicks: frame_flicks,
+            });
+        }
+        self.run_judgement(res, chart, bad_notes, t, spd, x_diff_max, touches, keys_down);
+    }
+
+    pub fn update_replay(&mut self, res: &mut Resource, chart: &mut Chart, bad_notes: &mut Vec<BadNote>) {
+        res.played_hitsounds_count.clear();
+        let spd = res.config.speed as f64;
+        let x_diff_max: f64 = if res.config.full_scrrn_judge() {
+            2. / res.config.chart_ratio as f64
+        } else {
+            0.21 / (16. / 9.) * 2.
+        };
+        let now = res.time;
+
+        let mut keys_down = 0u32;
+        if let Some(player) = self.replay_player.as_mut() {
+            // ids whose Started phase appeared within this consumed batch; their press
+            // state must survive until judgement even if later frames show movement
+            let mut fresh_started: FxHashSet<u64> = FxHashSet::default();
+            while player.frame_index < player.data.frames.len() && player.data.frames[player.frame_index].time <= now {
+                let frame = player.data.frames[player.frame_index].clone();
+                for rt in &frame.touches {
+                    if rt.phase == ReplayPhase::Started {
+                        self.trackers
+                            .entry(rt.id)
+                            .or_insert_with(|| FlickTracker::new(res.dpi, frame.time as _, Point::new(rt.position[0], rt.position[1])));
+                    }
+                }
+                for id in &frame.flicks {
+                    self.trackers
+                        .entry(*id)
+                        .or_insert_with(|| FlickTracker::new(res.dpi, frame.time as _, Point::new(0., 0.)));
+                    if let Some(tracker) = self.trackers.get_mut(id) {
+                        tracker.flicked = true;
+                    }
+                }
+                for rt in &frame.touches {
+                    match rt.phase {
+                        ReplayPhase::Started => {
+                            fresh_started.insert(rt.id);
+                            player.current_touches.retain(|it| it.id != rt.id);
+                            player.current_touches.push(Touch {
+                                id: rt.id,
+                                phase: TouchPhase::Started,
+                                position: vec2(rt.position[0], rt.position[1]),
+                                time: rt.time.unwrap_or(f64::NEG_INFINITY),
+                            });
+                        }
+                        ReplayPhase::Ended | ReplayPhase::Cancelled => {
+                            fresh_started.remove(&rt.id);
+                            player.current_touches.retain(|it| it.id != rt.id);
+                            self.trackers.remove(&rt.id);
+                        }
+                        phase => {
+                            if let Some(it) = player.current_touches.iter_mut().find(|it| it.id == rt.id) {
+                                if !fresh_started.contains(&rt.id) {
+                                    it.phase = phase.into();
+                                    it.position = vec2(rt.position[0], rt.position[1]);
+                                }
+                            } else {
+                                player.current_touches.push(Touch {
+                                    id: rt.id,
+                                    phase: phase.into(),
+                                    position: vec2(rt.position[0], rt.position[1]),
+                                    time: rt.time.unwrap_or(f64::NEG_INFINITY),
+                                });
+                            }
+                        }
+                    }
+                }
+                // a finger absent from this frame's snapshot has been lifted
+                let present: FxHashSet<u64> = frame.touches.iter().map(|it| it.id).collect();
+                player.current_touches.retain(|it| present.contains(&it.id));
+                player.keys_down = frame.keys_down;
+                player.frame_index += 1;
+            }
+            keys_down = player.keys_down;
+        }
+        let touches = self.replay_touches();
+        self.key_down_count = keys_down;
+        let t = now - spd * res.config.judge_offset;
+        self.run_judgement(res, chart, bad_notes, t, spd, x_diff_max, touches, keys_down);
+        if let Some(player) = self.replay_player.as_mut() {
+            for it in player.current_touches.iter_mut() {
+                it.phase = TouchPhase::Stationary;
+            }
+        }
+        self.last_time = t / spd;
+    }
+
+    /// Replay touch states converted into the current viewport's judge coordinate space.
+    /// Stored positions are aspect-normalized; the y axis is re-scaled to whatever
+    /// viewport the replay is running on.
+    pub fn replay_touches(&self) -> Vec<Touch> {
+        let Some(player) = &self.replay_player else {
+            return Vec::new();
+        };
+        let vp = get_viewport();
+        let ar = vp.2 as f32 / vp.3 as f32;
+        player
+            .current_touches
+            .iter()
+            .map(|it| {
+                let mut t = it.clone();
+                t.position.y /= ar;
+                t
+            })
+            .collect()
+    }
+
+    fn run_judgement(
+        &mut self,
+        res: &mut Resource,
+        chart: &mut Chart,
+        bad_notes: &mut Vec<BadNote>,
+        t: f64,
+        spd: f64,
+        x_diff_max: f64,
+        touches: Vec<Touch>,
+        keys_down: u32,
+    ) {
         // pos[line][touch]
         let mut pos = Vec::<Vec<Option<Point>>>::with_capacity(chart.lines.len());
         for id in 0..chart.lines.len() {
