@@ -1647,7 +1647,7 @@ impl Scene for SongScene {
         if let Some(result) = self.render_config_dialog.result.take() {
             if let Some(config) = result {
                 self.render_config = Some(config);
-                request_save_file("render", &format!("{}.mp4", safe_filename(self.info.name.clone())));
+                request_save_file("render", &format!("Phire-{}.mp4", safe_filename(self.info.name.clone())));
             }
         }
         UI_AUDIO.with(|it| it.borrow_mut().recover_if_needed())?;
