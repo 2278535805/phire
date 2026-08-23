@@ -1,6 +1,6 @@
 phire::tl_file!("song");
 
-use super::{confirm_delete, confirm_dialog, fs_from_path, render_ldb, LdbDisplayItem, ProfileScene, RenderScene};
+use super::{confirm_delete, confirm_dialog, fs_from_path, render_ldb, LdbDisplayItem, ProfileScene, RenderConfigDialog, RenderScene};
 use crate::{
     charts_view::NEED_UPDATE,
     client::{basic_client_builder, recv_raw, Chart, Client, Permission, Ptr, Record, ResponseDto, UserManager, CLIENT_TOKEN},
@@ -73,6 +73,14 @@ const EDIT_TRANSIT: f32 = 0.32;
 
 static CONFIRM_UPLOAD: AtomicBool = AtomicBool::new(false);
 pub static RECORD_ID: AtomicI32 = AtomicI32::new(-1);
+
+fn safe_filename(name: String) -> String {
+    name
+        .trim()
+        .chars()
+        .filter(|&it| it.is_alphanumeric() || " !#$%&'()+,-.;=@[]^_`{}~".contains(it))
+        .collect()
+}
 
 fn create_music(clip: AudioClip) -> Result<Music> {
     let mut music = UI_AUDIO.with(|it| {
@@ -241,6 +249,8 @@ pub struct SongScene {
     should_delete: Arc<AtomicBool>,
     menu_options: Vec<&'static str>,
     render_path: Option<String>,
+    render_config_dialog: RenderConfigDialog,
+    render_config: Option<((u32, u32), u32, i32)>,
 
     info_edit: Option<ChartInfoEdit>,
     edit_btn: RectButton,
@@ -426,6 +436,8 @@ impl SongScene {
             should_delete: Arc::new(AtomicBool::default()),
             menu_options: Vec::new(),
             render_path: None,
+            render_config_dialog: RenderConfigDialog::new(),
+            render_config: None,
 
             info_edit: None,
             edit_btn: RectButton::new(),
@@ -1457,6 +1469,9 @@ impl Scene for SongScene {
 
     fn touch(&mut self, tm: &mut TimeManager, touch: &Touch) -> Result<bool> {
         let t = tm.now() as f32;
+        if self.render_config_dialog.touch(touch, tm.real_time() as f32) {
+            return Ok(true);
+        }
         if self.scene_task.is_some()
             || self.save_task.is_some()
             || self.upload_task.is_some()
@@ -1625,7 +1640,15 @@ impl Scene for SongScene {
             }
         }
         if let (Some(path), Some(local_path)) = (self.render_path.take(), self.local_path.clone()) {
-            self.next_scene = Some(NextScene::Overlay(Box::new(RenderScene::new(local_path, path))));
+            let (resolution, fps, crf) = self.render_config.take().unwrap_or(((1280, 720), 60, 24));
+            self.next_scene = Some(NextScene::Overlay(Box::new(RenderScene::new(local_path, path, resolution, fps, crf))));
+        }
+        self.render_config_dialog.update();
+        if let Some(result) = self.render_config_dialog.result.take() {
+            if let Some(config) = result {
+                self.render_config = Some(config);
+                request_save_file("render", &format!("{}.mp4", safe_filename(self.info.name.clone())));
+            }
         }
         UI_AUDIO.with(|it| it.borrow_mut().recover_if_needed())?;
         let t = tm.now() as f32;
@@ -1787,7 +1810,7 @@ impl Scene for SongScene {
                     self.launch(GameMode::Normal, true)?;
                 }
                 "render" => {
-                    request_save_file("render", "phire-render.mp4");
+                    self.render_config_dialog.show();
                 }
                 "review-approve" => {
                     let id = self.info.id.unwrap();
@@ -2350,6 +2373,7 @@ impl Scene for SongScene {
         let rt = tm.real_time() as f32;
         self.tags.render(ui, rt);
         self.rate_dialog.render(ui, rt);
+        self.render_config_dialog.render(ui, rt);
 
         self.sf.render(ui, t);
 

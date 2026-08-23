@@ -19,7 +19,7 @@ mod unlock;
 pub use unlock::UnlockScene;
 
 mod render;
-pub use render::{RenderScene};
+pub use render::{RenderConfigDialog, RenderScene};
 
 use crate::{client::UserManager, data::LocalChart, dir, get_data, page::Fader};
 use anyhow::{bail, Context, Result};
