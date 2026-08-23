@@ -322,20 +322,17 @@ pub fn request_save_file(id: impl Into<String>, name: &str) {
     }
 }
 
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(target_os = "android")]
 pub fn finish_save_file(path: &str) {
-    #[cfg(target_os = "android")]
     unsafe {
         let env = miniquad::native::attach_jni_env();
         let ctx = ndk_context::android_context().context();
         let class = (**env).GetObjectClass.unwrap()(env, ctx);
-        let method = (**env).GetMethodID.unwrap()(env, class, b"finishRenderedFile\0".as_ptr() as _, b"(Ljava/lang/String;)V\0".as_ptr() as _);
+        let method = (**env).GetMethodID.unwrap()(env, class, b"finishSaveFile\0".as_ptr() as _, b"(Ljava/lang/String;)V\0".as_ptr() as _);
         let path = std::ffi::CString::new(path).unwrap();
         let jpath = (**env).NewStringUTF.unwrap()(env, path.as_ptr());
         (**env).CallVoidMethod.unwrap()(env, ctx, method, jpath);
     }
-    #[cfg(not(target_os = "android"))]
-    let _ = path;
 }
 
 #[cfg(not(target_arch = "wasm32"))]

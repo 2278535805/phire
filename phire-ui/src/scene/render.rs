@@ -600,6 +600,7 @@ impl Scene for RenderScene {
                 if let Err(error) = writer.finish() {
                     return NextScene::PopWithResult(Box::new(anyhow::Error::from(error)));
                 }
+                #[cfg(target_os = "android")]
                 phire::scene::finish_save_file(self.output.to_string_lossy().as_ref());
             }
             return NextScene::Pop;
