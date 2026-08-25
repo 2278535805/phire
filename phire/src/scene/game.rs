@@ -821,7 +821,7 @@ impl GameScene {
         let lf = -aspect_ratio + margin;
         let bt = -top - eps * 3.5 + (1. - p) * 0.4;
         #[cfg(feature = "play")]
-        if res.config.health_mode.is_some() && matches!(self.mode, GameMode::Normal | GameMode::NoRetry | GameMode::View) {
+        if res.config.health_mode.is_some() && matches!(self.mode, GameMode::Normal | GameMode::NoRetry | GameMode::View | GameMode::Replay) {
             let w = aspect_ratio * 0.05;
             let y = -top - eps * 9.;
             let h = top * 2. + eps * 23.;
@@ -1412,7 +1412,10 @@ impl Scene for GameScene {
                             }
                         }
                     }
-                    let record = if self.res.config.autoplay() || (self.res.config.speed - 1.0).abs() > 1e-3 {
+                    let record = if self.res.config.autoplay()
+                        || (self.res.config.speed - 1.0).abs() > 1e-3
+                        || self.mode == GameMode::Replay
+                    {
                         None
                     } else {
                         Some(SimpleRecord {
@@ -1422,12 +1425,12 @@ impl Scene for GameScene {
                             track_complete,
                         })
                     };
-                    if track_complete && self.judge.replay_recorder.is_some() {
+                    if self.judge.replay_recorder.is_some() {
                         let data = self.judge.stop_recording(&self.chart, self.res.config.speed);
                         *LAST_REPLAY.lock().unwrap() = Some((self.res.info.name.clone(), data));
                     }
                     self.next_scene = match self.mode {
-                        GameMode::Normal | GameMode::Exercise | GameMode::NoRetry | GameMode::View => Some(NextScene::Overlay(Box::new(EndingScene::new(
+                        GameMode::Normal | GameMode::Exercise | GameMode::NoRetry | GameMode::View | GameMode::Replay => Some(NextScene::Overlay(Box::new(EndingScene::new(
                             self.res.background.clone(),
                             self.res.illustration.clone(),
                             self.res.player.clone(),
@@ -1445,7 +1448,6 @@ impl Scene for GameScene {
                             record,
                         )?))),
                         GameMode::TweakOffset => Some(NextScene::PopWithResult(Box::new(Some(self.info_offset)))),
-                        GameMode::Replay => Some(NextScene::Pop),
                     };
                 }
                 self.res.alpha = 1. - (t / AFTER_TIME).clamp(0., 1.).powi(2) as f32;
@@ -1481,7 +1483,7 @@ impl Scene for GameScene {
                 self.replay_trails.retain(|(t, _)| now - *t <= TRAIL_DURATION);
             }
             #[cfg(feature = "play")]
-            if self.res.config.health_mode.is_some() && matches!(self.state, State::Playing) && matches!(self.mode, GameMode::Normal | GameMode::NoRetry | GameMode::View) {
+            if self.res.config.health_mode.is_some() && matches!(self.state, State::Playing) && matches!(self.mode, GameMode::Normal | GameMode::NoRetry | GameMode::View | GameMode::Replay) {
                 self.res.health.update(time as f32);
             }
             self.gl.quad_gl.viewport(None);

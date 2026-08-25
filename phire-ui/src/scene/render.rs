@@ -172,6 +172,8 @@ pub struct RenderScene {
     cancel_button: DRectButton,
     cancelled: bool,
     pub mode: RenderMode,
+    /// frame index at which an early finish (e.g. a failed replay) was scheduled
+    finish_frame: Option<u64>,
 }
 
 impl RenderScene {
@@ -247,6 +249,7 @@ impl RenderScene {
             cancel_button: DRectButton::new(),
             cancelled: false,
             mode: RenderMode::Export,
+            finish_frame: None,
         }
     }
 
@@ -328,6 +331,7 @@ impl RenderScene {
             cancel_button: DRectButton::new(),
             cancelled: false,
             mode: if preview { RenderMode::Preview } else { RenderMode::Export },
+            finish_frame: None,
         }
     }
 }
@@ -446,6 +450,7 @@ impl Scene for RenderScene {
             self.next_scene = Some(NextScene::Pop);
             return Ok(true);
         }
+        // self.scene.as_mut().map(|scene| scene.touch(tm, touch));
         Ok(false)
     }
 
@@ -492,10 +497,13 @@ impl Scene for RenderScene {
             if preview {
                 scene.update(tm)?;
                 match scene.next_scene(tm) {
-                    NextScene::Replace(mut replacement) => {
+                    NextScene::Replace(mut replacement) | NextScene::Overlay(mut replacement) => {
                         replacement.enter(tm, self.target.clone())?;
                         self.scene = Some(replacement);
                     }
+                    // NextScene::Overlay(replacement) => {
+                    //     self.next_scene = Some(NextScene::Overlay(replacement));
+                    // }
                     NextScene::Pop | NextScene::PopN(_) => {
                         self.next_scene = Some(NextScene::Pop);
                     }
@@ -509,10 +517,24 @@ impl Scene for RenderScene {
             let time = self.frame as f64 / self.fps as f64;
             *self.render_time.borrow_mut() = time;
             self.render_tm.seek_to(time);
-            scene.update(&mut self.render_tm)?;
-            if let NextScene::Replace(mut replacement) = scene.next_scene(&mut self.render_tm) {
-                replacement.enter(&mut self.render_tm, self.target.clone())?;
-                self.scene = Some(replacement);
+            if !self.finish_frame.is_some_and(|f| self.frame >= f) {
+                scene.update(&mut self.render_tm)?;
+                match scene.next_scene(&mut self.render_tm) {
+                    NextScene::Replace(mut replacement) => {
+                        replacement.enter(&mut self.render_tm, self.target.clone())?;
+                        self.scene = Some(replacement);
+                    }
+                    // a terminal transition (e.g. a failed replay) ends the export early
+                    // instead of rendering a frozen chart until the full duration
+                    NextScene::Overlay(_)
+                    | NextScene::Pop
+                    | NextScene::PopN(_)
+                    | NextScene::PopWithResult(_)
+                    | NextScene::PopNWithResult(_, _) => {
+                        self.finish_frame = Some(self.finish_frame.unwrap_or(self.frame));
+                    }
+                    _ => {}
+                }
             }
         }
         Ok(())
@@ -595,7 +617,8 @@ impl Scene for RenderScene {
             }
             return next_scene;
         }
-        if self.total_frames > 0 && self.frame >= self.total_frames {
+        let end = self.finish_frame.unwrap_or(self.total_frames).min(self.total_frames);
+        if self.total_frames > 0 && self.frame >= end {
             if let Some(writer) = self.writer.take() {
                 if let Err(error) = writer.finish() {
                     return NextScene::PopWithResult(Box::new(anyhow::Error::from(error)));
