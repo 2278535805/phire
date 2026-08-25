@@ -551,7 +551,7 @@ impl Scene for RenderScene {
             let top = ui.top;
             let cancel_rect = Rect::new(-0.92, top - 0.16, 0.24, 0.10);
             self.cancel_button
-                .render_text(ui, cancel_rect, 0.0, 1.0, ttl!("cancel"), 0.65, true);
+                .render_text(ui, cancel_rect, 0.0, 1.0, ttl!("back"), 0.65, true);
             ui.text(tl!("replaying"))
                 .anchor(1., 0.5)
                 .pos(0.92, top - 0.11)

@@ -170,7 +170,10 @@ pub struct ReplayFrame {
     /// raw `res.time` snapshot when this frame was recorded
     pub time: f64,
     pub touches: Vec<ReplayTouch>,
+    /// number of key press events received this frame
     pub keys_down: u32,
+    /// net key press/release delta of this frame (tracks held keys for holds)
+    pub key_delta: i32,
     /// touch ids whose flick got triggered this frame
     pub flicks: Vec<u64>,
 }
@@ -690,7 +693,8 @@ impl Judge {
             let guard = it.borrow();
             (guard.touches.clone(), guard.keys_down)
         });
-        self.key_down_count = self.key_down_count.saturating_add_signed(TOUCHES.with(|it| it.borrow().key_delta));
+        let key_delta = TOUCHES.with(|it| it.borrow().key_delta);
+        self.key_down_count = self.key_down_count.saturating_add_signed(key_delta);
         let mut frame_flicks: Vec<u64> = Vec::new();
         {
             fn to_local(Vec2 { x, y }: Vec2) -> Point {
@@ -764,6 +768,7 @@ impl Judge {
                     })
                     .collect(),
                 keys_down,
+                key_delta,
                 flicks: frame_flicks,
             });
         }
@@ -785,6 +790,8 @@ impl Judge {
             // ids whose Started phase appeared within this consumed batch; their press
             // state must survive until judgement even if later frames show movement
             let mut fresh_started: FxHashSet<u64> = FxHashSet::default();
+            let mut presses = 0u32;
+            let mut held_delta = 0i32;
             while player.frame_index < player.data.frames.len() && player.data.frames[player.frame_index].time <= now {
                 let frame = player.data.frames[player.frame_index].clone();
                 for rt in &frame.touches {
@@ -839,13 +846,21 @@ impl Judge {
                 // a finger absent from this frame's snapshot has been lifted
                 let present: FxHashSet<u64> = frame.touches.iter().map(|it| it.id).collect();
                 player.current_touches.retain(|it| present.contains(&it.id));
-                player.keys_down = frame.keys_down;
+                presses += frame.keys_down;
+                held_delta += frame.key_delta;
                 player.frame_index += 1;
             }
-            keys_down = player.keys_down;
+            // every press of the batch must reach the hit loop, and the held-key count
+            // is maintained via the recorded deltas just like during live play
+            keys_down = presses;
+            player.keys_down = player.keys_down.saturating_add_signed(held_delta);
         }
         let touches = self.replay_touches();
-        self.key_down_count = keys_down;
+        self.key_down_count = self
+            .replay_player
+            .as_ref()
+            .map(|it| it.keys_down)
+            .unwrap_or(keys_down);
         let t = now - spd * res.config.judge_offset;
         self.run_judgement(res, chart, bad_notes, t, spd, x_diff_max, touches, keys_down);
         if let Some(player) = self.replay_player.as_mut() {
