@@ -293,7 +293,7 @@ pub enum Judgement {
     Miss,
 }
 
-// #[cfg(not(feature = "closed"))]
+#[cfg(not(feature = "closed"))]
 #[derive(Default)]
 pub(crate) struct JudgeInner {
     perfect_diffs: Vec<f64>,
@@ -306,7 +306,7 @@ pub(crate) struct JudgeInner {
     num_of_notes: u32,
 }
 
-// #[cfg(not(feature = "closed"))]
+#[cfg(not(feature = "closed"))]
 impl JudgeInner {
     pub fn new(num_of_notes: u32) -> Self {
         Self {
@@ -335,6 +335,21 @@ impl JudgeInner {
         self.counts[what as usize] += 1;
         match what {
             Perfect | Good => {
+                self.combo += 1;
+                if self.combo > self.max_combo {
+                    self.max_combo = self.combo;
+                }
+            }
+            _ => {
+                self.combo = 0;
+            }
+        }
+    }
+
+    pub fn commit_diff(&mut self, what: Judgement) {
+        self.counts[what as usize] += 1;
+        match what {
+            Judgement::Perfect | Judgement::Good => {
                 self.combo += 1;
                 if self.combo > self.max_combo {
                     self.max_combo = self.combo;
@@ -377,11 +392,11 @@ impl JudgeInner {
         }
     }
 
-    pub fn result(&self, track_complete: bool, limit_bad: f64) -> PlayResult {
+    pub fn result(&self, track_complete: bool) -> PlayResult {
         let early = self.good_diffs.iter().filter(|it| **it < 0.).count() as u32;
         let n = self.perfect_diffs.len() + self.good_diffs.len() + self.bad_diffs.len();
         let std = if n == 0 {
-            limit_bad as f32
+            LIMIT_BAD as f32
         } else {
             let n = n as f64;
             let all_diffs = self.perfect_diffs.iter().chain(self.good_diffs.iter()).chain(self.bad_diffs.iter());
@@ -409,10 +424,15 @@ impl JudgeInner {
     pub fn counts(&self) -> [u32; 4] {
         self.counts
     }
+
+    pub fn is_vaild(&self) -> bool {
+        self.combo == 0
+        || self.perfect_diffs.len() + self.good_diffs.len() + self.bad_diffs.len() > 0
+    }
 }
 
-// #[cfg(feature = "closed")]
-// use inner::*;
+#[cfg(feature = "closed")]
+use crate::inner::*;
 
 #[repr(C)]
 pub struct Judge {
@@ -1355,8 +1375,7 @@ impl Judge {
                     if note.time >= res.config.play_start_time && !res.disable_hit_fx {
                         note.hitsound.play(res);
                     }
-                    self.judgements.borrow_mut().push((t, line_id as _, *id, Err(true)));
-                    // AutoPlay 无需输出打击时间差
+                    // self.judgements.borrow_mut().push((t, line_id as _, *id, Err(true)));
                     // JudgeStatus::Hold(true, t, (t - note.time) / spd, false, f32::INFINITY)
                     JudgeStatus::Hold(true, t, judge_time, true, f64::INFINITY)
                 } else {
@@ -1396,7 +1415,7 @@ impl Judge {
                     } else {
                         fx_color
                     };
-                    self.commit(t, judge_type, line_id as _, id, 0.);
+                    self.inner.commit_diff(judge_type);
                     if note.time >= res.config.play_start_time && !res.disable_hit_fx {
                         res.with_model(line.now_transform(res, &chart.lines) * note_transform, |res| {
                             res.emit_at_origin(note.rotation(line), color)
@@ -1407,7 +1426,7 @@ impl Judge {
                     }
                 }
                 NoteKind::Hold { .. } => {
-                    self.commit(t, judge_type_hold, line_id as _, id, 0.);
+                    self.inner.commit_diff(judge_type_hold);
                 }
                 _ => {
                     let color = if let Some(color) = note.hit_fx_color.now_opt() {
@@ -1415,7 +1434,7 @@ impl Judge {
                     } else {
                         res.res_pack.info.fx_perfect()
                     };
-                    self.commit(t, Judgement::Perfect, line_id as _, id, 0.);
+                    self.inner.commit_diff(judge_type);
                     if note.time >= res.config.play_start_time && !res.disable_hit_fx {
                         res.with_model(line.now_transform(res, &chart.lines) * note_transform, |res| {
                             res.emit_at_origin(note.rotation(line), color)
@@ -1432,13 +1451,13 @@ impl Judge {
             .flat_map(|it| it.notes.iter())
             .filter(|it| !it.fake && matches!(it.judge, JudgeStatus::NotJudged | JudgeStatus::PreJudge))
         {
-            self.commit(0., Judgement::Perfect, 0, 0, 0.);
+            self.inner.commit_diff(Judgement::Perfect);
         }
     }
 
     #[inline]
     pub fn result(&self, track_complete: bool) -> PlayResult {
-        self.inner.result(track_complete, self.limit_bad)
+        self.inner.result(track_complete)
     }
 
     #[inline]
@@ -1449,6 +1468,11 @@ impl Judge {
     #[inline]
     pub fn counts(&self) -> [u32; 4] {
         self.inner.counts()
+    }
+
+    #[inline]
+    pub fn is_vaild(&self) -> bool {
+        self.inner.is_vaild()
     }
 }
 

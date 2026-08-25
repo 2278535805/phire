@@ -8,7 +8,7 @@ use crate::{
         PARALLELOGRAM_SLOPE,
     },
     info::ChartInfo,
-    judge::{icon_index, PlayResult},
+    judge::{LIMIT_BAD, PlayResult, icon_index},
     scene::show_message,
     task::Task,
     time::TimeManager,
@@ -348,7 +348,7 @@ impl Scene for EndingScene {
             } else {
                 String::new()
             };
-            let text = if self.autoplay {
+            let text = if self.autoplay || (self.result.std - LIMIT_BAD as f32).abs() <= 1e-3 {
                 format!("{text_autoplay} {spd}")
             } else if !self.rated {
                 format!("{full_screen_judge} {spd}")

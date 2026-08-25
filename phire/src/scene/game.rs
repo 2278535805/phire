@@ -1404,7 +1404,13 @@ impl Scene for GameScene {
                     // TODO strengthen the protection
                     #[cfg(feature = "closed")]
                     if let Some(upload_fn) = &self.upload_fn {
-                        if !self.res.config.offline_mode && !self.res.config.autoplay() && (self.res.config.speed - 1.0).abs() < 1e-3 && track_complete {
+                        if !self.res.config.offline_mode
+                            && !self.res.config.autoplay()
+                            && (self.res.config.speed - 1.0).abs() < 1e-3
+                            && track_complete
+                            && self.judge.is_vaild()
+                            && (result.std - crate::judge::LIMIT_BAD as f32).abs() > 1e-3
+                        {
                             if let Some(player) = &self.player {
                                 if let Some(chart) = &self.res.info.guid {
                                     record_data = Some(encode_record(self));
