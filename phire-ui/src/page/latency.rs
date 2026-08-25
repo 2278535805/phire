@@ -645,7 +645,7 @@ impl LatencyPage {
         }
 
         let max_val = self.viz_samples.iter().cloned().fold(0.0f32, f32::max).max(0.001);
-        let max_points = 400;
+        let max_points = 4800;
         let step = (n as f32 / max_points as f32).max(1.0);
 
         let mut prev_x = wf_x;
@@ -659,7 +659,7 @@ impl LatencyPage {
             let line_w = (x - prev_x).max(0.001);
             ui.fill_rect(
                 Rect::new(prev_x, prev_y.min(y), line_w, (y - prev_y).abs().max(0.001)),
-                Color::new(0.4, 0.2, 0.6, c.a),
+                Color::new(0.9, 0.9, 0.9, c.a),
             );
             prev_x = x;
             prev_y = y;
@@ -674,7 +674,7 @@ impl LatencyPage {
             let edge_color = if k == 0 {
                 Color::new(1.0, 0.8, 0.2, 0.9 * c.a)
             } else {
-                Color::new(0.3, 0.9, 0.3, 0.9 * c.a)
+                Color::new(0.1, 0.1, 0.9, 0.9 * c.a)
             };
             ui.fill_rect(
                 Rect::new(ex - 0.002, wf_y, 0.004, wf_h),
