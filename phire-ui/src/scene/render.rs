@@ -272,6 +272,7 @@ impl RenderScene {
             let info = fs::load_info(fs.as_mut()).await?;
             let mut config = get_data().config.clone();
             config.enter_animation = false;
+            config.speed = replay.speed.max(f32::EPSILON);
             let (chart, format) = phire::scene::GameScene::load_chart(fs.as_mut(), &info, &config).await?;
             let (music, sample_rate) = AudioClip::decode(fs.load_file(&info.music).await?)?;
             let music = resample_audio(&music, sample_rate);

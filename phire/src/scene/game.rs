@@ -513,7 +513,7 @@ impl GameScene {
                 Some(data) => judge.load_replay(data),
                 None => bail!("replay data not provided"),
             }
-        } else if mode == GameMode::Normal && !config.autoplay() && (config.speed - 1.0).abs() < 1e-3 {
+        } else if mode == GameMode::Normal && !config.autoplay() {
             judge.start_recording();
         }
 

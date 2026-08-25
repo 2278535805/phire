@@ -480,11 +480,12 @@ impl Judge {
     }
 
     /// Collects recorded frames and resolves hit sounds from the judgement log.
+    /// The recorder itself stays armed (emptied) so that a retry of the same scene
+    /// instance keeps recording from scratch.
     pub fn stop_recording(&mut self, chart: &Chart, speed: f32) -> ReplayData {
-        let recorder = self.replay_recorder.take().unwrap_or_default();
-        let mut hits: Vec<ReplayHit> = self
-            .judgements
-            .borrow()
+        let frames = std::mem::take(&mut self.replay_recorder.get_or_insert_with(ReplayRecorder::default).frames);
+        let judgements = std::mem::take(&mut *self.judgements.borrow_mut());
+        let mut hits: Vec<ReplayHit> = judgements
             .iter()
             .filter_map(|(t, line_id, note_id, res)| {
                 let note = &chart.lines[*line_id as usize].notes[*note_id as usize];
@@ -514,7 +515,7 @@ impl Judge {
         ReplayData {
             version: REPLAY_VERSION,
             speed,
-            frames: recorder.frames,
+            frames,
             hits,
         }
     }
@@ -757,7 +758,7 @@ impl Judge {
             let vp = get_viewport();
             let ar = vp.2 as f32 / vp.3 as f32;
             recorder.frames.push(ReplayFrame {
-                time: res.time,
+                time: res.time - res.config.judge_offset,
                 touches: touches
                     .iter()
                     .map(|it| ReplayTouch {
@@ -861,14 +862,13 @@ impl Judge {
             .as_ref()
             .map(|it| it.keys_down)
             .unwrap_or(keys_down);
-        let t = now - spd * res.config.judge_offset;
-        self.run_judgement(res, chart, bad_notes, t, spd, x_diff_max, touches, keys_down);
+        self.run_judgement(res, chart, bad_notes, now, spd, x_diff_max, touches, keys_down);
         if let Some(player) = self.replay_player.as_mut() {
             for it in player.current_touches.iter_mut() {
                 it.phase = TouchPhase::Stationary;
             }
         }
-        self.last_time = t / spd;
+        self.last_time = now / spd;
     }
 
     /// Replay touch states converted into the current viewport's judge coordinate space.
