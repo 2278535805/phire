@@ -29,6 +29,23 @@ rate = 评分
 exercise = 练习
 offset = 调整延迟
 unlock = 播放解锁动画
+render = 渲染视频
+render-config = 导出设置
+render-resolution = 分辨率
+render-resolution-msg = 请选择导出视频的分辨率
+render-fps = 帧率
+render-fps-msg = 请选择导出视频的帧率
+render-quality = 质量 (CRF)
+render-quality-msg = 请输入 0 到 51，数值越小质量越高
+render-invalid-resolution = 分辨率无效，请输入偶数宽高，例如 1920x1080
+render-invalid-fps = 帧率无效，请输入 1 到 240
+render-invalid-quality = CRF 无效，请输入 0 到 51
+
+replay = 回放
+replay-select = 选择上次游玩的回放方式
+replay-preview = 预览回放
+replay-export = 导出视频
+replaying = 回放中
 
 edit-cancel = 取消
 edit-save = 保存

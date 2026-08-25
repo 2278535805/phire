@@ -1,6 +1,6 @@
 phire::tl_file!("song");
 
-use super::{confirm_delete, confirm_dialog, fs_from_path, render_ldb, LdbDisplayItem, ProfileScene};
+use super::{confirm_delete, confirm_dialog, fs_from_path, render_ldb, LdbDisplayItem, ProfileScene, RenderConfigDialog, RenderScene};
 use crate::{
     charts_view::NEED_UPDATE,
     client::{basic_client_builder, recv_raw, Chart, Client, Permission, Ptr, Record, ResponseDto, UserManager, CLIENT_TOKEN},
@@ -28,7 +28,7 @@ use phire::{
     info::{ChartFormat, ChartInfo},
     judge::{icon_index, Judge},
     scene::{
-        request_input, return_input, show_error, show_message, take_input, BasicPlayer, GameMode, LoadingScene, LocalSceneTask,
+        request_input, request_save_file, return_input, show_error, show_message, take_file, take_input, BasicPlayer, GameMode, LoadingScene, LocalSceneTask,
         NextScene, Scene, SimpleRecord, UpdateFn, UploadFn,
     },
     task::Task,
@@ -73,6 +73,14 @@ const EDIT_TRANSIT: f32 = 0.32;
 
 static CONFIRM_UPLOAD: AtomicBool = AtomicBool::new(false);
 pub static RECORD_ID: AtomicI32 = AtomicI32::new(-1);
+
+fn safe_filename(name: String) -> String {
+    name
+        .trim()
+        .chars()
+        .filter(|&it| it.is_alphanumeric() || " !#$%&'()+,-.;=@[]^_`{}~".contains(it))
+        .collect()
+}
 
 fn create_music(clip: AudioClip) -> Result<Music> {
     let mut music = UI_AUDIO.with(|it| {
@@ -240,6 +248,12 @@ pub struct SongScene {
     need_show_menu: bool,
     should_delete: Arc<AtomicBool>,
     menu_options: Vec<&'static str>,
+    render_path: Option<String>,
+    render_config_dialog: RenderConfigDialog,
+    render_config: Option<((u32, u32), u32, i32)>,
+    replay_export: bool,
+    replay_preview: Arc<AtomicBool>,
+    replay_export_request: Arc<AtomicBool>,
 
     info_edit: Option<ChartInfoEdit>,
     edit_btn: RectButton,
@@ -424,6 +438,12 @@ impl SongScene {
             need_show_menu: false,
             should_delete: Arc::new(AtomicBool::default()),
             menu_options: Vec::new(),
+            render_path: None,
+            render_config_dialog: RenderConfigDialog::new(),
+            render_config: None,
+            replay_export: false,
+            replay_preview: Arc::new(AtomicBool::default()),
+            replay_export_request: Arc::new(AtomicBool::default()),
 
             info_edit: None,
             edit_btn: RectButton::new(),
@@ -776,6 +796,17 @@ impl SongScene {
         if self.info.id.is_some() {
             self.menu_options.push("rate");
         }
+        if self.local_path.is_some() {
+            self.menu_options.push("render");
+            if phire::scene::LAST_REPLAY
+                .lock()
+                .unwrap()
+                .as_ref()
+                .is_some_and(|(name, _)| *name == self.info.name)
+            {
+                self.menu_options.push("replay");
+            }
+        }
         if let Some(local_path) = &self.local_path {
             self.menu_options.push("exercise");
             self.menu_options.push("offset");
@@ -1071,7 +1102,7 @@ impl SongScene {
                     .await
                     .map(|it| NextScene::Overlay(Box::new(it)))
             } else {
-                LoadingScene::new(None, mode, info, &config, fs, player, upload_fn, update_fn)
+                LoadingScene::new(None, mode, info, &config, fs, player, upload_fn, update_fn, None)
                     .await
                     .map(|it| NextScene::Overlay(Box::new(it)))
             }
@@ -1452,6 +1483,9 @@ impl Scene for SongScene {
 
     fn touch(&mut self, tm: &mut TimeManager, touch: &Touch) -> Result<bool> {
         let t = tm.now() as f32;
+        if self.render_config_dialog.touch(touch, tm.real_time() as f32) {
+            return Ok(true);
+        }
         if self.scene_task.is_some()
             || self.save_task.is_some()
             || self.upload_task.is_some()
@@ -1608,6 +1642,40 @@ impl Scene for SongScene {
     }
 
     fn update(&mut self, tm: &mut TimeManager) -> Result<()> {
+        #[cfg(not(target_arch = "wasm32"))]
+        if let Some((id, file)) = take_file() {
+            if id == "render" {
+                if let Some(path) = self.local_path.clone() {
+                    self.render_path = Some(file);
+                    let _ = path;
+                }
+            } else {
+                phire::scene::return_file(id, file);
+            }
+        }
+        if let (Some(path), Some(local_path)) = (self.render_path.take(), self.local_path.clone()) {
+            let (resolution, fps, crf) = self.render_config.take().unwrap_or(((1280, 720), 60, 24));
+            if std::mem::take(&mut self.replay_export) {
+                self.next_scene = Some(NextScene::Overlay(Box::new(RenderScene::new_replay(local_path, Some(path), resolution, fps, crf))));
+            } else {
+                self.next_scene = Some(NextScene::Overlay(Box::new(RenderScene::new(local_path, path, resolution, fps, crf))));
+            }
+        }
+        if let Some(local_path) = self.local_path.clone() {
+            if self.replay_preview.swap(false, Ordering::SeqCst) {
+                self.next_scene = Some(NextScene::Overlay(Box::new(RenderScene::new_replay(local_path, None, (0, 0), 60, 24))));
+            } else if self.replay_export_request.swap(false, Ordering::SeqCst) {
+                self.replay_export = true;
+                self.render_config_dialog.show();
+            }
+        }
+        self.render_config_dialog.update();
+        if let Some(result) = self.render_config_dialog.result.take() {
+            if let Some(config) = result {
+                self.render_config = Some(config);
+                request_save_file("render", &format!("Phire-{}.mp4", safe_filename(self.info.name.clone())));
+            }
+        }
         UI_AUDIO.with(|it| it.borrow_mut().recover_if_needed())?;
         let t = tm.now() as f32;
         self.menu.update(t);
@@ -1766,6 +1834,24 @@ impl Scene for SongScene {
                 }
                 "unlock" => {
                     self.launch(GameMode::Normal, true)?;
+                }
+                "render" => {
+                    self.replay_export = false;
+                    self.render_config_dialog.show();
+                }
+                "replay" => {
+                    let preview_flag = Arc::clone(&self.replay_preview);
+                    let export_flag = Arc::clone(&self.replay_export_request);
+                    Dialog::plain(tl!("replay"), tl!("replay-select"))
+                        .buttons(vec![ttl!("cancel").into_owned(), tl!("replay-preview").into_owned(), tl!("replay-export").into_owned()])
+                        .listener(move |id| {
+                            if id == 1 {
+                                preview_flag.store(true, Ordering::SeqCst);
+                            } else if id == 2 {
+                                export_flag.store(true, Ordering::SeqCst);
+                            }
+                        })
+                        .show();
                 }
                 "review-approve" => {
                     let id = self.info.id.unwrap();
@@ -2328,6 +2414,7 @@ impl Scene for SongScene {
         let rt = tm.real_time() as f32;
         self.tags.render(ui, rt);
         self.rate_dialog.render(ui, rt);
+        self.render_config_dialog.render(ui, rt);
 
         self.sf.render(ui, t);
 

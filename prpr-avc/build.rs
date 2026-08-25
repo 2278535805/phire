@@ -4,8 +4,8 @@ use std::{
     time::Duration,
 };
 
-const BASE_URL: &str = "https://github.com/TeamFlos/prpr-avc-ffmpeg/releases/download";
-const EXPECTED_LIBS: &[&str] = &["libavcodec.a", "libavformat.a", "libavutil.a", "libswresample.a", "libswscale.a"];
+const BASE_URL: &str = "https://github.com/2278535805/prpr-avc-ffmpeg/releases/download";
+const EXPECTED_LIBS: &[&str] = &["libx264.a", "libavcodec.a", "libavformat.a", "libavutil.a", "libswresample.a", "libswscale.a"];
 
 fn main() {
     if let Err(err) = run() {
@@ -33,6 +33,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     ensure_static_lib(&libs_dir, &target, &version)?;
 
     println!("cargo:rustc-link-search={}", target_dir.display());
+    println!("cargo:rustc-link-lib=static=x264");
     println!("cargo:rustc-link-lib=z");
     if env::var("CARGO_CFG_WINDOWS").is_ok() {
         println!("cargo:rustc-link-lib=bcrypt");

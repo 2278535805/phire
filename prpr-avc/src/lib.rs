@@ -9,6 +9,7 @@ mod stream;
 mod swr;
 mod sws;
 mod video;
+mod writer;
 
 pub use avformat::*;
 pub use codec::*;
@@ -20,6 +21,7 @@ pub use stream::*;
 pub use swr::*;
 pub use sws::*;
 pub use video::*;
+pub use writer::*;
 
 use sasa::{AudioClip, Frame};
 

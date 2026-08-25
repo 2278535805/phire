@@ -17,7 +17,7 @@ use crate::{
     fs::FileSystem,
     gyro::GYRO,
     info::{ChartFormat, ChartInfo},
-    judge::Judge,
+    judge::{Judge, ReplayData},
     parse::{RPE_WIDTH, parse_extra, parse_pec, parse_phigros, parse_rpe},
     task::Task,
     time::TimeManager,
@@ -31,7 +31,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     io::Cursor,
     ops::{DerefMut, Range},
-    sync::Arc,
+    sync::{Arc, Mutex},
 };
 use tracing::{debug, warn};
 
@@ -45,6 +45,8 @@ use crate::inner::*;
 pub const WAIT_TIME: f64 = 0.5;
 const AFTER_TIME: f64 = 0.7;
 const PAUSE_BACKGROUND_ALPHA: f32 = 0.6;
+const TRAIL_DURATION: f64 = 0.6;
+const TRAIL_RADIUS: f32 = 0.035;
 
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -103,7 +105,11 @@ pub enum GameMode {
     Exercise,
     NoRetry,
     View,
+    Replay,
 }
+
+/// The replay data of the most recent qualifying play, consumed by the replay viewer.
+pub static LAST_REPLAY: Mutex<Option<(String, ReplayData)>> = Mutex::new(None);
 
 #[derive(Clone)]
 enum State {
@@ -154,6 +160,8 @@ pub struct GameScene {
     update_fn: Option<UpdateFn>,
 
     pub touch_points: Vec<(f32, f32)>,
+
+    pub replay_trails: Vec<(f64, Vec2)>,
 }
 
 macro_rules! reset {
@@ -478,6 +486,7 @@ impl GameScene {
         illustration: SafeTexture,
         upload_fn: Option<UploadFn>,
         update_fn: Option<UpdateFn>,
+        replay: Option<ReplayData>,
     ) -> Result<Self> {
         if mode == GameMode::TweakOffset {
             config.mods.insert(Mods::AUTOPLAY);
@@ -499,6 +508,14 @@ impl GameScene {
 
         let mut judge = Judge::new(&chart);
         judge.set_limits(config.perfect_judgment, config.good_judgment, config.bad_judgment);
+        if mode == GameMode::Replay {
+            match replay {
+                Some(data) => judge.load_replay(data),
+                None => bail!("replay data not provided"),
+            }
+        } else if mode == GameMode::Normal && !config.autoplay() {
+            judge.start_recording();
+        }
 
         let info_offset = info.offset;
         let offset = chart.offset + info_offset;
@@ -637,6 +654,8 @@ impl GameScene {
             update_fn,
 
             touch_points: Vec::new(),
+
+            replay_trails: Vec::new(),
         })
     }
 
@@ -802,7 +821,7 @@ impl GameScene {
         let lf = -aspect_ratio + margin;
         let bt = -top - eps * 3.5 + (1. - p) * 0.4;
         #[cfg(feature = "play")]
-        if res.config.health_mode.is_some() && matches!(self.mode, GameMode::Normal | GameMode::NoRetry | GameMode::View) {
+        if res.config.health_mode.is_some() && matches!(self.mode, GameMode::Normal | GameMode::NoRetry | GameMode::View | GameMode::Replay) {
             let w = aspect_ratio * 0.05;
             let y = -top - eps * 9.;
             let h = top * 2. + eps * 23.;
@@ -1393,7 +1412,10 @@ impl Scene for GameScene {
                             }
                         }
                     }
-                    let record = if self.res.config.autoplay() || (self.res.config.speed - 1.0).abs() > 1e-3 {
+                    let record = if self.res.config.autoplay()
+                        || (self.res.config.speed - 1.0).abs() > 1e-3
+                        || self.mode == GameMode::Replay
+                    {
                         None
                     } else {
                         Some(SimpleRecord {
@@ -1403,8 +1425,12 @@ impl Scene for GameScene {
                             track_complete,
                         })
                     };
+                    if self.judge.replay_recorder.is_some() {
+                        let data = self.judge.stop_recording(&self.chart, self.res.config.speed);
+                        *LAST_REPLAY.lock().unwrap() = Some((self.res.info.name.clone(), data));
+                    }
                     self.next_scene = match self.mode {
-                        GameMode::Normal | GameMode::Exercise | GameMode::NoRetry | GameMode::View => Some(NextScene::Overlay(Box::new(EndingScene::new(
+                        GameMode::Normal | GameMode::Exercise | GameMode::NoRetry | GameMode::View | GameMode::Replay => Some(NextScene::Overlay(Box::new(EndingScene::new(
                             self.res.background.clone(),
                             self.res.illustration.clone(),
                             self.res.player.clone(),
@@ -1444,9 +1470,20 @@ impl Scene for GameScene {
                 0.
             };
 
-            self.judge.update(&mut self.res, &mut self.chart, &mut self.bad_notes, -angle);
+            if self.mode == GameMode::Replay {
+                self.judge.update_replay(&mut self.res, &mut self.chart, &mut self.bad_notes);
+            } else {
+                self.judge.update(&mut self.res, &mut self.chart, &mut self.bad_notes, -angle);
+            }
+            if self.mode == GameMode::Replay {
+                let now = tm.now();
+                for it in self.judge.replay_touches() {
+                    self.replay_trails.push((now, it.position));
+                }
+                self.replay_trails.retain(|(t, _)| now - *t <= TRAIL_DURATION);
+            }
             #[cfg(feature = "play")]
-            if self.res.config.health_mode.is_some() && matches!(self.state, State::Playing) && matches!(self.mode, GameMode::Normal | GameMode::NoRetry | GameMode::View) {
+            if self.res.config.health_mode.is_some() && matches!(self.state, State::Playing) && matches!(self.mode, GameMode::Normal | GameMode::NoRetry | GameMode::View | GameMode::Replay) {
                 self.res.health.update(time as f32);
             }
             self.gl.quad_gl.viewport(None);
@@ -1700,6 +1737,21 @@ impl Scene for GameScene {
         self.gl.quad_gl.render_pass(chart_onto.as_ref().map(|it| it.render_pass.raw_miniquad_id()));
         self.chart.render(ui, res);
 
+        if self.mode == GameMode::Replay {
+            let now = tm.now();
+            for (t, pos) in &self.replay_trails {
+                let age = ((now - t) / TRAIL_DURATION).clamp(0., 1.) as f32;
+                let alpha = (1. - age) * 0.35;
+                let radius = TRAIL_RADIUS * (1. - age * 0.5);
+                ui.fill_circle(pos.x, pos.y, radius, Color::new(1., 0.45, 0.5, alpha));
+            }
+            let touches = self.judge.replay_touches();
+            for it in &touches {
+                ui.fill_circle(it.position.x, it.position.y, TRAIL_RADIUS * 1.6, Color::new(1., 0.45, 0.5, 0.3));
+                ui.fill_circle(it.position.x, it.position.y, TRAIL_RADIUS, Color::new(1., 1., 1., 0.55));
+            }
+        }
+
         self.gl.quad_gl.render_pass(
             res.chart_target
                 .as_ref()
@@ -1829,7 +1881,7 @@ impl Scene for GameScene {
             tm.speed = 1.0;
             tm.adjust_time = false;
             match self.mode {
-                GameMode::Normal | GameMode::Exercise | GameMode::NoRetry | GameMode::View => NextScene::Pop,
+                GameMode::Normal | GameMode::Exercise | GameMode::NoRetry | GameMode::View | GameMode::Replay => NextScene::Pop,
                 GameMode::TweakOffset => NextScene::PopWithResult(Box::new(None::<f32>)),
             }
         } else if let Some(next_scene) = self.next_scene.take() {

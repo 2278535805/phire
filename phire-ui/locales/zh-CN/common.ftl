@@ -3,6 +3,7 @@ del-confirm = 你确定要删除吗？
 del-confirm-content = 该操作不可被撤销。
 
 cancel = 取消
+back = 返回
 confirm = 确定
 
 release-to-refresh = 释放刷新
