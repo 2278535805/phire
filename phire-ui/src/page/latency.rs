@@ -3,6 +3,7 @@ phire::tl_file!("latency");
 use super::{Page, SharedState};
 use crate::get_data;
 use anyhow::Result;
+use lyon::{math::point, path::Path};
 use macroquad::prelude::*;
 use phire::{
     ext::{create_audio_manger, push_frame_time, screen_aspect, semi_black, RectExt},
@@ -281,9 +282,9 @@ impl LatencyPage {
 
         self.viz_sr = sr;
         self.viz_edges.clear();
+        self.viz_samples = samples.clone();
 
         if samples.len() < 1024 {
-            self.viz_samples = samples;
             self.result_ms = Some(-3.0);
             self.phase = AnalysisPhase::Done;
             self.measuring = false;
@@ -296,20 +297,17 @@ impl LatencyPage {
             apply_envelope_and_scan(&hp, sr_f, &mut self.viz_fast, &mut self.viz_slow, &mut self.viz_threshold);
 
         if events_from_hp.len() == 2 {
-            self.viz_samples = hp;
             self.viz_edges = events_from_hp;
         } else {
             let avg = average_filter(&hp);
             let events_from_avg =
                 apply_envelope_and_scan(&avg, sr_f, &mut self.viz_fast, &mut self.viz_slow, &mut self.viz_threshold);
             if events_from_avg.len() == 2 {
-                self.viz_samples = avg;
                 self.viz_edges = events_from_avg;
             } else {
                 let gentle_hp = high_pass(&samples, sr_f, 0.80);
                 let events_from_gentle =
                     apply_envelope_and_scan(&gentle_hp, sr_f, &mut self.viz_fast, &mut self.viz_slow, &mut self.viz_threshold);
-                self.viz_samples = gentle_hp;
                 self.viz_edges = events_from_gentle;
             }
         }
@@ -636,35 +634,47 @@ impl LatencyPage {
 
         ui.fill_rect(
             Rect::new(wf_x, mid_y - 0.001, wf_w, 0.002),
-            Color::new(0.25, 0.25, 0.30, c.a),
+            Color::new(0.10, 0.80, 0.10, c.a),
         );
 
         let n = self.viz_samples.len();
-        if n < 2 {
+        if n == 0 {
             return;
         }
 
-        let max_val = self.viz_samples.iter().cloned().fold(0.0f32, f32::max).max(0.001);
-        let max_points = 4800;
-        let step = (n as f32 / max_points as f32).max(1.0);
-
-        let mut prev_x = wf_x;
-        let mut prev_y = mid_y - (self.viz_samples[0] / max_val) * wf_h / 2.0;
-        let mut i: f32 = step;
-        while (i as usize) < n {
-            let idx = i as usize;
-            let x = wf_x + (idx as f32 / n as f32) * wf_w;
-            let y = mid_y - (self.viz_samples[idx] / max_val) * wf_h / 2.0;
-            let y = y.clamp(wf_y, wf_y + wf_h);
-            let line_w = (x - prev_x).max(0.001);
-            ui.fill_rect(
-                Rect::new(prev_x, prev_y.min(y), line_w, (y - prev_y).abs().max(0.001)),
-                Color::new(0.9, 0.9, 0.9, c.a),
-            );
-            prev_x = x;
-            prev_y = y;
-            i += step;
+        let max_val = self
+            .viz_samples
+            .iter()
+            .map(|sample| sample.abs())
+            .filter(|level| level.is_finite())
+            .fold(0.0f32, f32::max)
+            .max(0.001);
+        let point_count = n.min(480);
+        let mut levels = Vec::with_capacity(point_count + 1);
+        for point_index in 0..point_count {
+            let start = point_index * n / point_count;
+            let end = ((point_index + 1) * n / point_count).min(n).max(start + 1);
+            let level = self.viz_samples[start..end.max(start + 1)]
+                .iter()
+                .map(|sample| sample.abs())
+                .filter(|level| level.is_finite())
+                .fold(0.0f32, f32::max);
+            levels.push((level / max_val).clamp(0.0, 1.0));
         }
+        levels.push(*levels.last().unwrap_or(&0.0));
+
+        let mut path = Path::builder();
+        path.begin(point(wf_x, mid_y));
+        for (index, level) in levels.iter().enumerate() {
+            let x = wf_x + index as f32 / point_count as f32 * wf_w;
+            path.line_to(point(x, mid_y - level * wf_h / 2.0));
+        }
+        for (index, level) in levels.iter().enumerate().rev() {
+            let x = wf_x + index as f32 / point_count as f32 * wf_w;
+            path.line_to(point(x, mid_y + level * wf_h / 2.0));
+        }
+        path.end(true);
+        ui.fill_path(&path.build(), Color::new(0.9, 0.9, 0.9, c.a));
 
         for (k, &edge) in self.viz_edges.iter().enumerate() {
             if k >= 2 {
@@ -674,10 +684,10 @@ impl LatencyPage {
             let edge_color = if k == 0 {
                 Color::new(1.0, 0.8, 0.2, 0.9 * c.a)
             } else {
-                Color::new(1.0, 0.5, 0.8, 0.9 * c.a)
+                Color::new(1.0, 0.4, 0.8, 0.9 * c.a)
             };
             ui.fill_rect(
-                Rect::new(ex - 0.002, wf_y, 0.004, wf_h),
+                Rect::new(ex - 0.001, wf_y, 0.002, wf_h),
                 edge_color,
             );
             let time_ms = edge as f64 / self.viz_sr as f64 * 1000.0;
@@ -694,7 +704,7 @@ impl LatencyPage {
                 .no_baseline()
                 .color(edge_color);
             let r = text.measure();
-            text.ui.fill_path(&r.feather(0.005).rounded(0.01), Color::new(0.0, 0.0, 0.0, 0.25 * c.a));
+            text.ui.fill_path(&r.feather(0.005).rounded(0.01), Color::new(0.0, 0.0, 0.0, 0.3 * c.a));
             text.draw();
         }
     }
