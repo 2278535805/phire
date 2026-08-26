@@ -5,7 +5,7 @@ use crate::get_data;
 use anyhow::Result;
 use macroquad::prelude::*;
 use phire::{
-    ext::{create_audio_manger, push_frame_time, screen_aspect, semi_black},
+    ext::{create_audio_manger, push_frame_time, screen_aspect, semi_black, RectExt},
     time::TimeManager,
     ui::Ui,
 };
@@ -674,7 +674,7 @@ impl LatencyPage {
             let edge_color = if k == 0 {
                 Color::new(1.0, 0.8, 0.2, 0.9 * c.a)
             } else {
-                Color::new(0.1, 0.1, 0.9, 0.9 * c.a)
+                Color::new(1.0, 0.5, 0.8, 0.9 * c.a)
             };
             ui.fill_rect(
                 Rect::new(ex - 0.002, wf_y, 0.004, wf_h),
@@ -682,17 +682,20 @@ impl LatencyPage {
             );
             let time_ms = edge as f64 / self.viz_sr as f64 * 1000.0;
             let is_top = if k % 2 == 0 { true } else { false };
-            let lx = if ex > wf_x + wf_w / 2.0 {
-                ex - 0.15
+            let lx = if ex >= wf_x + wf_w {
+                wf_x + wf_w
             } else {
-                ex + 0.01
+                ex
             };
-            ui.text(format!("{:.2}ms", time_ms))
+            let mut text = ui.text(format!("{:.2}ms", time_ms))
                 .pos(lx, if is_top { wf_y - aspect * 0.03 } else { wf_y + wf_h + aspect * 0.03 })
                 .anchor(0.5, 0.5)
                 .size(0.25)
-                .color(edge_color)
-                .draw();
+                .no_baseline()
+                .color(edge_color);
+            let r = text.measure();
+            text.ui.fill_path(&r.feather(0.005).rounded(0.01), Color::new(0.0, 0.0, 0.0, 0.25 * c.a));
+            text.draw();
         }
     }
 }
