@@ -183,6 +183,7 @@ pub struct LatencyPage {
     viz_threshold: Vec<f32>,
     viz_edges: Vec<usize>,
     viz_sr: u32,
+    viz_start_pos: u64,
 
     measurement_count: usize,
     latency_sum: f64,
@@ -233,6 +234,7 @@ impl LatencyPage {
             viz_threshold: Vec::new(),
             viz_edges: Vec::new(),
             viz_sr: 48000,
+            viz_start_pos: 0,
             measurement_count: 0,
             latency_sum: 0.0,
             latency_min: f64::MAX,
@@ -281,6 +283,7 @@ impl LatencyPage {
         drop(buf);
 
         self.viz_sr = sr;
+        self.viz_start_pos = from;
         self.viz_edges.clear();
         self.viz_samples = samples.clone();
 
@@ -510,7 +513,14 @@ impl Page for LatencyPage {
 
                 y += aspect * 0.15;
 
-                if self.measurement_count >= 2 {
+                if self.unreliable {
+                    ui.text(tl!("unreliable"))
+                        .pos(ct.x, y)
+                        .anchor(0.5, 0.)
+                        .size(0.35)
+                        .color(Color::new(0.7, 0.1, 0.1, c.a))
+                        .draw();
+                } else if self.measurement_count >= 2 {
                     let avg = self.latency_sum / self.measurement_count as f64;
                         let variance: f64 = self.latency_values.iter().map(|&v| {
                             let d = v - avg;
@@ -533,7 +543,7 @@ impl Page for LatencyPage {
 
                     y += h + aspect * 0.02;
 
-                    if self.measurement_count > 3 && !self.unreliable {
+                    if self.measurement_count > 3 {
                         let diff = self.latency_max - self.latency_min;
                         if avg < 40. && diff < 10. {
                             ui.text(tl!("level-1"))
@@ -571,13 +581,6 @@ impl Page for LatencyPage {
                                 .color(Color::new(0.7, 0.1, 0.1, c.a))
                                 .draw();
                         }
-                    } else if self.unreliable {
-                        ui.text(tl!("unreliable"))
-                            .pos(ct.x, y)
-                            .anchor(0.5, 0.)
-                            .size(0.35)
-                            .color(Color::new(0.7, 0.1, 0.1, c.a))
-                            .draw();
                     } else {
                         ui.text(tl!("need-test"))
                             .pos(ct.x, y)
@@ -690,7 +693,9 @@ impl LatencyPage {
                 Rect::new(ex - 0.001, wf_y, 0.002, wf_h),
                 edge_color,
             );
-            let time_ms = edge as f64 / self.viz_sr as f64 * 1000.0;
+            let edge_pos = self.viz_start_pos.saturating_add(edge as u64);
+            let trigger_pos = self.trigger_pos.unwrap_or(self.viz_start_pos);
+            let time_ms = (edge_pos as i128 - trigger_pos as i128) as f64 / self.viz_sr as f64 * 1000.0;
             let is_top = if k % 2 == 0 { true } else { false };
             let lx = if ex >= wf_x + wf_w {
                 wf_x + wf_w
