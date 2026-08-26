@@ -483,7 +483,6 @@ impl Main {
         if !touches.is_empty() {
             let now = self.tm.now();
             let delta = (now - self.last_update_time) / touches.len() as f64;
-            let start_time = self.tm.start_time;
             let mut last_err = None;
             DIALOG.with(|it| -> Result<()> {
                 let mut index = 1;
@@ -499,7 +498,6 @@ impl Main {
                         false
                     } else {
                         drop(guard);
-                        self.tm.seek_to(t);
                         match self.scenes.last_mut().unwrap().touch(&mut self.tm, touch) {
                             Ok(val) => !val,
                             Err(err) => {
@@ -515,7 +513,6 @@ impl Main {
             if let Some(err) = last_err {
                 return Err(err);
             }
-            self.tm.start_time = start_time;
         }
         self.touches = Some(touches);
         self.last_update_time = self.tm.now();
