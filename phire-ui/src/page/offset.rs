@@ -52,7 +52,7 @@ impl OffsetPage {
         )?;
         let cali_hit = audio.create_sfx(AudioClip::new(load_file("cali_hit.ogg").await?)?, None)?;
 
-        let mut tm = TimeManager::new(1., true);
+        let tm = TimeManager::new(1., true);
 
         let respack = ResourcePack::from_path(config.res_pack_path.as_ref())
             .await

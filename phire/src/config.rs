@@ -46,7 +46,7 @@ impl fmt::Display for ChallengeModeColor {
 #[serde(default)]
 #[serde(rename_all = "camelCase")]
 pub struct Config {
-    #[serde(rename = "adjust_time_new")]
+    pub adjust_time: bool,
     pub auto_tweak_offset: bool,
     pub aggressive_chart: bool,
     pub aggressive_note: bool,
@@ -135,6 +135,7 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
+            adjust_time: true,
             #[cfg(not(feature = "play"))]
             auto_tweak_offset: false,
             #[cfg(feature = "play")]

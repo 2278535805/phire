@@ -1261,7 +1261,7 @@ impl Scene for GameScene {
         self.music = Self::new_music(&mut self.res)?;
         self.res.camera.render_target = target;
         tm.speed = self.res.config.speed as _;
-        tm.adjust_time = self.res.config.auto_tweak_offset;
+        tm.adjust_time = self.res.config.adjust_time;
         reset!(self, self.res, tm);
         set_camera(&self.res.camera);
         self.first_in = true;
