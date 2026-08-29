@@ -1395,51 +1395,38 @@ impl Judge {
             }
         }
         for (line_id, id) in judgements.into_iter() {
-            let mut note_transform = {
-                let line = &mut chart.lines[line_id];
-                let note = &mut line.notes[id as usize];
-                let nt = if matches!(note.kind, NoteKind::Hold { .. }) { t } else { note.time };
-                line.object.set_time(nt);
-                note.object.set_time(nt);
-                note.object.now(res)
-            };
             let line = &chart.lines[line_id];
             let note = &line.notes[id as usize];
-            if !note.above {
-                note_transform.append_nonuniform_scaling_mut(&Vector::new(1.0, -1.0));
-            }
             match note.kind {
-                NoteKind::Click => {
-                    let color = if let Some(color) = note.hit_fx_color.now_opt() {
-                        color
-                    } else {
-                        fx_color
-                    };
-                    self.inner.commit_diff(judge_type);
-                    if note.time >= res.config.play_start_time && !res.disable_hit_fx {
-                        res.with_model(line.now_transform(res, &chart.lines) * note_transform, |res| {
-                            res.emit_at_origin(note.rotation(line), color)
-                        });
-                        if !res.config.all_bad {
-                            note.hitsound.play(res)
-                        }
-                    }
-                }
                 NoteKind::Hold { .. } => {
                     self.inner.commit_diff(judge_type_hold);
                 }
                 _ => {
-                    let color = if let Some(color) = note.hit_fx_color.now_opt() {
-                        color
-                    } else {
-                        res.res_pack.info.fx_perfect()
-                    };
                     self.inner.commit_diff(judge_type);
                     if note.time >= res.config.play_start_time && !res.disable_hit_fx {
+                        let mut note_transform = {
+                            // let nt = if matches!(note.kind, NoteKind::Hold { .. }) { t } else { note.time };
+                            let nt = note.time;
+                            chart.lines[line_id].object.set_time(nt);
+                            chart.lines[line_id].notes[id as usize].object.set_time(nt);
+                            chart.lines[line_id].notes[id as usize].object.now(res)
+                        };
+                        let line = &chart.lines[line_id];
+                        let note = &line.notes[id as usize];
+                        if !note.above {
+                            note_transform.append_nonuniform_scaling_mut(&Vector::new(1.0, -1.0));
+                        }
+                        let color = if let Some(color) = note.hit_fx_color.now_opt() {
+                            color
+                        } else {
+                            if matches!(note.kind, NoteKind::Click { .. }) { fx_color } else { res.res_pack.info.fx_perfect() }
+                        };
                         res.with_model(line.now_transform(res, &chart.lines) * note_transform, |res| {
-                            res.emit_at_origin(note.rotation(line), color)
+                            res.emit_at_origin(note.rotation(&line), color)
                         });
-                        note.hitsound.play(res)
+                        if !(matches!(note.kind, NoteKind::Click { .. }) && res.config.all_bad) {
+                            note.hitsound.play(res)
+                        }
                     }
                 },
             };
