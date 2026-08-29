@@ -122,7 +122,9 @@ impl JudgeLineCache {
 
     pub(crate) fn reset(&mut self, notes: &mut Vec<Note>) {
         self.update_order.clear();
-        self.update_order.extend(0..notes.len() as u32);
+        self.update_order.extend(notes.iter().enumerate()
+            .filter_map(|(index, note)| (!note.dead()).then_some(index as u32))
+        );
         self.above_indices.clear();
         self.below_indices.clear();
         let mut index = 0;
