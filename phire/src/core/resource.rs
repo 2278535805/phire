@@ -451,12 +451,8 @@ impl NoteBuffer {
                 }
             }
         }
-        // 清空数据但保留缓冲区容量
         for meshes in self.0.values_mut() {
-            for mesh in meshes.iter_mut() {
-                mesh.0.clear();
-                mesh.1.clear();
-            }
+            meshes.clear();
         }
     }
 }
