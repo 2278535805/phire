@@ -414,41 +414,41 @@ unsafe fn string_from_java(env: *mut ndk_sys::JNIEnv, s: ndk_sys::jstring) -> St
 }
 
 #[cfg(target_os = "android")]
-#[no_mangle]
-pub extern "C" fn Java_quad_1native_QuadNative_libActivityOnPause(_: *mut std::ffi::c_void, _: *const std::ffi::c_void) {
+#[export_name = "Java_quad_1native_QuadNative_libActivityOnPause"]
+pub extern "system" fn activity_on_pause(_: *mut std::ffi::c_void, _: *const std::ffi::c_void) {
     anti_addiction_action("leaveGame", None);
     on_pause_resume(true);
 }
 
 #[cfg(target_os = "android")]
-#[no_mangle]
-pub extern "C" fn Java_quad_1native_QuadNative_libActivityOnResume(_: *mut std::ffi::c_void, _: *const std::ffi::c_void) {
+#[export_name = "Java_quad_1native_QuadNative_libActivityOnResume"]
+pub extern "system" fn activity_on_resume(_: *mut std::ffi::c_void, _: *const std::ffi::c_void) {
     anti_addiction_action("enterGame", None);
     on_pause_resume(false);
 }
 
 #[cfg(target_os = "android")]
-#[no_mangle]
-pub extern "C" fn Java_quad_1native_QuadNative_libActivityOnWindowFocusChanged(_: *mut std::ffi::c_void, _: *const std::ffi::c_void, has_focus: ndk_sys::jboolean) {
+#[export_name = "Java_quad_1native_QuadNative_libActivityOnWindowFocusChanged"]
+pub extern "system" fn activity_on_window_focus_changed(_: *mut std::ffi::c_void, _: *const std::ffi::c_void, has_focus: ndk_sys::jboolean) {
     on_focus_change(has_focus != 0);
 }
 
 #[cfg(target_os = "android")]
-#[no_mangle]
-pub extern "C" fn Java_quad_1native_QuadNative_libActivityOnDestroy(_: *mut std::ffi::c_void, _: *const std::ffi::c_void) {
+#[export_name = "Java_quad_1native_QuadNative_libActivityOnDestroy"]
+pub extern "system" fn activity_on_destroy(_: *mut std::ffi::c_void, _: *const std::ffi::c_void) {
     // std::process::exit(0);
 }
 
 #[cfg(target_os = "android")]
-#[no_mangle]
-pub unsafe extern "C" fn Java_quad_1native_QuadNative_setDataPath(_: *mut std::ffi::c_void, _: *const std::ffi::c_void, path: ndk_sys::jstring) {
+#[export_name = "Java_quad_1native_QuadNative_setDataPath"]
+pub unsafe extern "system" fn set_data_path(_: *mut std::ffi::c_void, _: *const std::ffi::c_void, path: ndk_sys::jstring) {
     let env = crate::miniquad::native::attach_jni_env();
     *DATA_PATH.lock().unwrap() = Some(string_from_java(env, path));
 }
 
 #[cfg(target_os = "android")]
-#[no_mangle]
-pub unsafe extern "C" fn Java_quad_1native_QuadNative_setTempDir(_: *mut std::ffi::c_void, _: *const std::ffi::c_void, path: ndk_sys::jstring) {
+#[export_name = "Java_quad_1native_QuadNative_setTempDir"]
+pub unsafe extern "system" fn set_temp_dir(_: *mut std::ffi::c_void, _: *const std::ffi::c_void, path: ndk_sys::jstring) {
     let env = crate::miniquad::native::attach_jni_env();
     let path = string_from_java(env, path);
     std::env::set_var("TMPDIR", path.clone());
@@ -456,14 +456,14 @@ pub unsafe extern "C" fn Java_quad_1native_QuadNative_setTempDir(_: *mut std::ff
 }
 
 #[cfg(target_os = "android")]
-#[no_mangle]
-pub unsafe extern "C" fn Java_quad_1native_QuadNative_setDpi(_: *mut std::ffi::c_void, _: *const std::ffi::c_void, dpi: ndk_sys::jint) {
+#[export_name = "Java_quad_1native_QuadNative_setDpi"]
+pub unsafe extern "system" fn set_dpi(_: *mut std::ffi::c_void, _: *const std::ffi::c_void, dpi: ndk_sys::jint) {
     phire::core::DPI_VALUE.store(dpi as _, std::sync::atomic::Ordering::SeqCst);
 }
 
 #[cfg(target_os = "android")]
-#[no_mangle]
-pub unsafe extern "C" fn Java_quad_1native_QuadNative_setChosenFile(_: *mut std::ffi::c_void, _: *const std::ffi::c_void, file: ndk_sys::jstring) {
+#[export_name = "Java_quad_1native_QuadNative_setChosenFile"]
+pub unsafe extern "system" fn set_chosen_file(_: *mut std::ffi::c_void, _: *const std::ffi::c_void, file: ndk_sys::jstring) {
     use phire::scene::CHOSEN_FILE;
 
     let env = crate::miniquad::native::attach_jni_env();
@@ -471,24 +471,24 @@ pub unsafe extern "C" fn Java_quad_1native_QuadNative_setChosenFile(_: *mut std:
 }
 
 #[cfg(target_os = "android")]
-#[no_mangle]
-pub unsafe extern "C" fn Java_quad_1native_QuadNative_markImport(_: *mut std::ffi::c_void, _: *const std::ffi::c_void) {
+#[export_name = "Java_quad_1native_QuadNative_markImport"]
+pub unsafe extern "system" fn set_import(_: *mut std::ffi::c_void, _: *const std::ffi::c_void) {
     use phire::scene::CHOSEN_FILE;
 
     CHOSEN_FILE.lock().unwrap().0 = Some("_import".to_owned());
 }
 
 #[cfg(target_os = "android")]
-#[no_mangle]
-pub unsafe extern "C" fn Java_quad_1native_QuadNative_markImportRespack(_: *mut std::ffi::c_void, _: *const std::ffi::c_void) {
+#[export_name = "Java_quad_1native_QuadNative_markImportRespack"]
+pub unsafe extern "system" fn set_import_respack(_: *mut std::ffi::c_void, _: *const std::ffi::c_void) {
     use phire::scene::CHOSEN_FILE;
 
     CHOSEN_FILE.lock().unwrap().0 = Some("_import_respack".to_owned());
 }
 
 #[cfg(target_os = "android")]
-#[no_mangle]
-pub unsafe extern "C" fn Java_quad_1native_QuadNative_setInputText(_: *mut std::ffi::c_void, _: *const std::ffi::c_void, text: ndk_sys::jstring) {
+#[export_name = "Java_quad_1native_QuadNative_setInputText"]
+pub unsafe extern "system" fn set_input_text(_: *mut std::ffi::c_void, _: *const std::ffi::c_void, text: ndk_sys::jstring) {
     use phire::scene::INPUT_TEXT;
 
     let env = crate::miniquad::native::attach_jni_env();
@@ -550,8 +550,8 @@ pub fn anti_addiction_action(action: &str, arg: Option<String>) {
 }
 
 #[cfg(target_os = "android")]
-#[no_mangle]
-pub unsafe extern "C" fn Java_quad_1native_QuadNative_antiAddictionCallback(
+#[export_name = "Java_quad_1native_QuadNative_antiAddictionCallback"]
+pub unsafe extern "system" fn anti_addiction_callback(
     _: *mut std::ffi::c_void,
     _: *const std::ffi::c_void,
     #[allow(dead_code)] code: ndk_sys::jint,
@@ -564,8 +564,8 @@ pub unsafe extern "C" fn Java_quad_1native_QuadNative_antiAddictionCallback(
 }
 
 #[cfg(target_os = "android")]
-#[no_mangle]
-pub unsafe extern "C" fn Java_quad_1native_QuadNative_updateGyroScope(
+#[export_name = "Java_quad_1native_QuadNative_updateGyroScope"]
+pub unsafe extern "system" fn update_gyro_scope(
     env: ndk_sys::JNIEnv,
     _class: ndk_sys::jclass,
     x: ndk_sys::jfloat,
@@ -581,8 +581,8 @@ pub unsafe extern "C" fn Java_quad_1native_QuadNative_updateGyroScope(
 }
 
 #[cfg(target_os = "android")]
-#[no_mangle]
-pub unsafe extern "C" fn Java_quad_1native_QuadNative_updateGravity(
+#[export_name = "Java_quad_1native_QuadNative_updateGravity"]
+pub unsafe extern "system" fn update_gravity(
     env: ndk_sys::JNIEnv,
     _class: ndk_sys::jclass,
     roll: ndk_sys::jfloat,
