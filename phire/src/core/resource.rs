@@ -519,7 +519,10 @@ pub struct Resource {
     pub health: Health,
 
     pub resolution_ratio: f32,
+    pub dynamic_resolution_ratio: f32,
     pub last_resolution_ratio: f32,
+    pub last_adjustment: f64,
+    pub best_fps: usize,
 }
 
 impl Resource {
@@ -683,13 +686,18 @@ impl Resource {
             health,
 
             resolution_ratio: 1.0,
+            dynamic_resolution_ratio: 1.0,
             last_resolution_ratio: 1.0,
+            last_adjustment: f64::MIN,
+            best_fps: 0,
         })
     }
 
     pub fn reset(&mut self) {
         self.judge_line_color = self.res_pack.info.line_perfect();
         self.emitter.emitter_square.config.rng = Some(Pcg32::seed_from_u64(RNG_SEED));
+        self.last_adjustment = f64::MIN;
+        self.best_fps = 0;
         #[cfg(feature = "play")]
         self.health.reset();
     }
