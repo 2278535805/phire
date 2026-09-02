@@ -615,14 +615,10 @@ impl Judge {
         )
     }
 
-    fn touch_transform(flip_x: bool, scale: f32, angle: f32, low_resolution_mode: bool) -> impl Fn(&mut Touch) {
+    fn touch_transform(flip_x: bool, scale: f32, angle: f32, resolution_ratio: f32) -> impl Fn(&mut Touch) {
         let vp = get_viewport();
         move |touch| {
-            let p = if low_resolution_mode {
-                vec2(touch.position.x / 2., touch.position.y / 2.)
-            } else {
-                touch.position
-            };
+            let p = vec2(touch.position.x * resolution_ratio, touch.position.y * resolution_ratio);
             touch.position = vec2(
                 (p.x - vp.0 as f32) / vp.2 as f32 * 2. - 1.,
                 ((p.y - (vp.3 as f32 - (vp.1 + vp.3) as f32)) / vp.3 as f32 * 2. - 1.) / (vp.2 as f32 / vp.3 as f32),
@@ -635,10 +631,10 @@ impl Judge {
         }
     }
 
-    pub fn get_touches(scale: f32, low_resolution_mode: bool) -> Vec<Touch> {
+    pub fn get_touches(scale: f32, resolution_ratio: f32) -> Vec<Touch> {
         TOUCHES.with(|it| {
             let guard = it.borrow();
-            let tr = Self::touch_transform(false, scale, 0., low_resolution_mode);
+            let tr = Self::touch_transform(false, scale, 0., resolution_ratio);
             guard
                 .touches
                 .iter()
@@ -701,7 +697,7 @@ impl Judge {
                     time: f64::NEG_INFINITY,
                 });
             }
-            let tr = Self::touch_transform(res.config.flip_x(), res.config.chart_ratio, angle, res.config.low_resolution_mode);
+            let tr = Self::touch_transform(res.config.flip_x(), res.config.chart_ratio, angle, res.resolution_ratio);
             touches
                 .into_iter()
                 .map(|mut it| {

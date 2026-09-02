@@ -292,6 +292,7 @@ struct GeneralList {
     mp_addr_input: InlineInputBox,
     anti_aliasing_btn: DRectButton,
     low_resolution_btn: DRectButton,
+    dynamic_resolution_btn: DRectButton,
     insecure_btn: DRectButton,
 }
 
@@ -318,6 +319,7 @@ impl GeneralList {
             mp_addr_input: InlineInputBox::new(),
             anti_aliasing_btn: DRectButton::new(),
             low_resolution_btn: DRectButton::new(),
+            dynamic_resolution_btn: DRectButton::new(),
             insecure_btn: DRectButton::new(),
         }
     }
@@ -371,6 +373,10 @@ impl GeneralList {
         }
         if self.low_resolution_btn.touch(touch, t) {
             config.low_resolution_mode ^= true;
+            return Ok(Some(true));
+        }
+        if self.dynamic_resolution_btn.touch(touch, t) {
+            config.dynamic_resolution_mode ^= true;
             return Ok(Some(true));
         }
         if self.insecure_btn.touch(touch, t) {
@@ -443,6 +449,10 @@ impl GeneralList {
         item! {
             render_title(ui, c, tl!("item-low-resolution"), None);
             render_switch(ui, rr, t, c, &mut self.low_resolution_btn, config.low_resolution_mode);
+        }
+        item! {
+            render_title(ui, c, tl!("item-dynamic-resolution"), None);
+            render_switch(ui, rr, t, c, &mut self.dynamic_resolution_btn, config.dynamic_resolution_mode);
         }
         item! {
             render_title(ui, c, tl!("item-insecure"), Some(tl!("item-insecure-sub")));

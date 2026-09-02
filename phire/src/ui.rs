@@ -599,7 +599,7 @@ impl<'a> Ui<'a> {
 
     pub fn ensure_touches(&mut self) -> &mut Vec<Touch> {
         if self.touches.is_none() {
-            self.touches = Some(Judge::get_touches(1.0, false));
+            self.touches = Some(Judge::get_touches(1.0, 1.0));
         }
         self.touches.as_mut().unwrap()
     }

@@ -170,6 +170,7 @@ impl Chart {
                 self.lines[*id].render(ui, res, &self.lines, &mut guard, &self.settings, *id);
             }
             drop(guard);
+            res.last_note_count = res.note_buffer.borrow().count();
             res.note_buffer.borrow_mut().draw_all();
             if res.config.aggressive_note {
                 res.note_pos_map.clear();

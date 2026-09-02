@@ -929,7 +929,7 @@ impl SongScene {
                                 reconnect_task = None;
                             }
                         }
-                        let points: Vec<_> = Judge::get_touches(1.0, false)
+                        let points: Vec<_> = Judge::get_touches(1.0, 1.0)
                             .into_iter()
                             .filter_map(|it| {
                                 if matches!(it.phase, TouchPhase::Stationary) {

@@ -710,7 +710,7 @@ impl GameScene {
             && !tm.paused()
             && self.pause_rewind.time.is_none()
             && matches!(self.state, State::Playing)
-            && Judge::get_touches(res.config.chart_ratio, res.config.low_resolution_mode).iter().any(|touch| {
+            && Judge::get_touches(res.config.chart_ratio, res.resolution_ratio).iter().any(|touch| {
                 touch.phase == TouchPhase::Started && {
                     let p = touch.position;
                     let p = Point::new(p.x * screen_aspect, p.y * screen_aspect);
@@ -942,7 +942,7 @@ impl GameScene {
             );
             if res.config.interactive {
                 let mut clicked = None;
-                for touch in Judge::get_touches(1.0, res.config.low_resolution_mode) {
+                for touch in Judge::get_touches(1.0, res.resolution_ratio) {
                     if touch.phase != TouchPhase::Started {
                         continue;
                     }
@@ -1026,7 +1026,7 @@ impl GameScene {
                 ui.fill_circle(st, -eh, rad, Color::new(0.66, 0.78, 0.98, 1.));
                 if self.exercise_press.is_none() {
                     let r = ui.rect_to_global(Rect::new(st, -eh, 0., 0.).feather(rad));
-                    self.exercise_press = Judge::get_touches(1.0, self.res.config.low_resolution_mode)
+                    self.exercise_press = Judge::get_touches(1.0, self.res.resolution_ratio)
                         .iter()
                         .find(|it| it.phase == TouchPhase::Started && r.contains(it.position))
                         .map(|it| (-1, it.id));
@@ -1035,7 +1035,7 @@ impl GameScene {
                 ui.fill_circle(en, eh, rad, Color::new(1., 0.34, 0.54, 1.));
                 if self.exercise_press.is_none() {
                     let r = ui.rect_to_global(Rect::new(en, eh, 0., 0.).feather(rad));
-                    self.exercise_press = Judge::get_touches(1.0, self.res.config.low_resolution_mode)
+                    self.exercise_press = Judge::get_touches(1.0, self.res.resolution_ratio)
                         .iter()
                         .find(|it| it.phase == TouchPhase::Started && r.contains(it.position))
                         .map(|it| (1, it.id));
@@ -1044,7 +1044,7 @@ impl GameScene {
                 ui.fill_circle(cur, 0., rad, Color::new(0.95, 0.95, 0.95, 1.));
                 if self.exercise_press.is_none() {
                     let r = ui.rect_to_global(Rect::new(cur, 0., 0., 0.).feather(rad));
-                    self.exercise_press = Judge::get_touches(1.0, self.res.config.low_resolution_mode)
+                    self.exercise_press = Judge::get_touches(1.0, self.res.resolution_ratio)
                         .iter()
                         .find(|it| it.phase == TouchPhase::Started && r.contains(it.position))
                         .map(|it| (0, it.id));
@@ -1054,7 +1054,7 @@ impl GameScene {
                     self.exercise_press = None;
                 }
                 if let Some((ctrl, id)) = &self.exercise_press {
-                    if let Some(touch) = Judge::get_touches(1.0, self.res.config.low_resolution_mode).iter().rfind(|it| it.id == *id) {
+                    if let Some(touch) = Judge::get_touches(1.0, self.res.resolution_ratio).iter().rfind(|it| it.id == *id) {
                         let x = touch.position.x;
                         let p = (x + hw) / (hw * 2.) * (self.res.track_length - sp) as f32 + sp as f32;
                         let p = if track_length - sp as f32 <= 3. || *ctrl == 0 {
@@ -1641,6 +1641,20 @@ impl Scene for GameScene {
             res.config.chart_ratio
         };
 
+        res.resolution_ratio = 1.0;
+        if res.config.dynamic_resolution_mode {
+            let min = (ui.viewport.3 / 2).min(720) as f32;
+            let ratio = (1.1 - res.last_note_count as f32 / 1000.).clamp(0.0, 1.0);
+            let ratio = (ratio * (ui.viewport.3 as f32 - min) + min) / ui.viewport.3 as f32;
+            if ratio < 0.99 {
+                res.resolution_ratio = ratio;
+            }
+            println!("note count: {}\t ratio: {:.2}", res.last_note_count, ratio);
+        }
+        if res.config.low_resolution_mode {
+            res.resolution_ratio *= 0.5;
+        }
+
         if res.update_size(ui.viewport) || self.mode == GameMode::View {
             set_camera(&res.camera);
         }
@@ -1648,11 +1662,7 @@ impl Scene for GameScene {
         let msaa = res.config.sample_count > 1;
 
         // camera setup
-        let ui_viewport = if res.config.low_resolution_mode {
-            (ui.viewport.0 / 2, ui.viewport.1 / 2, ui.viewport.2 / 2, ui.viewport.3 / 2)
-        } else {
-            ui.viewport
-        };
+        let ui_viewport = res.parse_resolution_ratio(ui.viewport);
         let vp = res.camera.viewport.unwrap_or(ui_viewport);
         let viewport_window = Some(ui_viewport);
         let viewport_chart = if res.chart_target.is_some() {
@@ -1691,7 +1701,7 @@ impl Scene for GameScene {
             //let alpha = res.alpha * (1. - dim_alpha) + dim_alpha;    
             let dim = Color::new(0.1, 0.1, 0.1, dim_alpha * res.alpha);
             let x_range = vp.0 as f32 / ui_viewport.2 as f32;
-            let y_range =  vp.1 as f32 / vp.3 as f32;
+            let y_range = vp.1 as f32 / vp.3 as f32;
             draw_rectangle(-1., -h,x_range * 2., h * 2., dim); // Left
             draw_rectangle(1., -h,-x_range * 2., h * 2., dim); // Right
             draw_rectangle(-1., -h,2., -y_range * 2., dim); // Top
@@ -1829,7 +1839,7 @@ impl Scene for GameScene {
                 self.tweak_offset(ui, Self::interactive(&self.res, &self.state), tm);
             }
             if self.res.config.touch_debug {
-                for touch in Judge::get_touches(1.0, self.res.config.low_resolution_mode) {
+                for touch in Judge::get_touches(1.0, self.res.resolution_ratio) {
                     ui.fill_circle(touch.position.x, touch.position.y, 0.04, Color { a: 0.4, ..RED });
                 }
             }
@@ -1845,7 +1855,7 @@ impl Scene for GameScene {
             self.overlay_ui(ui, tm)?;
         }
 
-        if !self.res.no_effect || msaa || self.res.config.low_resolution_mode {
+        if !self.res.no_effect || msaa || self.res.config.low_resolution_mode || self.res.config.dynamic_resolution_mode {
             // render the texture onto screen
             if let Some(target) = &self.res.chart_target {
                 self.gl.flush();

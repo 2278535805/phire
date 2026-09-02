@@ -21,6 +21,7 @@ item-lowq = 低画质模式
 item-lowq-sub = 建议在画面卡顿时启用
 item-anti-aliasing = 抗锯齿
 item-low-resolution = 低分辨率模式
+item-dynamic-resolution = 动态分辨率模式
 item-insecure = 不安全模式
 item-insecure-sub = 当无法使用在线功能时可尝试该功能。这会使得你的连接不安全！
 

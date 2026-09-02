@@ -455,6 +455,10 @@ impl NoteBuffer {
             meshes.clear();
         }
     }
+
+    pub fn count(&self) -> usize {
+        self.0.values().map(|meshes| meshes.iter().map(|it| it.0.len() / 4).sum::<usize>()).sum()
+    }
 }
 
 pub struct Resource {
@@ -500,6 +504,7 @@ pub struct Resource {
     pub no_effect: bool,
 
     pub note_buffer: RefCell<NoteBuffer>,
+    pub last_note_count: usize,
 
     pub model_stack: Vec<Matrix>,
     #[cfg(feature = "play")]
@@ -512,6 +517,9 @@ pub struct Resource {
     pub played_hitsounds_count: FxHashMap<String, u8>,
     #[cfg(feature = "play")]
     pub health: Health,
+
+    pub resolution_ratio: f32,
+    pub last_resolution_ratio: f32,
 }
 
 impl Resource {
@@ -660,6 +668,7 @@ impl Resource {
             no_effect,
 
             note_buffer: RefCell::new(NoteBuffer::default()),
+            last_note_count: 0,
 
             model_stack: vec![Matrix::identity()],
             #[cfg(feature = "play")]
@@ -672,6 +681,9 @@ impl Resource {
             played_hitsounds_count: hitsounds_map,
             #[cfg(feature = "play")]
             health,
+
+            resolution_ratio: 1.0,
+            last_resolution_ratio: 1.0,
         })
     }
 
@@ -720,17 +732,26 @@ impl Resource {
         );
     }
 
+    pub fn parse_resolution_ratio(&self, vp: (i32, i32, i32, i32)) -> (i32, i32, i32, i32) {
+        (
+            (vp.0 as f32 * self.resolution_ratio) as i32,
+            (vp.1 as f32 * self.resolution_ratio) as i32,
+            (vp.2 as f32 * self.resolution_ratio) as i32,
+            (vp.3 as f32 * self.resolution_ratio) as i32,
+        )
+    }
+
     pub fn update_size(&mut self, vp: (i32, i32, i32, i32)) -> bool {
-        if self.last_vp == vp {
+        if !self.config.dynamic_resolution_mode && self.last_vp == vp {
+            return false;
+        }
+        if self.config.dynamic_resolution_mode && self.last_vp == vp && self.last_resolution_ratio == self.resolution_ratio {
             return false;
         }
         self.last_vp = vp;
-        let vp = if self.config.low_resolution_mode {
-            (vp.0 / 2, vp.1 / 2, vp.2 / 2, vp.3 / 2)
-        } else {
-            vp
-        };
-        if !self.no_effect || self.config.sample_count != 1 || self.config.low_resolution_mode {
+        self.last_resolution_ratio = self.resolution_ratio;
+        let vp = self.parse_resolution_ratio(vp);
+        if !self.no_effect || self.config.sample_count != 1 || self.config.low_resolution_mode || self.config.dynamic_resolution_mode {
             self.chart_target = Some(MSRenderTarget::new((vp.2 as u32, vp.3 as u32), self.config.sample_count));
         }
         fn viewport(aspect_ratio: f32, (x, y, w, h): (i32, i32, i32, i32)) -> (i32, i32, i32, i32) {
