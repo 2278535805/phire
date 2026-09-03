@@ -1641,28 +1641,28 @@ impl Scene for GameScene {
             res.config.chart_ratio
         };
 
-        if res.config.dynamic_resolution_mode && !matches!(self.state, State::Starting) {
+        if res.config.dynamic_resolution_mode && !matches!(self.state, State::Starting) && res.frame_times.len() > 5 {
             let min = (ui.viewport.3 as f32 / 2.).min(480.) / ui.viewport.3 as f32;
             let now = tm.real_time();
             let fps = res.frame_times.len();
             let mut frame_times = res.frame_times.iter().rev();
-            let frame_time = frame_times
+            let now_fps_5 = 1. / frame_times
                 .next()
                 .zip(frame_times.nth(4))
                 .map_or(0., |(latest, oldest)| (latest - oldest) / 5.);
-            let now_fps = if frame_time > 0. {
-                1. / frame_time
-            } else {
-                0.
-            };
+            let mut frame_times = res.frame_times.iter().rev();
+            let now_fps_1 = 1. / frame_times
+                .next()
+                .zip(frame_times.next())
+                .map_or(0., |(latest, oldest)| latest - oldest);
             {
                 if fps > 0 {
                     res.best_fps = res.best_fps.max(fps);
-                    if now_fps as f64 / res.best_fps as f64 <= 0.8 {
-                        res.dynamic_resolution_ratio = (res.dynamic_resolution_ratio - 0.05).max(min);
-                        res.last_adjustment = now;
-                    } else if now_fps as f64 / res.best_fps as f64 <= 0.5 {
+                    if now_fps_5 as f64 / res.best_fps as f64 <= 0.5 || now_fps_1 as f64 / res.best_fps as f64 <= 0.2 {
                         res.dynamic_resolution_ratio = min;
+                        res.last_adjustment = now;
+                    } else if now_fps_5 as f64 / res.best_fps as f64 <= 0.8 {
+                        res.dynamic_resolution_ratio = (res.dynamic_resolution_ratio - 0.05).max(min);
                         res.last_adjustment = now;
                     } else if fps as f64 / res.best_fps as f64 >= 0.9 && now - res.last_adjustment > 0.1 {
                         res.dynamic_resolution_ratio = (res.dynamic_resolution_ratio + 0.05).min(1.0);
