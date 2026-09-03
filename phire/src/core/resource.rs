@@ -742,10 +742,10 @@ impl Resource {
 
     pub fn parse_resolution_ratio(&self, vp: (i32, i32, i32, i32)) -> (i32, i32, i32, i32) {
         (
-            (vp.0 as f32 * self.resolution_ratio) as i32,
-            (vp.1 as f32 * self.resolution_ratio) as i32,
-            (vp.2 as f32 * self.resolution_ratio) as i32,
-            (vp.3 as f32 * self.resolution_ratio) as i32,
+            (vp.0 as f32 * self.resolution_ratio).floor() as i32,
+            (vp.1 as f32 * self.resolution_ratio).floor() as i32,
+            (vp.2 as f32 * self.resolution_ratio).floor() as i32,
+            (vp.3 as f32 * self.resolution_ratio).floor() as i32,
         )
     }
 
