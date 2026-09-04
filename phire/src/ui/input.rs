@@ -69,6 +69,7 @@ struct State {
     up_arrow_time: Option<f64>,
     down_arrow_time: Option<f64>,
     last_cursor_time: Option<f64>,
+    last_preedit_time: Option<f64>,
 
     cursor_positions: Vec<(f32, f32)>,
     scroll_x: f32,
@@ -522,6 +523,11 @@ impl InlineInputBox {
         let ctrl = is_key_down(KeyCode::LeftControl) || is_key_down(KeyCode::RightControl);
         let shift = is_key_down(KeyCode::LeftShift) || is_key_down(KeyCode::RightShift);
 
+        if get_ime_preedit().is_some() {
+            self.state.last_preedit_time = Some(now);
+            return;
+        }
+
         // Arrow keys
         if is_key_pressed(KeyCode::Right) {
             self.state.right_arrow_time = Some(now);
@@ -651,7 +657,9 @@ impl InlineInputBox {
             }
         }
 
-        if is_key_pressed(KeyCode::Backspace) {
+        let block_remove = self.state.last_preedit_time.map_or(false, |t| now - t < 0.25);
+
+        if is_key_pressed(KeyCode::Backspace) && !block_remove {
             self.state.backspace_time = Some(now);
             if !self.delete_selection() {
                 if self.state.cursor > 0 {
@@ -680,7 +688,7 @@ impl InlineInputBox {
         }
 
         // Delete key
-        if is_key_pressed(KeyCode::Delete) {
+        if is_key_pressed(KeyCode::Delete) && !block_remove {
             self.state.delete_time = Some(now);
             if !self.delete_selection() {
                 if self.state.cursor < self.buffer.chars().count() {
