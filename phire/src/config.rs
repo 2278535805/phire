@@ -46,14 +46,13 @@ impl fmt::Display for ChallengeModeColor {
 #[serde(default)]
 #[serde(rename_all = "camelCase")]
 pub struct Config {
-    #[serde(rename = "adjust_time_new")]
+    pub adjust_time: bool,
     pub auto_tweak_offset: bool,
     pub aggressive_chart: bool,
     pub aggressive_note: bool,
     pub aggressive_particle: bool,
     pub aspect_ratio: Option<f32>,
     pub audio_buffer_size: Option<u32>,
-    #[cfg(target_os = "android")]
     pub audio_compatibility: bool,
     pub challenge_color: ChallengeModeColor,
     pub challenge_rank: u32,
@@ -72,13 +71,15 @@ pub struct Config {
     pub offline_mode: bool,
     #[cfg(any(target_os = "windows", target_os = "linux"))]
     pub fullscreen_mode: bool,
-    pub offset: f64,
+    pub audio_offset: f64,
+    pub judge_offset: f64,
     pub particle: bool,
     pub player_name: String,
     pub player_rks: f32,
     pub res_pack_path: Option<String>,
     pub sample_count: u32,
     pub low_resolution_mode: bool,
+    pub dynamic_resolution_mode: bool,
     pub show_acc: bool,
     pub speed: f32,
     pub touch_debug: bool,
@@ -95,8 +96,7 @@ pub struct Config {
 
     // for compatibility
     pub autoplay: Option<bool>,
-
-    pub judge_offset: f64,
+    pub autoplay_judge_offset: f64,
 
     pub perfect_judgment: f64,
     pub good_judgment: f64,
@@ -136,6 +136,7 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
+            adjust_time: true,
             #[cfg(not(feature = "play"))]
             auto_tweak_offset: false,
             #[cfg(feature = "play")]
@@ -148,8 +149,10 @@ impl Default for Config {
             aggressive_particle: false,
             aspect_ratio: None,
             audio_buffer_size: None,
-            #[cfg(target_os = "android")]
+            #[cfg(not(target_os = "windows"))]
             audio_compatibility: false,
+            #[cfg(target_os = "windows")]
+            audio_compatibility: true,
             challenge_color: ChallengeModeColor::Rainbow,
             challenge_rank: 3,
             chart_debug_line: 0.0,
@@ -167,13 +170,15 @@ impl Default for Config {
             offline_mode: false,
             #[cfg(any(target_os = "windows", target_os = "linux"))]
             fullscreen_mode: false,
-            offset: 0.0,
+            audio_offset: 0.0,
+            judge_offset: 0.0,
             particle: true,
             player_name: "Guest".to_string(),
             player_rks: 15.,
             res_pack_path: None,
             sample_count: 1,
             low_resolution_mode: false,
+            dynamic_resolution_mode: false,
             show_acc: false,
             speed: 1.0,
             touch_debug: false,
@@ -189,8 +194,7 @@ impl Default for Config {
             enter_animation: true,
 
             autoplay: None,
-
-            judge_offset: 0.,
+            autoplay_judge_offset: 0.,
 
             perfect_judgment: 0.08,
             good_judgment: 0.16,

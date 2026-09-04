@@ -9,6 +9,7 @@ mod stream;
 mod swr;
 mod sws;
 mod video;
+mod writer;
 
 pub use avformat::*;
 pub use codec::*;
@@ -20,10 +21,11 @@ pub use stream::*;
 pub use swr::*;
 pub use sws::*;
 pub use video::*;
+pub use writer::*;
 
 use sasa::{AudioClip, Frame};
 
-const AUDIO_DECODING_SAMPLE_RATE: i32 = 48000;
+const AUDIO_DECODING_SAMPLE_RATE: i32 = 44100;
 
 #[repr(transparent)]
 struct OwnedPtr<T>(pub *mut T);
@@ -72,13 +74,11 @@ pub fn demux_audio(file: impl AsRef<str>) -> Result<Option<AudioClip>> {
     let params = stream.codec_params();
     let in_format = AudioStreamFormat {
         channel_layout: params.channel_layout(),
-        channels: params.channels(),
         sample_fmt: params.sample_format(),
         sample_rate: params.sample_rate(),
     };
     let out_format = AudioStreamFormat {
-        channel_layout: ffi::AV_CH_LAYOUT_STEREO,
-        channels: 2,
+        channel_layout: ffi::AV_CHANNEL_LAYOUT_STEREO,
         sample_fmt: ffi::AV_SAMPLE_FMT_FLT,
         sample_rate: AUDIO_DECODING_SAMPLE_RATE,
     };
@@ -111,8 +111,11 @@ pub fn demux_audio(file: impl AsRef<str>) -> Result<Option<AudioClip>> {
                     out_samples as _,
                 )?;
                 frames.truncate(end + out_samples);
+
+                in_frame.unref();
             }
         }
+        packet.unref();
     }
 
     Ok(Some(AudioClip::from_raw(frames, AUDIO_DECODING_SAMPLE_RATE as _)))

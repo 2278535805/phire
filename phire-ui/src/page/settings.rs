@@ -1,7 +1,8 @@
 phire::tl_file!("settings");
 
-use super::{NextPage, OffsetPage, Page, PlayConfigurationPage, SharedState};
-use crate::{get_data, get_data_mut, popup::ChooseButton, save_data, scene::BGM_VOLUME_UPDATED, sync_data};
+
+use super::{NextPage, OffsetPage, Page, PlayConfigurationPage, SharedState, LatencyPage};
+use crate::{get_data, get_data_mut, page::{OutputPage, offset::OffsetMode}, popup::ChooseButton, save_data, scene::BGM_VOLUME_UPDATED, sync_data};
 use anyhow::Result;
 use macroquad::prelude::*;
 use phire::{
@@ -12,6 +13,8 @@ use phire::{
     ui::{DRectButton, InlineInputBox, Scroll, Slider, Ui},
 };
 use std::{borrow::Cow, net::ToSocketAddrs, sync::atomic::Ordering};
+#[cfg(target_os = "android")]
+use crate::{check_record_audio_permission, request_record_audio_permission};
 
 const ITEM_HEIGHT: f32 = 0.15;
 
@@ -137,6 +140,9 @@ impl Page for SettingsPage {
     }
 
     fn update(&mut self, s: &mut SharedState) -> Result<()> {
+        if !s.fader.transiting() {
+            let _ = phire::ui::UI_AUDIO.with(|it| it.borrow_mut().recover_if_needed());
+        }
         let t = s.t;
         if match self.chosen {
             SettingListType::General => self.list_general.update(t)?,
@@ -286,6 +292,7 @@ struct GeneralList {
     mp_addr_input: InlineInputBox,
     anti_aliasing_btn: DRectButton,
     low_resolution_btn: DRectButton,
+    dynamic_resolution_btn: DRectButton,
     insecure_btn: DRectButton,
 }
 
@@ -312,6 +319,7 @@ impl GeneralList {
             mp_addr_input: InlineInputBox::new(),
             anti_aliasing_btn: DRectButton::new(),
             low_resolution_btn: DRectButton::new(),
+            dynamic_resolution_btn: DRectButton::new(),
             insecure_btn: DRectButton::new(),
         }
     }
@@ -365,6 +373,10 @@ impl GeneralList {
         }
         if self.low_resolution_btn.touch(touch, t) {
             config.low_resolution_mode ^= true;
+            return Ok(Some(true));
+        }
+        if self.dynamic_resolution_btn.touch(touch, t) {
+            config.dynamic_resolution_mode ^= true;
             return Ok(Some(true));
         }
         if self.insecure_btn.touch(touch, t) {
@@ -439,6 +451,10 @@ impl GeneralList {
             render_switch(ui, rr, t, c, &mut self.low_resolution_btn, config.low_resolution_mode);
         }
         item! {
+            render_title(ui, c, tl!("item-dynamic-resolution"), None);
+            render_switch(ui, rr, t, c, &mut self.dynamic_resolution_btn, config.dynamic_resolution_mode);
+        }
+        item! {
             render_title(ui, c, tl!("item-insecure"), Some(tl!("item-insecure-sub")));
             render_switch(ui, rr, t, c, &mut self.insecure_btn, data.accept_invalid_cert);
         }
@@ -453,11 +469,15 @@ struct AudioList {
     sfx_slider: Slider,
     bgm_slider: Slider,
     high_precision_sfx_btn: DRectButton,
-    cali_btn: DRectButton,
-    #[cfg(target_os = "android")]
-    audio_compatibility_btn: DRectButton,
+    audio_offset_btn: DRectButton,
+    judge_offset_btn: DRectButton,
+
+    latency_btn: DRectButton,
+    output_btn: DRectButton,
 
     cali_task: LocalTask<Result<OffsetPage>>,
+    latency_task: LocalTask<Result<LatencyPage>>,
+    output_task: LocalTask<Result<OutputPage>>,
     next_page: Option<NextPage>,
 }
 
@@ -469,11 +489,14 @@ impl AudioList {
             sfx_slider: Slider::new(0.0..2.0, 0.05),
             bgm_slider: Slider::new(0.0..2.0, 0.05),
             high_precision_sfx_btn: DRectButton::new(),
-            cali_btn: DRectButton::new(),
-            #[cfg(target_os = "android")]
-            audio_compatibility_btn: DRectButton::new(),
+            judge_offset_btn: DRectButton::new(),
+            audio_offset_btn: DRectButton::new(),
+            latency_btn: DRectButton::new(),
+            output_btn: DRectButton::new(),
 
             cali_task: None,
+            latency_task: None,
+            output_task: None,
             next_page: None,
         }
     }
@@ -506,14 +529,27 @@ impl AudioList {
             config.high_precision_sfx ^= true;
             return Ok(Some(true));
         }
-        if self.cali_btn.touch(touch, t) {
-            self.cali_task = Some(Box::pin(OffsetPage::new()));
+        if self.judge_offset_btn.touch(touch, t) {
+            self.cali_task = Some(Box::pin(OffsetPage::new(OffsetMode::Judge)));
             return Ok(Some(false));
         }
-        #[cfg(target_os = "android")]
-        if self.audio_compatibility_btn.touch(touch, t) {
-            config.audio_compatibility ^= true;
-            return Ok(Some(true));
+        if self.audio_offset_btn.touch(touch, t) {
+            self.cali_task = Some(Box::pin(OffsetPage::new(OffsetMode::Audio)));
+            return Ok(Some(false));
+        }
+        if self.latency_btn.touch(touch, t) {
+            #[cfg(target_os = "android")]
+            if !check_record_audio_permission() {
+                request_record_audio_permission();
+                show_message(tl!("permission-required")).error();
+                return Ok(Some(false));
+            }
+            self.latency_task = Some(Box::pin(LatencyPage::new()));
+            return Ok(Some(false));
+        }
+        if self.output_btn.touch(touch, t) {
+            self.output_task = Some(Box::pin(OutputPage::new()));
+            return Ok(Some(false));
         }
         Ok(None)
     }
@@ -528,6 +564,28 @@ impl AudioList {
                     }
                 }
                 self.cali_task = None;
+            }
+        }
+        if let Some(task) = &mut self.latency_task {
+            if let Some(res) = poll_future(task.as_mut()) {
+                match res {
+                    Err(err) => show_error(err.context(tl!("load-latency-failed"))),
+                    Ok(page) => {
+                        self.next_page = Some(NextPage::Overlay(Box::new(page)));
+                    }
+                }
+                self.latency_task = None;
+            }
+        }
+        if let Some(task) = &mut self.output_task {
+            if let Some(res) = poll_future(task.as_mut()) {
+                match res {
+                    Err(err) => show_error(err.context(tl!("load-output-failed"))),
+                    Ok(page) => {
+                        self.next_page = Some(NextPage::Overlay(Box::new(page)));
+                    }
+                }
+                self.output_task = None;
             }
         }
         Ok(false)
@@ -568,13 +626,20 @@ impl AudioList {
             render_switch(ui, rr, t, c, &mut self.high_precision_sfx_btn, config.high_precision_sfx);
         }
         item! {
-            render_title(ui, c, tl!("item-cali"), None);
-            self.cali_btn.render_text(ui, rr, t, c.a, format!("{:.0}ms", config.offset * 1000.), 0.5, true);
+            render_title(ui, c, tl!("item-judge-offset"), None);
+            self.judge_offset_btn.render_text(ui, rr, t, c.a, format!("{:.0}ms", config.judge_offset * 1000.), 0.5, true);
         }
-        #[cfg(target_os = "android")]
         item! {
-            render_title(ui, c, tl!("item-audio-compatibility"), None);
-            render_switch(ui, rr, t, c, &mut self.audio_compatibility_btn, config.audio_compatibility);
+            render_title(ui, c, tl!("item-audio-offset"), None);
+            self.audio_offset_btn.render_text(ui, rr, t, c.a, format!("{:.0}ms", config.audio_offset * 1000.), 0.5, true);
+        }
+        item! {
+            render_title(ui, c, tl!("item-latency-test"), None);
+            self.latency_btn.render_text(ui, rr, t, c.a, ">", 0.5, true);
+        }
+        item! {
+            render_title(ui, c, tl!("item-output-test"), None);
+            self.output_btn.render_text(ui, rr, t, c.a, ">", 0.5, true);
         }
         (w, h)
     }
@@ -758,7 +823,7 @@ struct OtherList {
     rotation_mode: DRectButton,
     #[cfg(feature = "play")]
     shake_play_mode_btn: DRectButton,
-
+    #[cfg(feature = "play")]
     health_mode_btn: DRectButton,
     health_mode_input: InlineInputBox,
 }
@@ -805,6 +870,7 @@ impl OtherList {
             return Ok(Some(false));
         }
 
+        #[cfg(feature = "play")]
         if self.health_mode_input.is_active() {
             if self.health_mode_input.touch(touch) {
                 let text = self.health_mode_input.confirm();

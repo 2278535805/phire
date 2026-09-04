@@ -2,7 +2,7 @@ use crate::{
     client::{Chart, File},
     dir, get_data, get_data_mut,
     icons::Icons,
-    page::{ChartItem, Fader, Illustration},
+    page::{local_illustration, ChartItem, Fader, Illustration},
     save_data,
     scene::{SongScene, MP_PANEL},
 };
@@ -223,22 +223,20 @@ impl ChartsView {
                             continue;
                         }
                         let download_path = chart.info.guid.clone().map(|it| format!("download/{it}"));
+                        let local_path = if let Some(path) = &chart.local_path {
+                            Some(path.clone())
+                        } else if let Some(path) = download_path.clone() {
+                            if Path::new(&format!("{}/{path}", dir::charts()?)).exists() { Some(path) } else { None }
+                        } else {
+                            None
+                        };
+                        let local_illu = local_path
+                            .clone()
+                            .map(|path| local_illustration(path, chart.illu.texture.0.clone(), true));
                         let scene = SongScene::new(
                             chart.clone(),
-                            None,
-                            if let Some(path) = &chart.local_path {
-                                Some(path.clone())
-                            } else {
-                                if let Some(path) = download_path.clone() {
-                                    if Path::new(&format!("{}/{path}", dir::charts()?)).exists() {
-                                        Some(path)
-                                    } else {
-                                        None
-                                    }
-                                } else {
-                                    None
-                                }
-                            },
+                            local_illu,
+                            local_path,
                             Arc::clone(&self.icons),
                             self.rank_icons.clone(),
                             get_data()

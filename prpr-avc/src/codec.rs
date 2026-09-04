@@ -15,12 +15,8 @@ impl AVCodecParamsRef {
         unsafe { (*self.0).codec_id }
     }
 
-    pub fn channel_layout(&self) -> u64 {
-        unsafe { (*self.0).channel_layout }
-    }
-
-    pub fn channels(&self) -> i32 {
-        unsafe { (*self.0).channels }
+    pub fn channel_layout(&self) -> ffi::AVChannelLayout {
+        unsafe { (*self.0).ch_layout }
     }
 
     pub fn sample_format(&self) -> ffi::AVSampleFormat {
@@ -46,12 +42,39 @@ impl AVCodecRef {
             }
         }
     }
+
+    pub fn find_encoder(id: ffi::AVCodecID) -> Result<Self> {
+        unsafe {
+            let ptr = ffi::avcodec_find_encoder(id);
+            if ptr.is_null() {
+                Err(Error::EncoderNotFound(id))
+            } else {
+                Ok(Self(ptr))
+            }
+        }
+    }
+
+    pub fn find_encoder_by_name(name: &str) -> Result<Self> {
+        let name = std::ffi::CString::new(name).map_err(|_| Error::InvalidPath)?;
+        unsafe {
+            let ptr = ffi::avcodec_find_encoder_by_name(name.as_ptr());
+            if ptr.is_null() {
+                Err(Error::EncoderNotFound(ffi::AV_CODEC_ID_H264))
+            } else {
+                Ok(Self(ptr))
+            }
+        }
+    }
+
+    pub(crate) fn raw(&self) -> *const ffi::AVCodec {
+        self.0
+    }
 }
 
 static EXPECTED_PIX_FMT_EDIT: Mutex<()> = Mutex::new(());
 static EXPECTED_PIX_FMT: AtomicI32 = AtomicI32::new(-1);
 
-unsafe fn get_format(s: *mut ffi::AVCodecContext, fmt: *const ffi::AVPixelFormat) -> ffi::AVPixelFormat {
+unsafe extern "C" fn get_format(s: *mut ffi::AVCodecContext, fmt: *const ffi::AVPixelFormat) -> ffi::AVPixelFormat {
     let expected = EXPECTED_PIX_FMT.load(Ordering::SeqCst);
     for i in 0.. {
         let fmt = fmt.add(i).read();
@@ -68,14 +91,23 @@ unsafe fn get_format(s: *mut ffi::AVCodecContext, fmt: *const ffi::AVPixelFormat
 #[repr(transparent)]
 pub struct AVCodecContext(OwnedPtr<ffi::AVCodecContext>);
 impl AVCodecContext {
+    pub(crate) fn new_unconfigured(codec: AVCodecRef) -> Result<Self> {
+        unsafe {
+            let ptr = OwnedPtr::new(ffi::avcodec_alloc_context3(codec.0)).ok_or(Error::AllocationFailed)?;
+            Ok(Self(ptr))
+        }
+    }
+
     pub fn new(codec: AVCodecRef, par: AVCodecParamsRef, expected: Option<AVPixelFormat>) -> Result<Self> {
         unsafe {
             let mut ptr = OwnedPtr::new(ffi::avcodec_alloc_context3(codec.0)).ok_or(Error::AllocationFailed)?;
             handle(ffi::avcodec_parameters_to_context(ptr.0, par.0))?;
+            handle(ffi::av_opt_set_int(ptr.0.cast(), c"threads".as_ptr(), 0, 0))?;
+            handle(ffi::av_opt_set_int(ptr.0.cast(), c"thread_type".as_ptr(), (ffi::FF_THREAD_FRAME | ffi::FF_THREAD_SLICE) as i64, 0))?;
             let _guard = expected.map(|pix_fmt| {
                 let guard = EXPECTED_PIX_FMT_EDIT.lock().unwrap();
                 EXPECTED_PIX_FMT.store(pix_fmt.0, Ordering::SeqCst);
-                ptr.as_mut().get_format = get_format as _;
+                ptr.as_mut().get_format = Some(get_format);
                 guard
             });
             handle(ffi::avcodec_open2(ptr.0, codec.0, null_mut()))?;
@@ -117,6 +149,30 @@ impl AVCodecContext {
     pub fn flush_buffers(&mut self) {
         unsafe {
             ffi::avcodec_flush_buffers(self.0 .0);
+        }
+    }
+
+    pub(crate) fn raw_mut(&mut self) -> *mut ffi::AVCodecContext {
+        self.0 .0
+    }
+
+    pub(crate) fn raw(&self) -> *const ffi::AVCodecContext {
+        self.0 .0
+    }
+
+    pub fn send_frame(&mut self, frame: Option<&AVFrame>) -> Result<()> {
+        unsafe { handle(ffi::avcodec_send_frame(self.0 .0, frame.map_or(std::ptr::null(), |it| it.0 .0))) }
+    }
+
+    pub fn receive_packet(&mut self, packet: &mut AVPacket) -> Result<bool> {
+        unsafe {
+            match handle(ffi::avcodec_receive_packet(self.0 .0, packet.0 .0)) {
+                Err(Error::TryAgain) | Err(Error::EndOfFile) => Ok(false),
+                x => {
+                    x?;
+                    Ok(true)
+                }
+            }
         }
     }
 }

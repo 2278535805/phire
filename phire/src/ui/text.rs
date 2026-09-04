@@ -305,29 +305,23 @@ impl TextPainter {
         let mut flushed = false;
         loop {
             match self.brush.process_queued(
-                |rect, tex_data| unsafe {
+                |rect, tex_data| {
                     if !flushed {
-                        get_internal_gl().flush();
+                        unsafe { get_internal_gl() }.flush();
                         flushed = true;
                     }
-                    use miniquad::gl::*;
-                    let miniquad::RawId::OpenGl(raw_id) = get_internal_gl().quad_context.texture_raw_id(self.cache_texture.raw_miniquad_id());
-                    glBindTexture(GL_TEXTURE_2D, raw_id);
                     self.data_buffer.clear();
                     self.data_buffer.reserve(tex_data.len() * 4);
                     for alpha in tex_data {
                         self.data_buffer.extend_from_slice(&[255, 255, 255, *alpha]);
                     }
-                    glTexSubImage2D(
-                        GL_TEXTURE_2D,
-                        0,
+                    unsafe { get_internal_gl() }.quad_context.texture_update_part(
+                        self.cache_texture.raw_miniquad_id(),
                         rect.min[0] as _,
                         rect.min[1] as _,
                         rect.width() as _,
                         rect.height() as _,
-                        GL_RGBA,
-                        GL_UNSIGNED_BYTE,
-                        self.data_buffer.as_ptr() as _,
+                        &self.data_buffer,
                     );
                 },
                 |vertex| {

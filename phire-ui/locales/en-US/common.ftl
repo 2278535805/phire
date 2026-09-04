@@ -3,6 +3,7 @@ del-confirm = Are you sure to delete?
 del-confirm-content = This operation can not be undone.
 
 cancel = Cancel
+back = Back
 confirm = Confirm
 
 release-to-refresh = Release to refresh
@@ -15,3 +16,5 @@ chart-special = Special
 chart-unstable = Unstable
 
 list-empty = Nothing here
+
+start-audio-failed = Failed to play audio

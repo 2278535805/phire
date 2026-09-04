@@ -41,7 +41,7 @@ use lyon::{
 use macroquad::prelude::*;
 use miniquad::PassAction;
 use sasa::{AudioManager, PlaySfxParams, Sfx};
-use std::{borrow::Cow, cell::RefCell, collections::HashMap, ops::Range};
+use std::{borrow::Cow, cell::RefCell, collections::HashMap, mem::ManuallyDrop, ops::Range};
 
 #[derive(Default, Clone, Copy)]
 pub struct Gravity(u8);
@@ -599,7 +599,7 @@ impl<'a> Ui<'a> {
 
     pub fn ensure_touches(&mut self) -> &mut Vec<Touch> {
         if self.touches.is_none() {
-            self.touches = Some(Judge::get_touches(1.0, false));
+            self.touches = Some(Judge::get_touches(1.0, 1.0));
         }
         self.touches.as_mut().unwrap()
     }
@@ -1198,21 +1198,27 @@ fn build_audio() -> AudioManager {
             performance_mode: PerformanceMode::None,
             sharing_mode: SharingMode::Shared,
             usage: Usage::Media,
+            mmap: false,
             ..Default::default()
         }))
-        .unwrap()
     }
-    #[cfg(not(target_os = "android"))]
+    #[cfg(target_os = "windows")]
+    {
+        use sasa::backend::wasapi::*;
+        AudioManager::new(WasapiBackend::new(WasapiSettings {
+            stream_category: StreamCategory::Media,
+            ..Default::default()
+        }))
+    }
+    #[cfg(not(any(target_os = "android", target_os = "windows")))]
     {
         use sasa::backend::cpal::*;
         AudioManager::new(CpalBackend::new(CpalSettings::default()))
-        .unwrap()
-        //.expect("Failed to play sound")
     }
 }
 
 thread_local! {
-    pub static UI_AUDIO: RefCell<AudioManager> = RefCell::new(build_audio());
+    pub static UI_AUDIO: ManuallyDrop<RefCell<AudioManager>> = ManuallyDrop::new(RefCell::new(build_audio()));
     pub static UI_BTN_HITSOUND_LARGE: RefCell<Option<Sfx>> = const { RefCell::new(None) };
     pub static UI_BTN_HITSOUND: RefCell<Option<Sfx>> = const { RefCell::new(None) };
     pub static UI_SWITCH_SOUND: RefCell<Option<Sfx>> = const { RefCell::new(None) };

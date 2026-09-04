@@ -1,16 +1,17 @@
+crate::tl_file!("scene" tl);
 use crate::{
     config::Config,
     core::{Matrix, Point, Vector},
     ui::Ui,
 };
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 use image::DynamicImage;
 use lyon::{
     math::Box2D,
     path::{builder::BorderRadii, Path, Winding},
 };
 use macroquad::prelude::*;
-use macroquad::miniquad::{gl::GLenum, BlendFactor, BlendState, BlendValue, CompareFunc, Equation, PrimitiveType, StencilFaceState, StencilOp, StencilState};
+use macroquad::miniquad::{BlendFactor, BlendState, BlendValue, CompareFunc, Equation, PrimitiveType, StencilFaceState, StencilOp, StencilState};
 use once_cell::sync::Lazy;
 use ordered_float::{Float, NotNan};
 use regex::Regex;
@@ -91,24 +92,15 @@ impl SafeTexture {
     }
 
     pub fn with_mipmap(self) -> Self {
-        let macroquad::miniquad::RawId::OpenGl(id) = unsafe { get_internal_gl().quad_context.texture_raw_id(self.0 .0.raw_miniquad_id()) };
-        unsafe {
-            use macroquad::miniquad::gl::*;
-            glBindTexture(GL_TEXTURE_2D, id);
-            glGenerateMipmap(GL_TEXTURE_2D);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR as _);
-        }
+        let ctx = unsafe { get_internal_gl() }.quad_context;
+        ctx.texture_generate_mipmaps(self.0 .0.raw_miniquad_id());
+        ctx.texture_set_filter(self.0 .0.raw_miniquad_id(), FilterMode::Linear, miniquad::MipmapFilterMode::Linear);
         self
     }
 
-    pub fn with_filter(self, filter: GLenum) -> Self{
-        let macroquad::miniquad::RawId::OpenGl(id) = unsafe { get_internal_gl().quad_context.texture_raw_id(self.0 .0.raw_miniquad_id()) };
-        unsafe {
-            use macroquad::miniquad::gl::*;
-            glBindTexture(GL_TEXTURE_2D, id);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filter as _);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filter as _);
-        }
+    pub fn with_filter(self, filter: FilterMode) -> Self{
+        let ctx = unsafe { get_internal_gl() }.quad_context;
+        ctx.texture_set_filter(self.0 .0.raw_miniquad_id(), filter, miniquad::MipmapFilterMode::None);
         self
     }
 
@@ -424,21 +416,48 @@ pub fn create_audio_manger(config: &Config) -> Result<AudioManager> {
         } else {
             Usage::Game
         };
-        AudioManager::new(OboeBackend::new(OboeSettings {
+        let mmap = if config.audio_compatibility {
+            false
+        } else {
+            true
+        };
+        let mut audio = AudioManager::new(OboeBackend::new(OboeSettings {
             buffer_size: config.audio_buffer_size,
             performance_mode: PerformanceMode::LowLatency,
             sharing_mode,
             usage,
+            mmap,
             ..Default::default()
-        }))
+        }));
+        audio.start().context(tl!("start-audio-failed"))?;
+        Ok(audio)
     }
-    #[cfg(not(target_os = "android"))]
+    #[cfg(target_os = "windows")]
+    {
+        use sasa::backend::wasapi::*;
+        let share_mode = if config.audio_compatibility {
+            ShareMode::Shared
+        } else {
+            ShareMode::Exclusive
+        };
+        let mut audio = AudioManager::new(WasapiBackend::new(WasapiSettings {
+            buffer_size: config.audio_buffer_size,
+            share_mode,
+            stream_category: StreamCategory::Media,
+            stream_option: Some(StreamOption::Raw),
+            ..Default::default()
+        }));
+        audio.start().context(tl!("start-audio-failed"))?;
+        Ok(audio)
+    }
+    #[cfg(not(any(target_os = "android", target_os = "windows")))]
     {
         use sasa::backend::cpal::*;
-        Ok(AudioManager::new(CpalBackend::new(CpalSettings {
+        let mut audio = AudioManager::new(CpalBackend::new(CpalSettings {
             buffer_size: config.audio_buffer_size,
-        }))
-        .expect("Failed to play sound"))
+        }));
+        audio.start().context(tl!("start-audio-failed"))?;
+        Ok(audio)
     }
 }
 
@@ -637,9 +656,12 @@ pub fn validate_combo(value: &String) -> bool {
     RE_VALIDATE.is_match(&filtered_value)
 }
 
-pub fn get_latency(audio: &AudioManager, frame_times: &VecDeque<f64>) -> f64 {
-    let avg_frame_time = (1.0 / frame_times.len() as f64).min(0.25);
-    audio.estimate_latency().max(0.) + avg_frame_time
+pub fn get_frame_latency(frame_times: &VecDeque<f64>) -> f64 {
+    (1.0 / frame_times.len() as f64).min(0.25)
+}
+
+pub fn get_audio_latency(audio: &AudioManager) -> f64 {
+    audio.estimate_latency().max(0.)
 }
 
 pub fn push_frame_time(frame_times: &mut VecDeque<f64>, real_time: f64) {

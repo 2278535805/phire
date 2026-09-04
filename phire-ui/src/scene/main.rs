@@ -173,8 +173,9 @@ impl Scene for MainScene {
 
     fn enter(&mut self, tm: &mut TimeManager, _target: Option<RenderTarget>) -> Result<()> {
         crate::character::check_erosion_trigger();
+        let _ = UI_AUDIO.with(|it| it.borrow_mut().recover_if_needed());
         if let Some(bgm) = &mut self.bgm {
-            let _ = bgm.fade_in(1.3);
+            bgm.fade_in(1.3)?;
         }
         self.state.update(tm);
         self.pages.last_mut().unwrap().enter(&mut self.state)?;
@@ -187,9 +188,12 @@ impl Scene for MainScene {
     }
 
     fn resume(&mut self, tm: &mut TimeManager) -> Result<()> {
+        let _ = UI_AUDIO.with(|it| it.borrow_mut().start());
         tm.resume();
-        if let Some(bgm) = &mut self.bgm {
-            bgm.play()?;
+        if self.pages.last().unwrap().can_play_bgm() {
+            if let Some(bgm) = &mut self.bgm {
+                bgm.fade_in(0.5)?;
+            }
         }
         self.state.update(tm);
         self.pages.last_mut().unwrap().resume()?;
@@ -197,12 +201,29 @@ impl Scene for MainScene {
     }
 
     fn pause(&mut self, tm: &mut TimeManager) -> Result<()> {
-        tm.pause();
         if let Some(bgm) = &mut self.bgm {
             bgm.pause()?;
         }
+        let _ = UI_AUDIO.with(|it| it.borrow_mut().close())?;
+        tm.pause();
         self.state.update(tm);
         self.pages.last_mut().unwrap().pause()?;
+        Ok(())
+    }
+
+    fn focus_resume(&mut self, _tm: &mut TimeManager) -> Result<()> {
+        if self.pages.last().unwrap().can_play_bgm() {
+            if let Some(bgm) = &mut self.bgm {
+                let _ = bgm.fade_in(0.5);
+            }
+        }
+        Ok(())
+    }
+
+    fn focus_pause(&mut self, _tm: &mut TimeManager) -> Result<()> {
+        if let Some(bgm) = &mut self.bgm {
+            let _ = bgm.fade_out(0.5);
+        }
         Ok(())
     }
 
@@ -292,7 +313,6 @@ impl Scene for MainScene {
     }
 
     fn update(&mut self, tm: &mut TimeManager) -> Result<()> {
-        UI_AUDIO.with(|it| it.borrow_mut().recover_if_needed())?;
         if get_data().config.mp_enabled {
             MP_PANEL.with(|it| {
                 if let Some(panel) = it.borrow_mut().as_mut() {

@@ -187,6 +187,9 @@ impl Page for HomePage {
     }
 
     fn update(&mut self, s: &mut SharedState) -> Result<()> {
+        if !s.fader.transiting() {
+            let _ = phire::ui::UI_AUDIO.with(|it| it.borrow_mut().recover_if_needed());
+        }
         let t = s.t;
         self.login.update(t)?;
         if let Some(task) = &mut self.update_task {
@@ -200,7 +203,7 @@ impl Page for HomePage {
                             let _ = save_data();
                             sync_data();
                         }
-                        show_error(err.context(tl!("failed-to-update")));
+                        show_error(err.context(tl!("failed-to-update") + "\n" + tl!("try-login-again")));
                     }
                     Ok(val) => {
                         get_data_mut().me = Some(val);

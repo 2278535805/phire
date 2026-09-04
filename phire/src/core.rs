@@ -29,10 +29,10 @@ mod object;
 pub use object::{CtrlObject, Object};
 
 mod render;
-pub use render::{copy_fbo, internal_id, MSRenderTarget};
+pub use render::{copy_fbo, internal_id, read_render_target_rgba8, MSRenderTarget};
 
 mod resource;
-pub use resource::{NoteStyle, ParticleEmitter, ResPackInfo, Resource, ResourcePack, SfxMap, BUFFER_SIZE, DPI_VALUE};
+pub use resource::{NoteStyle, ParticleEmitter, ResPackInfo, Resource, ResourcePack, SfxMap, MAX_SIZE, MAX_SIZE_LIMIT, BUFFER_SIZE, DPI_VALUE};
 
 mod smooth;
 pub use smooth::Smooth;
@@ -49,6 +49,8 @@ mod video;
 pub use video::{Video, VideoAttach};
 #[cfg(feature = "video")]
 pub use prpr_avc::demux_audio;
+#[cfg(feature = "video")]
+pub use prpr_avc::VideoWriter;
 
 pub fn init_assets() {
     if let Ok(mut exe) = std::env::current_exe() {

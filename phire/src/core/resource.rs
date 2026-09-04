@@ -10,7 +10,7 @@ use crate::{
 };
 use anyhow::{bail, Context, Result};
 use macroquad::prelude::*;
-use macroquad::miniquad::{gl::{GLuint, GL_LINEAR}, TextureId, TextureWrap};
+use macroquad::miniquad::{gl::GLuint, TextureId, TextureWrap};
 use sasa::{AudioClip, AudioManager, Sfx};
 use serde::Deserialize;
 use std::{cell::RefCell, collections::{BTreeMap, HashMap, VecDeque}, ops::DerefMut, path::Path, sync::atomic::AtomicU32};
@@ -19,8 +19,14 @@ use rand_pcg::{
     rand_core::SeedableRng
 };
 use rustc_hash::FxHashMap;
-
-pub const MAX_SIZE: usize = 1024; // needs tweaking
+#[cfg(not(feature = "play"))]
+pub const MAX_SIZE: usize = 1024;
+#[cfg(feature = "play")]
+pub const MAX_SIZE: usize = 256;
+#[cfg(not(feature = "play"))]
+pub const MAX_SIZE_LIMIT: usize = 20480;
+#[cfg(feature = "play")]
+pub const MAX_SIZE_LIMIT: usize = 4096;
 pub static DPI_VALUE: AtomicU32 = AtomicU32::new(250);
 pub const BUFFER_SIZE: usize = 1024;
 pub const RNG_SEED: u64 = 0x7a_61_6b_6f;
@@ -219,7 +225,7 @@ impl ResourcePack {
     pub async fn load(fs: &mut dyn FileSystem) -> Result<Self> {
         macro_rules! load_tex {
             ($path:literal) => {
-                SafeTexture::from(image::load_from_memory(&fs.load_file($path).await.with_context(|| format!("Missing {}", $path))?)?).with_filter(GL_LINEAR)
+                SafeTexture::from(image::load_from_memory(&fs.load_file($path).await.with_context(|| format!("Missing {}", $path))?)?).with_filter(FilterMode::Linear)
             };
         }
         let info: ResPackInfo = serde_yaml::from_str(&String::from_utf8(fs.load_file("info.yml").await.context("Missing info.yml")?)?)?;
@@ -445,13 +451,13 @@ impl NoteBuffer {
                 }
             }
         }
-        // 清空数据但保留缓冲区容量
         for meshes in self.0.values_mut() {
-            for mesh in meshes.iter_mut() {
-                mesh.0.clear();
-                mesh.1.clear();
-            }
+            meshes.clear();
         }
+    }
+
+    pub fn count(&self) -> usize {
+        self.0.values().map(|meshes| meshes.iter().map(|it| it.0.len() / 4).sum::<usize>()).sum()
     }
 }
 
@@ -498,6 +504,7 @@ pub struct Resource {
     pub no_effect: bool,
 
     pub note_buffer: RefCell<NoteBuffer>,
+    pub last_note_count: usize,
 
     pub model_stack: Vec<Matrix>,
     #[cfg(feature = "play")]
@@ -510,6 +517,12 @@ pub struct Resource {
     pub played_hitsounds_count: FxHashMap<String, u8>,
     #[cfg(feature = "play")]
     pub health: Health,
+
+    pub resolution_ratio: f32,
+    pub dynamic_resolution_ratio: f32,
+    pub last_resolution_ratio: f32,
+    pub last_adjustment: f64,
+    pub best_fps: usize,
 }
 
 impl Resource {
@@ -563,6 +576,8 @@ impl Resource {
         background: SafeTexture,
         illustration: SafeTexture,
         has_no_effect: bool,
+        max_note: usize,
+        sfx_buffer_size: Option<(usize, usize, usize)>
     ) -> Result<Self> {
         macro_rules! load_tex {
             ($path:literal) => {
@@ -583,10 +598,10 @@ impl Resource {
         let music = AudioClip::new(fs.load_file(&info.music).await?)?;
         let music_length = music.length();
         let track_length = config.play_end_time.unwrap_or(music_length).min(music_length);
-        let buffer_size = Some(BUFFER_SIZE);
-        let sfx_click = audio.create_sfx(res_pack.sfx_click.clone(), buffer_size)?;
-        let sfx_drag = audio.create_sfx(res_pack.sfx_drag.clone(), buffer_size)?;
-        let sfx_flick = audio.create_sfx(res_pack.sfx_flick.clone(), buffer_size)?;
+        let (sfx_click_buffer, sfx_drag_buffer, sfx_flick_buffer) = sfx_buffer_size.unwrap_or((BUFFER_SIZE, BUFFER_SIZE, BUFFER_SIZE));
+        let sfx_click = audio.create_sfx(res_pack.sfx_click.clone(), Some(sfx_click_buffer))?;
+        let sfx_drag = audio.create_sfx(res_pack.sfx_drag.clone(), Some(sfx_drag_buffer))?;
+        let sfx_flick = audio.create_sfx(res_pack.sfx_flick.clone(), Some(sfx_flick_buffer))?;
         let frame_times: VecDeque<f64> = VecDeque::new();
 
         let aspect_ratio = config.aspect_ratio.unwrap_or(info.aspect_ratio);
@@ -612,7 +627,7 @@ impl Resource {
         #[cfg(feature = "play")]
         let health = Health::new(config.health_mode.clone().unwrap_or_default());
 
-        macroquad::window::gl_set_drawcall_buffer_capacity(MAX_SIZE * 4, MAX_SIZE * 6);
+        macroquad::window::gl_set_drawcall_buffer_capacity(max_note * 4, max_note * 6);
         Ok(Self {
             config,
             info,
@@ -656,6 +671,7 @@ impl Resource {
             no_effect,
 
             note_buffer: RefCell::new(NoteBuffer::default()),
+            last_note_count: 0,
 
             model_stack: vec![Matrix::identity()],
             #[cfg(feature = "play")]
@@ -668,12 +684,20 @@ impl Resource {
             played_hitsounds_count: hitsounds_map,
             #[cfg(feature = "play")]
             health,
+
+            resolution_ratio: 1.0,
+            dynamic_resolution_ratio: 1.0,
+            last_resolution_ratio: 1.0,
+            last_adjustment: f64::MIN,
+            best_fps: 0,
         })
     }
 
     pub fn reset(&mut self) {
         self.judge_line_color = self.res_pack.info.line_perfect();
         self.emitter.emitter_square.config.rng = Some(Pcg32::seed_from_u64(RNG_SEED));
+        self.last_adjustment = f64::MIN;
+        self.best_fps = 0;
         #[cfg(feature = "play")]
         self.health.reset();
     }
@@ -716,17 +740,26 @@ impl Resource {
         );
     }
 
+    pub fn parse_resolution_ratio(&self, vp: (i32, i32, i32, i32)) -> (i32, i32, i32, i32) {
+        (
+            (vp.0 as f32 * self.resolution_ratio).floor() as i32,
+            (vp.1 as f32 * self.resolution_ratio).floor() as i32,
+            (vp.2 as f32 * self.resolution_ratio).floor() as i32,
+            (vp.3 as f32 * self.resolution_ratio).floor() as i32,
+        )
+    }
+
     pub fn update_size(&mut self, vp: (i32, i32, i32, i32)) -> bool {
-        if self.last_vp == vp {
+        if !self.config.dynamic_resolution_mode && self.last_vp == vp {
+            return false;
+        }
+        if self.config.dynamic_resolution_mode && self.last_vp == vp && self.last_resolution_ratio == self.resolution_ratio {
             return false;
         }
         self.last_vp = vp;
-        let vp = if self.config.low_resolution_mode {
-            (vp.0 / 2, vp.1 / 2, vp.2 / 2, vp.3 / 2)
-        } else {
-            vp
-        };
-        if !self.no_effect || self.config.sample_count != 1 || self.config.low_resolution_mode {
+        self.last_resolution_ratio = self.resolution_ratio;
+        let vp = self.parse_resolution_ratio(vp);
+        if !self.no_effect || self.config.sample_count != 1 || self.config.low_resolution_mode || self.config.dynamic_resolution_mode {
             self.chart_target = Some(MSRenderTarget::new((vp.2 as u32, vp.3 as u32), self.config.sample_count));
         }
         fn viewport(aspect_ratio: f32, (x, y, w, h): (i32, i32, i32, i32)) -> (i32, i32, i32, i32) {

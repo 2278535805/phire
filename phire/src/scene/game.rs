@@ -12,12 +12,12 @@ use super::{
 use crate::{
     bin::BinaryReader,
     config::{Config, Mods},
-    core::{BUFFER_SIZE, BadNote, Chart, ChartExtra, Effect, Point, Resource, UIElement, HitSound},
-    ext::{RectExt, SafeTexture, draw_text_aligned, draw_text_aligned_opt_width, ease_in_out_quartic, get_latency, parse_time, push_frame_time, screen_aspect, semi_white, validate_combo},
+    core::{MAX_SIZE, MAX_SIZE_LIMIT, BUFFER_SIZE, BadNote, Chart, ChartExtra, Effect, Point, Resource, UIElement, HitSound},
+    ext::{RectExt, SafeTexture, draw_text_aligned, draw_text_aligned_opt_width, ease_in_out_quartic, get_audio_latency, parse_time, push_frame_time, screen_aspect, semi_white, validate_combo},
     fs::FileSystem,
     gyro::GYRO,
     info::{ChartFormat, ChartInfo},
-    judge::Judge,
+    judge::{Judge, ReplayData},
     parse::{RPE_WIDTH, parse_extra, parse_pec, parse_phigros, parse_rpe},
     task::Task,
     time::TimeManager,
@@ -31,7 +31,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     io::Cursor,
     ops::{DerefMut, Range},
-    sync::Arc,
+    sync::{Arc, Mutex},
 };
 use tracing::{debug, warn};
 
@@ -45,6 +45,8 @@ use crate::inner::*;
 pub const WAIT_TIME: f64 = 0.5;
 const AFTER_TIME: f64 = 0.7;
 const PAUSE_BACKGROUND_ALPHA: f32 = 0.6;
+const TRAIL_DURATION: f64 = 0.6;
+const TRAIL_RADIUS: f32 = 0.035;
 
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -103,7 +105,11 @@ pub enum GameMode {
     Exercise,
     NoRetry,
     View,
+    Replay,
 }
+
+/// The replay data of the most recent qualifying play, consumed by the replay viewer.
+pub static LAST_REPLAY: Mutex<Option<(String, ReplayData)>> = Mutex::new(None);
 
 #[derive(Clone)]
 enum State {
@@ -154,6 +160,8 @@ pub struct GameScene {
     update_fn: Option<UpdateFn>,
 
     pub touch_points: Vec<(f32, f32)>,
+
+    pub replay_trails: Vec<(f64, Vec2)>,
 }
 
 macro_rules! reset {
@@ -204,6 +212,42 @@ fn round_to_step(v: f64, step: f64) -> f64 {
     (v / step).round() * step
 }
 
+fn parse_note_list(time_list: Vec<f64>, mix_opt: bool) -> Vec<f64> {
+    let mut time_list = time_list;
+    time_list.sort_by(|a, b| {
+        let a = round_to_step(*a, 0.005);
+        let b = round_to_step(*b, 0.005);
+        a.total_cmp(&b)
+    });
+
+    if !mix_opt {
+        return time_list;
+    }
+
+    let step = 1. / 1000.;
+
+    let mut kept_sfx_list = Vec::with_capacity(time_list.len());
+    let mut last_t = 0.0;
+    let mut count = 0;
+
+    for &pos in time_list.iter() {
+        let round_pos = round_to_step(pos, step);
+        let is_new_group = round_pos != last_t;
+
+        if is_new_group {
+            last_t = round_pos;
+            count = 1;
+            kept_sfx_list.push(round_pos);
+        } else {
+            if count < 3 {
+                kept_sfx_list.push(round_pos);
+                count += 1;
+            }
+        }
+    }
+    kept_sfx_list
+}
+
 fn parse_sfx_list(sfx_list: Vec<f64>, mix_opt: bool) -> Vec<f64> {
     let mut sfx_list = sfx_list;
     sfx_list.sort_by(|a, b| {
@@ -212,25 +256,31 @@ fn parse_sfx_list(sfx_list: Vec<f64>, mix_opt: bool) -> Vec<f64> {
         a.total_cmp(&b)
     });
 
-    if !mix_opt {
-        return sfx_list;
-    }
+    let step = if mix_opt { 0.001 } else { 0.0005 };
 
     let mut kept_sfx_list = Vec::with_capacity(sfx_list.len());
     let mut last_t = 0.0;
     let mut count = 0;
 
     for &pos in sfx_list.iter() {
-        let pos = round_to_step(pos, 0.005);
-        let is_new_group = pos != last_t;
+        let round_pos = round_to_step(pos, step);
+        let is_new_group = round_pos != last_t;
 
         if is_new_group {
-            last_t = pos;
+            last_t = round_pos;
             count = 1;
-            kept_sfx_list.push(pos);
+            if mix_opt {
+                kept_sfx_list.push(round_pos);
+            } else {
+                kept_sfx_list.push(pos);
+            };
         } else {
             if count < 3 {
-                kept_sfx_list.push(pos);
+                if mix_opt {
+                    kept_sfx_list.push(round_pos);
+                } else {
+                    kept_sfx_list.push(pos);
+                };
                 count += 1;
             }
         }
@@ -254,6 +304,17 @@ fn offset_sfx_list(sfx_list: &mut (Vec<f64>, Vec<f64>, Vec<f64>), res: &mut Reso
     Ok(())
 }
 
+fn peak_density(times: &[f64]) -> usize {
+    let mut max = 0;
+    let mut r = 0;
+    for l in 0..times.len() {
+        let limit = times[l] + 0.5;
+        while r < times.len() && times[r] < limit { r += 1; }
+        if r - l > max { max = r - l; }
+        if r == times.len() { break; }
+    }
+    max
+}
 
 impl GameScene {
     pub const BEFORE_TIME: f64 = 0.7;
@@ -425,6 +486,7 @@ impl GameScene {
         illustration: SafeTexture,
         upload_fn: Option<UploadFn>,
         update_fn: Option<UpdateFn>,
+        replay: Option<ReplayData>,
     ) -> Result<Self> {
         if mode == GameMode::TweakOffset {
             config.mods.insert(Mods::AUTOPLAY);
@@ -446,8 +508,69 @@ impl GameScene {
 
         let mut judge = Judge::new(&chart);
         judge.set_limits(config.perfect_judgment, config.good_judgment, config.bad_judgment);
+        if mode == GameMode::Replay {
+            match replay {
+                Some(data) => judge.load_replay(data),
+                None => bail!("replay data not provided"),
+            }
+        } else if mode == GameMode::Normal && !config.autoplay() {
+            judge.start_recording();
+        }
 
         let info_offset = info.offset;
+        let offset = chart.offset + info_offset;
+
+        let (max_note, sfx_vec) = {
+            let sfx = config.high_precision_sfx && config.autoplay() && config.volume_sfx >= 1e-2;
+            let mut time_vec = Vec::with_capacity(chart.lines.iter().map(|line| line.notes.len()).sum());
+            let mut sfx_click_vec = Vec::new();
+            let mut sfx_drag_vec = Vec::new();
+            let mut sfx_flick_vec = Vec::new();
+            let t = if mode == GameMode::TweakOffset {
+                chart.offset + info_offset
+            } else {
+                offset
+            };
+            chart.lines.iter().for_each(|line| line.notes.iter().for_each(|note| {
+                time_vec.push(note.time + t);
+                if note.fake { return; }
+                if !sfx { return; }
+                match note.hitsound {
+                    HitSound::Click => sfx_click_vec.push(note.time + t),
+                    HitSound::Drag => sfx_drag_vec.push(note.time + t),
+                    HitSound::Flick => sfx_flick_vec.push(note.time + t),
+                    _ => {},
+                }
+            }));
+            time_vec = parse_note_list(time_vec, config.aggressive_note);
+            let max_note = (peak_density(&time_vec) + 64).clamp(MAX_SIZE, MAX_SIZE_LIMIT);
+            debug!("notes = {}, max_note = {}", time_vec.len(), max_note);
+            drop(time_vec);
+            if sfx {
+                sfx_click_vec = parse_sfx_list(sfx_click_vec, mode != GameMode::TweakOffset);
+                sfx_drag_vec = parse_sfx_list(sfx_drag_vec, mode != GameMode::TweakOffset);
+                sfx_flick_vec = parse_sfx_list(sfx_flick_vec, mode != GameMode::TweakOffset);
+                debug!(
+                    "Prepared {} click, {} drag, {} flick sfx",
+                    sfx_click_vec.len(), sfx_drag_vec.len(), sfx_flick_vec.len()
+                );
+            }
+            (
+                max_note,
+                if sfx { Some((sfx_click_vec, sfx_drag_vec, sfx_flick_vec)) } else { None }
+            )
+        };
+
+        let sfx_buffer_size = if let Some((sfx_click_vec, sfx_drag_vec, sfx_flick_vec)) = &sfx_vec {
+            Some((
+                (peak_density(sfx_click_vec) + 16).clamp(64, 3072),
+                (peak_density(sfx_drag_vec) + 16).clamp(64, 3072),
+                (peak_density(sfx_flick_vec) + 16).clamp(64, 3072),
+            ))
+        } else {
+            None
+        };
+
         let mut res = Resource::new(
             config,
             info,
@@ -456,6 +579,8 @@ impl GameScene {
             background,
             illustration,
             chart.extra.effects.is_empty() && effects.is_empty(),
+            max_note,
+            sfx_buffer_size,
         )
         .await
         .context("Failed to load resources")?;
@@ -464,7 +589,6 @@ impl GameScene {
             res.info.line_length *= 4000. / RPE_WIDTH / 6.;
         }
 
-        let offset = chart.offset + info_offset + res.config.offset;
         let exercise_range = offset + res.config.play_start_time..res.track_length;
         
         // Prepare extra sfx from chart.hitsounds
@@ -477,43 +601,21 @@ impl GameScene {
 
         let music = Self::new_music(&mut res)?;
 
-        let sfx_vec = if res.config.high_precision_sfx && res.config.autoplay() && res.config.volume_sfx >= 1e-2 {
-            let mut sfx_click_vec = Vec::new();
-            let mut sfx_drag_vec = Vec::new();
-            let mut sfx_flick_vec = Vec::new();
-            let t = if mode == GameMode::TweakOffset {
-                chart.offset + info_offset
-            } else {
-                offset
-            };
-            chart.lines.iter().for_each(|line| line.notes.iter().for_each(|note| {
-                match note.hitsound {
-                    HitSound::Click => sfx_click_vec.push(note.time + t),
-                    HitSound::Drag => sfx_drag_vec.push(note.time + t),
-                    HitSound::Flick => sfx_flick_vec.push(note.time + t),
-                    _ => {},
-                }
-            }));
-            sfx_click_vec = parse_sfx_list(sfx_click_vec, mode != GameMode::TweakOffset);
-            sfx_drag_vec = parse_sfx_list(sfx_drag_vec, mode != GameMode::TweakOffset);
-            sfx_flick_vec = parse_sfx_list(sfx_flick_vec, mode != GameMode::TweakOffset);
-            debug!("Prepared {} click, {} drag, {} flick sfx", sfx_click_vec.len(), sfx_drag_vec.len(), sfx_flick_vec.len());
+        if let Some((sfx_click_vec, sfx_drag_vec, sfx_flick_vec)) = &sfx_vec {
             res.sfx_click.set_clock(music.clock())?;
             res.sfx_drag.set_clock(music.clock())?;
             res.sfx_flick.set_clock(music.clock())?;
-            res.sfx_click.schedule_play(&sfx_click_vec, PlaySfxParams {
+            res.sfx_click.schedule_play(sfx_click_vec, PlaySfxParams {
                 amplifier: res.config.volume_sfx,
             })?;
-            res.sfx_drag.schedule_play(&sfx_drag_vec, PlaySfxParams {
+            res.sfx_drag.schedule_play(sfx_drag_vec, PlaySfxParams {
                 amplifier: res.config.volume_sfx,
             })?;
-            res.sfx_flick.schedule_play(&sfx_flick_vec, PlaySfxParams {
+            res.sfx_flick.schedule_play(sfx_flick_vec, PlaySfxParams {
                 amplifier: res.config.volume_sfx,
             })?;
-            Some((sfx_click_vec, sfx_drag_vec, sfx_flick_vec))
-        } else {
-            None
         };
+
         Ok(Self {
             should_exit: false,
             next_scene: None,
@@ -552,6 +654,8 @@ impl GameScene {
             update_fn,
 
             touch_points: Vec::new(),
+
+            replay_trails: Vec::new(),
         })
     }
 
@@ -606,7 +710,7 @@ impl GameScene {
             && !tm.paused()
             && self.pause_rewind.time.is_none()
             && matches!(self.state, State::Playing)
-            && Judge::get_touches(res.config.chart_ratio, res.config.low_resolution_mode).iter().any(|touch| {
+            && Judge::get_touches(res.config.chart_ratio, res.resolution_ratio).iter().any(|touch| {
                 touch.phase == TouchPhase::Started && {
                     let p = touch.position;
                     let p = Point::new(p.x * screen_aspect, p.y * screen_aspect);
@@ -620,7 +724,7 @@ impl GameScene {
             } else {
                 self.pause_first_time = f32::NEG_INFINITY;
                 if !self.music.paused() {
-                    self.music.pause()?;
+                    self.music.fade_out(0.3)?;
                 }
                 tm.pause();
             }
@@ -717,7 +821,7 @@ impl GameScene {
         let lf = -aspect_ratio + margin;
         let bt = -top - eps * 3.5 + (1. - p) * 0.4;
         #[cfg(feature = "play")]
-        if res.config.health_mode.is_some() && matches!(self.mode, GameMode::Normal | GameMode::NoRetry | GameMode::View) {
+        if res.config.health_mode.is_some() && matches!(self.mode, GameMode::Normal | GameMode::NoRetry | GameMode::View | GameMode::Replay) {
             let w = aspect_ratio * 0.05;
             let y = -top - eps * 9.;
             let h = top * 2. + eps * 23.;
@@ -750,7 +854,7 @@ impl GameScene {
         };
         let hw = 0.003;
         let height = eps * 1.0;
-        let offset = self.chart.offset + self.info_offset + res.config.offset;
+        let offset = self.chart.offset + self.info_offset + res.config.audio_offset;
         let dest = (res.time - self.exercise_range.start + offset) / (self.exercise_range.end - self.exercise_range.start);
         let dest = (aspect_ratio * 2. * dest as f32).max(0.).min(aspect_ratio * 2.);
         if res.config.render_ui_bar {
@@ -838,7 +942,7 @@ impl GameScene {
             );
             if res.config.interactive {
                 let mut clicked = None;
-                for touch in Judge::get_touches(1.0, res.config.low_resolution_mode) {
+                for touch in Judge::get_touches(1.0, res.resolution_ratio) {
                     if touch.phase != TouchPhase::Started {
                         continue;
                     }
@@ -877,7 +981,7 @@ impl GameScene {
                             tm.seek_to(self.exercise_range.start);
                             self.music.seek_to(self.exercise_range.start)?;
                         }
-                        self.music.play()?;
+                        self.music.fade_in(0.5)?;
                         let now = tm.now();
                         tm.speed = res.config.speed as _;
                         tm.resume();
@@ -911,7 +1015,7 @@ impl GameScene {
                 let h = 0.06;
                 let eh = 0.12;
                 let rad = 0.03;
-                let sp = self.offset().min(0.);
+                let sp = self.offset_chart().min(0.);
                 ui.fill_rect(Rect::new(-hw, -h, hw * 2., h * 2.), Color::new(0.4, 0.4, 0.4, 1.));
                 let st = -hw + (self.exercise_range.start - sp) as f32 / (self.res.track_length - sp) as f32 * hw * 2.;
                 let en = -hw + (self.exercise_range.end - sp) as f32 / (self.res.track_length - sp) as f32 * hw * 2.;
@@ -922,7 +1026,7 @@ impl GameScene {
                 ui.fill_circle(st, -eh, rad, Color::new(0.66, 0.78, 0.98, 1.));
                 if self.exercise_press.is_none() {
                     let r = ui.rect_to_global(Rect::new(st, -eh, 0., 0.).feather(rad));
-                    self.exercise_press = Judge::get_touches(1.0, self.res.config.low_resolution_mode)
+                    self.exercise_press = Judge::get_touches(1.0, self.res.resolution_ratio)
                         .iter()
                         .find(|it| it.phase == TouchPhase::Started && r.contains(it.position))
                         .map(|it| (-1, it.id));
@@ -931,7 +1035,7 @@ impl GameScene {
                 ui.fill_circle(en, eh, rad, Color::new(1., 0.34, 0.54, 1.));
                 if self.exercise_press.is_none() {
                     let r = ui.rect_to_global(Rect::new(en, eh, 0., 0.).feather(rad));
-                    self.exercise_press = Judge::get_touches(1.0, self.res.config.low_resolution_mode)
+                    self.exercise_press = Judge::get_touches(1.0, self.res.resolution_ratio)
                         .iter()
                         .find(|it| it.phase == TouchPhase::Started && r.contains(it.position))
                         .map(|it| (1, it.id));
@@ -940,7 +1044,7 @@ impl GameScene {
                 ui.fill_circle(cur, 0., rad, Color::new(0.95, 0.95, 0.95, 1.));
                 if self.exercise_press.is_none() {
                     let r = ui.rect_to_global(Rect::new(cur, 0., 0., 0.).feather(rad));
-                    self.exercise_press = Judge::get_touches(1.0, self.res.config.low_resolution_mode)
+                    self.exercise_press = Judge::get_touches(1.0, self.res.resolution_ratio)
                         .iter()
                         .find(|it| it.phase == TouchPhase::Started && r.contains(it.position))
                         .map(|it| (0, it.id));
@@ -950,7 +1054,7 @@ impl GameScene {
                     self.exercise_press = None;
                 }
                 if let Some((ctrl, id)) = &self.exercise_press {
-                    if let Some(touch) = Judge::get_touches(1.0, self.res.config.low_resolution_mode).iter().rfind(|it| it.id == *id) {
+                    if let Some(touch) = Judge::get_touches(1.0, self.res.resolution_ratio).iter().rfind(|it| it.id == *id) {
                         let x = touch.position.x;
                         let p = (x + hw) / (hw * 2.) * (self.res.track_length - sp) as f32 + sp as f32;
                         let p = if track_length - sp as f32 <= 3. || *ctrl == 0 {
@@ -967,6 +1071,7 @@ impl GameScene {
                         };
                         if *ctrl == 0 {
                             tm.seek_to(p as f64);
+                            self.music.pause()?;
                             self.music.seek_to(p as f64)?;
                         } else {
                             *(if *ctrl == -1 {
@@ -1024,10 +1129,10 @@ impl GameScene {
                 };
                 self.res.disable_hit_fx = false;
             } else if dim {
-                let a = (t / duration).clamp(0.0, 1.0) * PAUSE_BACKGROUND_ALPHA as f64;
+                let a = (t / duration).clamp(0.0, 1.0) as f32 * PAUSE_BACKGROUND_ALPHA;
                 let h = 1. / self.res.aspect_ratio;
-                draw_rectangle(-1., -h, 2., h * 2., Color::new(0., 0., 0., a as f32));
-                ui.text((t.ceil() as i32).to_string()).anchor(0.5, 0.5).size(1.).color(c).draw();
+                draw_rectangle(-1., -h, 2., h * 2., Color::new(0., 0., 0., a));
+                ui.text((t.ceil() as i32).to_string()).anchor(0.5, 0.5).size(1.).color(c.with_alpha(a)).draw();
             }
         }
         Ok(())
@@ -1037,8 +1142,15 @@ impl GameScene {
         res.config.interactive && matches!(state, State::Playing)
     }
 
-    fn offset(&self) -> f64 {
-        self.chart.offset + self.info_offset + self.res.config.offset
+    fn offset(&self, speed: f64) -> f64 {
+        self.chart.offset +
+        self.info_offset +
+        (self.res.config.audio_offset +
+        if self.res.config.auto_tweak_offset {
+            get_audio_latency(&self.res.audio)
+        } else {
+            0.
+        }) * speed
     }
 
     fn offset_chart(&self) -> f64 {
@@ -1046,7 +1158,7 @@ impl GameScene {
     }
 
     fn tweak_offset(&mut self, ui: &mut Ui, ita: bool, tm: &mut TimeManager) -> Result<()> {
-        let width = 0.55;
+        let width = 0.60;
         let height = 0.3;
         ui.scope(|ui| -> Result<()> {
             ui.dx(1. - width - 0.02);
@@ -1069,42 +1181,42 @@ impl GameScene {
                 .size(0.6)
                 .no_baseline()
                 .draw();
-            let d = 0.14;
+            let d = 0.18;
             let mut bpm_list = self.chart.bpm_list.borrow_mut();
             let beat = (15. / bpm_list.now_bpm(tm.now())).clamp(0.020, 0.500);
-            if ui.button("lg_sub", Rect::new(d, r.center().y, 0., 0.).feather(0.026), "-") && ita {
+            if ui.button("lg_sub", Rect::new(d, r.center().y, 0., 0.).feather(0.030), "-") && ita {
                 self.info_offset -= beat;
                 if let Some(sfx_vec) = &mut self.sfx_vec {
                     offset_sfx_list(sfx_vec, &mut self.res, -beat)?;
                 }
             }
-            if ui.button("lg_add", Rect::new(width - d, r.center().y, 0., 0.).feather(0.026), "+") && ita {
+            if ui.button("lg_add", Rect::new(width - d, r.center().y, 0., 0.).feather(0.030), "+") && ita {
                 self.info_offset += beat;
                 if let Some(sfx_vec) = &mut self.sfx_vec {
                     offset_sfx_list(sfx_vec, &mut self.res, beat)?;
                 }
             }
-            let d = 0.080;
-            if ui.button("sm_sub", Rect::new(d, r.center().y, 0., 0.).feather(0.022), "-") && ita {
+            let d = 0.11;
+            if ui.button("sm_sub", Rect::new(d, r.center().y, 0., 0.).feather(0.026), "-") && ita {
                 self.info_offset -= 0.010;
                 if let Some(sfx_vec) = &mut self.sfx_vec {
                     offset_sfx_list(sfx_vec, &mut self.res, -0.010)?;
                 }
             }
-            if ui.button("sm_add", Rect::new(width - d, r.center().y, 0., 0.).feather(0.022), "+") && ita {
+            if ui.button("sm_add", Rect::new(width - d, r.center().y, 0., 0.).feather(0.026), "+") && ita {
                 self.info_offset += 0.010;
                 if let Some(sfx_vec) = &mut self.sfx_vec {
                     offset_sfx_list(sfx_vec, &mut self.res, 0.010)?;
                 }
             }
-            let d = 0.03;
-            if ui.button("ti_sub", Rect::new(d, r.center().y, 0., 0.).feather(0.017), "-") && ita {
+            let d = 0.047;
+            if ui.button("ti_sub", Rect::new(d, r.center().y, 0., 0.).feather(0.023), "-") && ita {
                 self.info_offset -= 0.001;
                 if let Some(sfx_vec) = &mut self.sfx_vec {
                     offset_sfx_list(sfx_vec, &mut self.res, -0.001)?;
                 }
             }
-            if ui.button("ti_add", Rect::new(width - d, r.center().y, 0., 0.).feather(0.017), "+") && ita {
+            if ui.button("ti_add", Rect::new(width - d, r.center().y, 0., 0.).feather(0.023), "+") && ita {
                 self.info_offset += 0.001;
                 if let Some(sfx_vec) = &mut self.sfx_vec {
                     offset_sfx_list(sfx_vec, &mut self.res, 0.001)?;
@@ -1127,11 +1239,11 @@ impl GameScene {
                 self.next_scene = Some(NextScene::PopWithResult(Box::new(Some(self.info_offset))));
             }*/
             Ok(())
-        });
+        })?;
         ui.scope(|ui| {
             ui.dx(1. - width * 0.97);
             ui.dy(ui.top - height * 0.75);
-            ui.slider(tl!("speed"), 0.1..2.0, 0.05, &mut self.res.config.speed, Some(0.36));
+            ui.slider(tl!("speed"), 0.1..2.0, 0.05, &mut self.res.config.speed, Some(0.40));
             if (tm.speed - self.res.config.speed as f64).abs() > 1e-3 {
                 reset_music_speed!(self, &mut self.res, tm);
                 tm.resume();
@@ -1149,7 +1261,7 @@ impl Scene for GameScene {
         self.music = Self::new_music(&mut self.res)?;
         self.res.camera.render_target = target;
         tm.speed = self.res.config.speed as _;
-        tm.adjust_time = self.res.config.auto_tweak_offset;
+        tm.adjust_time = self.res.config.adjust_time;
         reset!(self, self.res, tm);
         set_camera(&self.res.camera);
         self.first_in = true;
@@ -1167,6 +1279,7 @@ impl Scene for GameScene {
     }
 
     fn pause(&mut self, tm: &mut TimeManager) -> Result<()> {
+        self.res.audio.close()?;
         if !tm.paused() {
             self.pause_rewind = PauseRewind {
                 time: None,
@@ -1180,26 +1293,27 @@ impl Scene for GameScene {
     }
 
     fn resume(&mut self, tm: &mut TimeManager) -> Result<()> {
+        self.res.audio.start()?;
         if tm.paused() && !matches!(self.state, State::Playing) {
             tm.resume();
         }
         Ok(())
     }
 
-    fn foucus_pause(&mut self, tm: &mut TimeManager) -> Result<()> {
-        if !tm.paused() {
+    fn focus_pause(&mut self, tm: &mut TimeManager) -> Result<()> {
+        if !self.res.config.autoplay() && !tm.paused() {
             self.pause_rewind = PauseRewind {
                 time: None,
                 duration: None,
                 dim: false
             };
-            self.music.pause()?;
+            self.music.fade_out(0.3)?;
             tm.pause();
         }
         Ok(())
     }
 
-    fn foucus_resume(&mut self, tm: &mut TimeManager) -> Result<()> {
+    fn focus_resume(&mut self, tm: &mut TimeManager) -> Result<()> {
         if tm.paused() && !matches!(self.state, State::Playing) {
             tm.resume();
         }
@@ -1218,7 +1332,7 @@ impl Scene for GameScene {
             self.state = state;
             tm.seek_to(self.exercise_range.start);
             tm.pause();
-            self.music.pause()?;
+            self.music.fade_out(0.3)?;
         }
         if tm.paused() && self.res.config.rotation_mode {
             GYRO.lock().unwrap().reset_gyroscope();
@@ -1274,8 +1388,15 @@ impl Scene for GameScene {
                 #[cfg(feature = "play")]
                 let is_ending = is_ending || self.res.health.state.track_failed;
                 if is_ending {
+                    #[cfg(feature = "play")]
                     let track_complete = self.res.health.state.now_health >= self.res.health.config.complete_health && !self.res.health.state.track_failed;
-                    if self.res.config.autoplay() && !self.res.health.state.track_failed {
+                    #[cfg(not(feature = "play"))]
+                    let track_complete = true;
+                    #[cfg(feature = "play")]
+                    let track_failed = self.res.health.state.track_failed;
+                    #[cfg(not(feature = "play"))]
+                    let track_failed = false;
+                    if self.res.config.autoplay() && !track_failed {
                         self.judge.commit_all(&mut self.chart);
                     }
                     let result = self.judge.result(track_complete);
@@ -1283,7 +1404,13 @@ impl Scene for GameScene {
                     // TODO strengthen the protection
                     #[cfg(feature = "closed")]
                     if let Some(upload_fn) = &self.upload_fn {
-                        if !self.res.config.offline_mode && !self.res.config.autoplay() && (self.res.config.speed - 1.0).abs() < 1e-3 && track_complete {
+                        if !self.res.config.offline_mode
+                            && !self.res.config.autoplay()
+                            && (self.res.config.speed - 1.0).abs() < 1e-3
+                            && track_complete
+                            && self.judge.is_vaild()
+                            && (result.std - crate::judge::LIMIT_BAD as f32).abs() > 1e-3
+                        {
                             if let Some(player) = &self.player {
                                 if let Some(chart) = &self.res.info.guid {
                                     record_data = Some(encode_record(self));
@@ -1291,7 +1418,10 @@ impl Scene for GameScene {
                             }
                         }
                     }
-                    let record = if self.res.config.autoplay() || (self.res.config.speed - 1.0).abs() > 1e-3 {
+                    let record = if self.res.config.autoplay()
+                        || (self.res.config.speed - 1.0).abs() > 1e-3
+                        || self.mode == GameMode::Replay
+                    {
                         None
                     } else {
                         Some(SimpleRecord {
@@ -1301,8 +1431,12 @@ impl Scene for GameScene {
                             track_complete,
                         })
                     };
+                    if self.judge.replay_recorder.is_some() {
+                        let data = self.judge.stop_recording(&self.chart, self.res.config.speed);
+                        *LAST_REPLAY.lock().unwrap() = Some((self.res.info.name.clone(), data));
+                    }
                     self.next_scene = match self.mode {
-                        GameMode::Normal | GameMode::Exercise | GameMode::NoRetry | GameMode::View => Some(NextScene::Overlay(Box::new(EndingScene::new(
+                        GameMode::Normal | GameMode::Exercise | GameMode::NoRetry | GameMode::View | GameMode::Replay => Some(NextScene::Overlay(Box::new(EndingScene::new(
                             self.res.background.clone(),
                             self.res.illustration.clone(),
                             self.res.player.clone(),
@@ -1319,7 +1453,7 @@ impl Scene for GameScene {
                             record_data,
                             record,
                         )?))),
-                        GameMode::TweakOffset => Some(NextScene::PopWithResult(Box::new(None::<f32>))),
+                        GameMode::TweakOffset => Some(NextScene::PopWithResult(Box::new(Some(self.info_offset)))),
                     };
                 }
                 self.res.alpha = 1. - (t / AFTER_TIME).clamp(0., 1.).powi(2) as f32;
@@ -1328,11 +1462,9 @@ impl Scene for GameScene {
         };
 
         let time = if self.mode == GameMode::TweakOffset {
-            time.max(0.) - self.offset_chart()
-        } else if self.res.config.auto_tweak_offset {
-            (time - self.offset() - get_latency(&self.res.audio, &self.res.frame_times)).max(0.)
+            (time - self.offset_chart()).max(0.)
         } else {
-            (time - self.offset()).max(0.)
+            (time - self.offset(self.res.config.speed as f64)).max(0.)
         };
         self.res.time = time;
         if !tm.paused() && (self.res.config.autoplay() || self.pause_rewind.time.is_none()) && self.mode != GameMode::View {
@@ -1344,9 +1476,20 @@ impl Scene for GameScene {
                 0.
             };
 
-            self.judge.update(&mut self.res, &mut self.chart, &mut self.bad_notes, -angle);
+            if self.mode == GameMode::Replay {
+                self.judge.update_replay(&mut self.res, &mut self.chart, &mut self.bad_notes);
+            } else {
+                self.judge.update(&mut self.res, &mut self.chart, &mut self.bad_notes, -angle);
+            }
+            if self.mode == GameMode::Replay {
+                let now = tm.now();
+                for it in self.judge.replay_touches() {
+                    self.replay_trails.push((now, it.position));
+                }
+                self.replay_trails.retain(|(t, _)| now - *t <= TRAIL_DURATION);
+            }
             #[cfg(feature = "play")]
-            if self.res.config.health_mode.is_some() && matches!(self.state, State::Playing) && matches!(self.mode, GameMode::Normal | GameMode::NoRetry | GameMode::View) {
+            if self.res.config.health_mode.is_some() && matches!(self.state, State::Playing) && matches!(self.mode, GameMode::Normal | GameMode::NoRetry | GameMode::View | GameMode::Replay) {
                 self.res.health.update(time as f32);
             }
             self.gl.quad_gl.viewport(None);
@@ -1374,7 +1517,7 @@ impl Scene for GameScene {
                         reset_music_speed!(self, res, tm);
                     }
                     self.music.seek_to(now)?;
-                    self.music.play()?;
+                    self.music.fade_in(0.5)?;
                     tm.seek_to(now);
                     tm.resume();
                     self.pause_rewind = PauseRewind {
@@ -1386,7 +1529,7 @@ impl Scene for GameScene {
                 }
             } else if matches!(self.state, State::Playing) && !self.pause_rewind.dim { // State::BeforeMusic
                 if !self.music.paused() {
-                    self.music.pause()?;
+                    self.music.fade_out(0.3)?;
                 }
                 self.pause_rewind = PauseRewind {
                     time: None,
@@ -1424,7 +1567,7 @@ impl Scene for GameScene {
             effect.update(&self.res);
         }
         if let Some((id, text)) = take_input() {
-            let offset = self.offset().min(0.);
+            let offset = self.offset_chart().min(0.);
             match id.as_str() {
                 "exercise_start" => {
                     if let Some(t) = parse_time(&text) {
@@ -1498,6 +1641,44 @@ impl Scene for GameScene {
             res.config.chart_ratio
         };
 
+        if res.config.dynamic_resolution_mode && !matches!(self.state, State::Starting) && res.frame_times.len() > 5 {
+            let min = crate::ext::round_to_step((ui.viewport.3 as f32 / 2.).min(540.) / ui.viewport.3 as f32, 0.05);
+            let now = tm.real_time();
+            let fps = res.frame_times.len();
+            let mut frame_times = res.frame_times.iter().rev();
+            let now_fps_5 = 1. / frame_times
+                .next()
+                .zip(frame_times.nth(4))
+                .map_or(0., |(latest, oldest)| (latest - oldest) / 5.);
+            let mut frame_times = res.frame_times.iter().rev();
+            let now_fps_2 = 1. / frame_times
+                .next()
+                .zip(frame_times.nth(1))
+                .map_or(0., |(latest, oldest)| (latest - oldest) / 2.);
+            {
+                if fps > 0 {
+                    res.best_fps = res.best_fps.max(fps);
+                    if now_fps_5 as f64 / res.best_fps as f64 <= 0.3 || now_fps_2 as f64 / res.best_fps as f64 <= 0.2 {
+                        res.dynamic_resolution_ratio = min;
+                        res.last_adjustment = now;
+                    } else if now_fps_5 as f64 / res.best_fps as f64 <= 0.7 && now - res.last_adjustment > 0.05 {
+                        res.dynamic_resolution_ratio = (res.dynamic_resolution_ratio - 0.1).max(min);
+                        res.last_adjustment = now;
+                    } else if fps as f64 / res.best_fps as f64 >= 0.9 && now - res.last_adjustment > 0.4 && res.dynamic_resolution_ratio < 1.0 {
+                        res.dynamic_resolution_ratio = (res.dynamic_resolution_ratio + 0.1).min(1.0);
+                        res.last_adjustment = now;
+                    }
+                }
+            }
+        } else {
+            res.dynamic_resolution_ratio = 1.0;
+        }
+        if res.config.low_resolution_mode {
+            res.resolution_ratio = res.dynamic_resolution_ratio * 0.5;
+        } else {
+            res.resolution_ratio = res.dynamic_resolution_ratio;
+        }
+
         if res.update_size(ui.viewport) || self.mode == GameMode::View {
             set_camera(&res.camera);
         }
@@ -1505,11 +1686,7 @@ impl Scene for GameScene {
         let msaa = res.config.sample_count > 1;
 
         // camera setup
-        let ui_viewport = if res.config.low_resolution_mode {
-            (ui.viewport.0 / 2, ui.viewport.1 / 2, ui.viewport.2 / 2, ui.viewport.3 / 2)
-        } else {
-            ui.viewport
-        };
+        let ui_viewport = res.parse_resolution_ratio(ui.viewport);
         let vp = res.camera.viewport.unwrap_or(ui_viewport);
         let viewport_window = Some(ui_viewport);
         let viewport_chart = if res.chart_target.is_some() {
@@ -1548,7 +1725,7 @@ impl Scene for GameScene {
             //let alpha = res.alpha * (1. - dim_alpha) + dim_alpha;    
             let dim = Color::new(0.1, 0.1, 0.1, dim_alpha * res.alpha);
             let x_range = vp.0 as f32 / ui_viewport.2 as f32;
-            let y_range =  vp.1 as f32 / vp.3 as f32;
+            let y_range = vp.1 as f32 / vp.3 as f32;
             draw_rectangle(-1., -h,x_range * 2., h * 2., dim); // Left
             draw_rectangle(1., -h,-x_range * 2., h * 2., dim); // Right
             draw_rectangle(-1., -h,2., -y_range * 2., dim); // Top
@@ -1599,6 +1776,21 @@ impl Scene for GameScene {
         });
         self.gl.quad_gl.render_pass(chart_onto.as_ref().map(|it| it.render_pass.raw_miniquad_id()));
         self.chart.render(ui, res);
+
+        if self.mode == GameMode::Replay {
+            let now = tm.now();
+            for (t, pos) in &self.replay_trails {
+                let age = ((now - t) / TRAIL_DURATION).clamp(0., 1.) as f32;
+                let alpha = (1. - age) * 0.35;
+                let radius = TRAIL_RADIUS * (1. - age * 0.5);
+                ui.fill_circle(pos.x, pos.y, radius, Color::new(1., 0.45, 0.5, alpha));
+            }
+            let touches = self.judge.replay_touches();
+            for it in &touches {
+                ui.fill_circle(it.position.x, it.position.y, TRAIL_RADIUS * 1.6, Color::new(1., 0.45, 0.5, 0.3));
+                ui.fill_circle(it.position.x, it.position.y, TRAIL_RADIUS, Color::new(1., 1., 1., 0.55));
+            }
+        }
 
         self.gl.quad_gl.render_pass(
             res.chart_target
@@ -1668,10 +1860,10 @@ impl Scene for GameScene {
                 ..Default::default()
             });
             if self.mode == GameMode::TweakOffset {
-                self.tweak_offset(ui, Self::interactive(&self.res, &self.state), tm);
+                self.tweak_offset(ui, Self::interactive(&self.res, &self.state), tm)?;
             }
             if self.res.config.touch_debug {
-                for touch in Judge::get_touches(1.0, self.res.config.low_resolution_mode) {
+                for touch in Judge::get_touches(1.0, self.res.resolution_ratio) {
                     ui.fill_circle(touch.position.x, touch.position.y, 0.04, Color { a: 0.4, ..RED });
                 }
             }
@@ -1687,7 +1879,7 @@ impl Scene for GameScene {
             self.overlay_ui(ui, tm)?;
         }
 
-        if !self.res.no_effect || msaa || self.res.config.low_resolution_mode {
+        if !self.res.no_effect || msaa || self.res.config.low_resolution_mode || self.res.config.dynamic_resolution_mode {
             // render the texture onto screen
             if let Some(target) = &self.res.chart_target {
                 self.gl.flush();
@@ -1713,7 +1905,7 @@ impl Scene for GameScene {
             self.gl.flush();
         }
 
-        if self.res.config.auto_tweak_offset {
+        if self.res.config.auto_tweak_offset || self.res.config.dynamic_resolution_mode {
             push_frame_time(&mut self.res.frame_times, tm.real_time());
         }
         
@@ -1722,13 +1914,14 @@ impl Scene for GameScene {
 
     fn next_scene(&mut self, tm: &mut TimeManager) -> NextScene {
         if self.should_exit {
+            let _ = self.music.pause();
             if tm.paused() {
                 tm.resume();
             }
             tm.speed = 1.0;
             tm.adjust_time = false;
             match self.mode {
-                GameMode::Normal | GameMode::Exercise | GameMode::NoRetry | GameMode::View => NextScene::Pop,
+                GameMode::Normal | GameMode::Exercise | GameMode::NoRetry | GameMode::View | GameMode::Replay => NextScene::Pop,
                 GameMode::TweakOffset => NextScene::PopWithResult(Box::new(None::<f32>)),
             }
         } else if let Some(next_scene) = self.next_scene.take() {

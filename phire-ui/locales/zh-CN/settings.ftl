@@ -21,6 +21,7 @@ item-lowq = 低画质模式
 item-lowq-sub = 建议在画面卡顿时启用
 item-anti-aliasing = 抗锯齿
 item-low-resolution = 低分辨率模式
+item-dynamic-resolution = 动态分辨率模式
 item-insecure = 不安全模式
 item-insecure-sub = 当无法使用在线功能时可尝试该功能。这会使得你的连接不安全！
 
@@ -34,6 +35,8 @@ item-bgm = BGM 音量
 item-high-precision-hit-effect = 高精度打击音效
 item-high-precision-hit-effect-sub = AUTOPLAY 启用时激活与音乐时钟绑定的高精度打击音效
 item-cali = 调整延迟
+item-audio-offset = 音频偏移
+item-judge-offset = 判定偏移
 item-exclusive-audio = 独占音频
 item-exclusive-audio-sub = 尝试独占输出设备，可以降低音频延时，但会导致声音无法被录制
 item-audio-compatibility = 音频兼容模式
@@ -78,7 +81,12 @@ item-health-mode-example = 生存模式示例
 item-max-health = 最大血量
 item-initial-health = 初始血量
 
+item-latency-test = 延迟测试
+item-output-test = 音频输出测试
 load-cali-failed = 加载音频失败
+load-latency-failed = 加载延迟测试失败
+load-output-failed = 加载音频输出测试失败
+permission-required = 权限被拒绝
 not-combo = 不能是 COMBO
 illegal-input = 非法输入
 

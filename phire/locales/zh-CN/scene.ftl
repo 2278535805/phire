@@ -5,3 +5,5 @@ input-hint = 文字
 
 read-file-failed = 读取文件失败
 pasted = 从剪贴板加载成功
+
+start-audio-failed = 音频播放失败
