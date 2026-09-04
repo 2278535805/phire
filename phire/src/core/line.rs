@@ -96,6 +96,10 @@ pub struct JudgeLineCache {
     update_order: Vec<u32>,
     above_indices: Vec<usize>,
     below_indices: Vec<usize>,
+
+    backup_update_order: Vec<u32>,
+    backup_above_indices: Vec<usize>,
+    backup_below_indices: Vec<usize>,
 }
 
 impl JudgeLineCache {
@@ -115,21 +119,31 @@ impl JudgeLineCache {
             update_order: Vec::with_capacity(notes.len()),
             above_indices: Vec::new(),
             below_indices: Vec::new(),
+
+            backup_update_order: Vec::with_capacity(notes.len()),
+            backup_above_indices: Vec::new(),
+            backup_below_indices: Vec::new(),
         };
-        res.reset(notes);
+        res.build(notes);
         res
     }
 
-    pub(crate) fn reset(&mut self, notes: &mut Vec<Note>) {
-        self.update_order.clear();
-        self.update_order.extend(notes.iter().enumerate()
+    pub(crate) fn reset(&mut self) {
+        self.update_order.clone_from(&self.backup_update_order);
+        self.above_indices.clone_from(&self.backup_above_indices);
+        self.below_indices.clone_from(&self.backup_below_indices);
+    }
+
+    fn build(&mut self, notes: &mut Vec<Note>) {
+        self.backup_update_order.clear();
+        self.backup_update_order.extend(notes.iter().enumerate()
             .filter_map(|(index, note)| (!note.dead()).then_some(index as u32))
         );
-        self.above_indices.clear();
-        self.below_indices.clear();
+        self.backup_above_indices.clear();
+        self.backup_below_indices.clear();
         let mut index = 0;
         while notes.get(index).is_some_and(|it| it.above) {
-            self.above_indices.push(index);
+            self.backup_above_indices.push(index);
             let speed = notes[index].speed;
             loop {
                 index += 1;
@@ -139,7 +153,7 @@ impl JudgeLineCache {
             }
         }
         while index != notes.len() {
-            self.below_indices.push(index);
+            self.backup_below_indices.push(index);
             let speed = notes[index].speed;
             loop {
                 index += 1;
@@ -148,6 +162,7 @@ impl JudgeLineCache {
                 }
             }
         }
+        self.reset();
     }
 }
 
