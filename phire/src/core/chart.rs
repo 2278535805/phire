@@ -104,17 +104,14 @@ impl Chart {
     }
 
     pub fn reset(&mut self) {
-        self.lines
-            .iter_mut()
-            .flat_map(|it| it.notes.iter_mut())
-            .for_each(|note| {
+        self.lines.iter_mut().for_each(|line| {
+            line.cache.reset();
+            line.notes.iter_mut().for_each(|note| {
                 note.judge = JudgeStatus::NotJudged;
                 note.protected = false;
                 note.object.set_time(0.0);
             });
-        for line in &mut self.lines {
-            line.cache.reset();
-        }
+        });
     }
 
     pub fn update(&mut self, res: &mut Resource) {
