@@ -92,14 +92,32 @@ pub enum JudgeLineKind {
 }
 
 #[derive(Clone)]
-pub struct JudgeLineCache {
-    update_order: Vec<u32>,
-    above_indices: Vec<usize>,
-    below_indices: Vec<usize>,
+struct NoteGroup {
+    start: usize,
+    end: usize,
+    cursor: usize,
+}
 
-    backup_update_order: Vec<u32>,
-    backup_above_indices: Vec<usize>,
-    backup_below_indices: Vec<usize>,
+impl NoteGroup {
+    fn new(start: usize, end: usize) -> Self {
+        Self {
+            start: start,
+            end: end,
+            cursor: start,
+        }
+    }
+
+    fn reset(&mut self) {
+        self.cursor = self.start;
+    }
+}
+
+#[derive(Clone)]
+pub struct JudgeLineCache {
+    update_order: Vec<usize>,
+    active_update_count: usize,
+    above_groups: Vec<NoteGroup>,
+    below_groups: Vec<NoteGroup>,
 }
 
 impl JudgeLineCache {
@@ -115,54 +133,56 @@ impl JudgeLineCache {
             )
         });
 
-        let mut res = Self {
-            update_order: Vec::with_capacity(notes.len()),
-            above_indices: Vec::new(),
-            below_indices: Vec::new(),
+        let update_order = notes.iter().enumerate().filter_map(|(index, note)| (!note.dead()).then_some(index)).collect::<Vec<_>>();
+        let active_update_count = update_order.len();
+        let mut above_groups = Vec::new();
+        let mut below_groups = Vec::new();
+        let mut start = 0;
+        while start < notes.len() {
+            let above = notes[start].above;
+            let speed = notes[start].speed;
+            let mut end = start + 1;
+            while notes.get(end).is_some_and(|note| note.above == above && note.speed == speed) {
+                end += 1;
+            }
+            let group = NoteGroup::new(start, end);
+            if above {
+                above_groups.push(group);
+            } else {
+                below_groups.push(group);
+            }
+            start = end;
+        }
 
-            backup_update_order: Vec::with_capacity(notes.len()),
-            backup_above_indices: Vec::new(),
-            backup_below_indices: Vec::new(),
-        };
-        res.build(notes);
-        res
+        Self {
+            update_order,
+            active_update_count,
+            above_groups,
+            below_groups,
+        }
     }
 
     pub(crate) fn reset(&mut self) {
-        self.update_order.clone_from(&self.backup_update_order);
-        self.above_indices.clone_from(&self.backup_above_indices);
-        self.below_indices.clone_from(&self.backup_below_indices);
+        self.active_update_count = self.update_order.len();
+        for group in self.above_groups.iter_mut().chain(self.below_groups.iter_mut()) {
+            group.reset();
+        }
     }
+}
 
-    fn build(&mut self, notes: &mut Vec<Note>) {
-        self.backup_update_order.clear();
-        self.backup_update_order.extend(notes.iter().enumerate()
-            .filter_map(|(index, note)| (!note.dead()).then_some(index as u32))
-        );
-        self.backup_above_indices.clear();
-        self.backup_below_indices.clear();
-        let mut index = 0;
-        while notes.get(index).is_some_and(|it| it.above) {
-            self.backup_above_indices.push(index);
-            let speed = notes[index].speed;
-            loop {
-                index += 1;
-                if !notes.get(index).is_some_and(|it| it.above && it.speed == speed) {
-                    break;
-                }
+fn advance_note_groups(groups: &mut [NoteGroup], notes: &[Note], time: f64) {
+    for group in groups {
+        while group.cursor < group.end {
+            let note = &notes[group.cursor as usize];
+            let removable = match note.kind {
+                NoteKind::Hold { end_time, .. } => matches!(note.judge, JudgeStatus::Judged) && time > end_time,
+                _ => matches!(note.judge, JudgeStatus::Judged),
+            };
+            if !removable {
+                break;
             }
+            group.cursor += 1;
         }
-        while index != notes.len() {
-            self.backup_below_indices.push(index);
-            let speed = notes[index].speed;
-            loop {
-                index += 1;
-                if !notes.get(index).is_some_and(|it| it.speed == speed) {
-                    break;
-                }
-            }
-        }
-        self.reset();
     }
 }
 
@@ -204,12 +224,13 @@ impl JudgeLine {
         //   retain 在删除元素时需要将后续所有元素前移（memmove），开销为 O(n)
 
         let mut i = 0;
-        while i < self.cache.update_order.len() {
+        while i < self.cache.active_update_count {
             let id = self.cache.update_order[i];
-            let note = &mut self.notes[id as usize];
+            let note = &mut self.notes[id];
             note.update(res, rot, &tr, &mut ctrl_obj, line_height, bpm_list, index);
             if note.dead() {
-                self.cache.update_order.swap_remove(i); // update_order 顺序不影响功能
+                self.cache.active_update_count -= 1;
+                self.cache.update_order.swap(i, self.cache.active_update_count); // update_order 顺序不影响功能
             } else {
                 i += 1;
             }
@@ -229,58 +250,8 @@ impl JudgeLine {
         }
         self.color.set_time(res.time);
 
-        let not_judge = |index: usize| match self.notes[index].kind {
-            NoteKind::Hold { end_time, .. } => matches!(self.notes[index].judge, JudgeStatus::Judged) && res.time > end_time,
-            _ => {
-                matches!(self.notes[index].judge, JudgeStatus::Judged)
-            }
-        };
-
-        //   self.cache.above_indices.retain_mut(|index| {
-        //       while not_judge(*index) { ... }
-        //       true/false
-        //   });
-        //   retain_mut 在删除元素时需要将后续元素前移，产生内存拷贝开销
-
-        let mut write_idx = 0;
-        for i in 0..self.cache.above_indices.len() {
-            let mut index = self.cache.above_indices[i];
-            while not_judge(index) {
-                if self
-                    .notes
-                    .get(index + 1)
-                    .is_some_and(|it| it.above && it.speed == self.notes[index].speed)
-                {
-                    index += 1;
-                } else {
-                    index = usize::MAX; // 标记删除
-                    break;
-                }
-            }
-            if index != usize::MAX {
-                self.cache.above_indices[write_idx] = index;
-                write_idx += 1;
-            }
-        }
-        self.cache.above_indices.truncate(write_idx);
-
-        let mut write_idx = 0;
-        for i in 0..self.cache.below_indices.len() {
-            let mut index = self.cache.below_indices[i];
-            while not_judge(index) {
-                if self.notes.get(index + 1).is_some_and(|it| it.speed == self.notes[index].speed) {
-                    index += 1;
-                } else {
-                    index = usize::MAX;
-                    break;
-                }
-            }
-            if index != usize::MAX {
-                self.cache.below_indices[write_idx] = index;
-                write_idx += 1;
-            }
-        }
-        self.cache.below_indices.truncate(write_idx);
+        advance_note_groups(&mut self.cache.above_groups, &self.notes, res.time);
+        advance_note_groups(&mut self.cache.below_groups, &self.notes, res.time);
     }
 
     pub fn fetch_pos(&self, res: &Resource, lines: &[JudgeLine]) -> Vector {
@@ -524,13 +495,10 @@ impl JudgeLine {
             let mut height = self.height.clone();
             let aspect_ratio = res.aspect_ratio as f64;
             if res.config.note_scale > 0. && res.config.render_note {
-                let mut render_notes_side = |res: &mut Resource, config: &mut RenderConfig<'_>, indices: &[usize], min_y: f64, max_y: f64, above: bool| {
-                    for index in indices {
-                        let speed = self.notes[*index].speed;
-                        for note in self.notes[*index..].iter() {
-                            if note.above != above || speed != note.speed {
-                                break;
-                            }
+                let mut render_notes_side = |res: &mut Resource, config: &mut RenderConfig<'_>, groups: &[NoteGroup], min_y: f64, max_y: f64| {
+                    for group in groups {
+                        for note in self.notes[group.cursor..group.end].iter() {
+                            let speed = note.speed;
                             if matches!(note.judge, JudgeStatus::Judged) && !matches!(note.kind, NoteKind::Hold { .. }) {
                                 continue;
                             }
@@ -569,9 +537,9 @@ impl JudgeLine {
                     }
                 };
                 let mut render_notes = |res: &mut Resource, config: &mut RenderConfig<'_>| {
-                    render_notes_side(res, config, &self.cache.above_indices, height_below, height_above, true);
+                    render_notes_side(res, config, &self.cache.above_groups, height_below, height_above);
                     res.with_model(Matrix::identity().append_nonuniform_scaling(&Vector::new(1.0, -1.0)), |res| {
-                        render_notes_side(res, config, &self.cache.below_indices, -height_above, -height_below, false);
+                        render_notes_side(res, config, &self.cache.below_groups, -height_above, -height_below);
                     });
                 };
                 if self.scale_on_notes == 1 {
