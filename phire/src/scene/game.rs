@@ -1072,7 +1072,7 @@ impl GameScene {
                         if *ctrl == 0 {
                             tm.seek_to(p as f64);
                             self.music.pause()?;
-                            self.music.seek_to(p as f64);
+                            self.music.seek_to(p as f64)?;
                         } else {
                             *(if *ctrl == -1 {
                                 &mut self.exercise_range.start
@@ -1239,7 +1239,7 @@ impl GameScene {
                 self.next_scene = Some(NextScene::PopWithResult(Box::new(Some(self.info_offset))));
             }*/
             Ok(())
-        });
+        })?;
         ui.scope(|ui| {
             ui.dx(1. - width * 0.97);
             ui.dy(ui.top - height * 0.75);
@@ -1860,7 +1860,7 @@ impl Scene for GameScene {
                 ..Default::default()
             });
             if self.mode == GameMode::TweakOffset {
-                self.tweak_offset(ui, Self::interactive(&self.res, &self.state), tm);
+                self.tweak_offset(ui, Self::interactive(&self.res, &self.state), tm)?;
             }
             if self.res.config.touch_debug {
                 for touch in Judge::get_touches(1.0, self.res.resolution_ratio) {
