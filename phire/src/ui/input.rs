@@ -71,6 +71,9 @@ struct State {
     last_cursor_time: Option<f64>,
     last_preedit_time: Option<f64>,
 
+    line_time: Option<f64>,
+    last_line_time: Option<f64>,
+
     cursor_positions: Vec<(f32, f32)>,
     scroll_x: f32,
     scroll_y: f32,
@@ -722,15 +725,31 @@ impl InlineInputBox {
             }
         }
 
-        // Enter key
-        if is_key_pressed(KeyCode::Enter) {
-            if self.multiline {
+        if self.multiline {
+            // Enter key
+            if is_key_pressed(KeyCode::Enter) {
+                self.state.line_time = Some(now);
                 self.delete_selection();
                 let byte_pos = self.byte_at(self.state.cursor);
                 self.buffer.insert(byte_pos, '\n');
                 self.state.cursor += 1;
                 self.state.manual_scroll = false;
                 self.update_ime_state();
+            } else if let Some(line_time) = self.state.line_time {
+                if is_key_down(KeyCode::Enter) {
+                    if now - line_time > 0.5 {
+                        if self.state.last_line_time.map_or(true, |t| now - t > 0.02) {
+                            self.state.last_line_time = Some(now);
+                            self.delete_selection();
+                            let byte_pos = self.byte_at(self.state.cursor);
+                            self.buffer.insert(byte_pos, '\n');
+                            self.state.cursor += 1;
+                            self.update_ime_state();
+                        }
+                    }
+                } else {
+                    self.state.line_time = None;
+                }
             }
         }
 
