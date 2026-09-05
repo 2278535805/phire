@@ -421,7 +421,7 @@ impl InlineInputBox {
         let mut best_dist = f32::MAX;
         for (i, &(px, py)) in self.state.cursor_positions.iter().enumerate() {
             let dx = touch_x - px;
-            let dy = touch_y - py;
+            let dy = touch_y - py - 0.0175;
             let dist = dx * dx + dy * dy * 10000.0;
             if dist < best_dist {
                 best_dist = dist;
