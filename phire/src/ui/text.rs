@@ -154,7 +154,13 @@ impl<'a, 's, 'ui> DrawText<'a, 's, 'ui> {
         }
         let bound = painter!(|p: &mut TextPainter| p.brush.glyph_bounds(&section).unwrap_or_default());
         let mut height = bound.height();
-        height += text.chars().take_while(|it| *it == '\n').count() as f32 * painter!(|p: &mut TextPainter| p.line_gap(scale)) * 3.;
+        let leading = text.chars().take_while(|c| *c == '\n').count();
+        let trailing = text.chars().rev().take_while(|c| *c == '\n').count();
+        if leading + trailing >= text.chars().count() {
+            height += leading as f32 * painter!(|p: &mut TextPainter| p.line_gap(scale)) * 3.;
+        } else {
+            height += (leading + trailing) as f32 * painter!(|p: &mut TextPainter| p.line_gap(scale)) * 3.;
+        }
         if self.baseline {
             height += painter!(|p: &mut TextPainter| p.brush.fonts()[0].as_scaled(scale).descent());
         }

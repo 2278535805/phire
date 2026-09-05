@@ -532,6 +532,7 @@ impl InlineInputBox {
         if is_key_pressed(KeyCode::Right) {
             self.state.right_arrow_time = Some(now);
             self.cursor_right(shift);
+            self.state.manual_scroll = false;
             self.update_ime_state();
         } else if let Some(arrow_time) = self.state.right_arrow_time {
             if is_key_down(KeyCode::Right) {
@@ -549,6 +550,7 @@ impl InlineInputBox {
         if is_key_pressed(KeyCode::Left) {
             self.state.left_arrow_time = Some(now);
             self.cursor_left(shift);
+            self.state.manual_scroll = false;
             self.update_ime_state();
         } else if let Some(arrow_time) = self.state.left_arrow_time {
             if is_key_down(KeyCode::Left) {
@@ -567,6 +569,7 @@ impl InlineInputBox {
             if is_key_pressed(KeyCode::Up) {
                 self.state.up_arrow_time = Some(now);
                 self.cursor_up(shift);
+                self.state.manual_scroll = false;
                 self.update_ime_state();
             } else if let Some(arrow_time) = self.state.up_arrow_time {
                 if is_key_down(KeyCode::Up) {
@@ -584,6 +587,7 @@ impl InlineInputBox {
             if is_key_pressed(KeyCode::Down) {
                 self.state.down_arrow_time = Some(now);
                 self.cursor_down(shift);
+                self.state.manual_scroll = false;
                 self.update_ime_state();
             } else if let Some(arrow_time) = self.state.down_arrow_time {
                 if is_key_down(KeyCode::Down) {
@@ -609,6 +613,7 @@ impl InlineInputBox {
             }
             let before = self.text_before();
             self.state.cursor = before.rfind('\n').map(|i| self.buffer[..i].chars().count() + 1).unwrap_or(0);
+            self.state.manual_scroll = false;
             self.update_ime_state();
         }
         if is_key_pressed(KeyCode::End) {
@@ -623,6 +628,7 @@ impl InlineInputBox {
             self.state.cursor = self.buffer[after_byte..].find('\n').map(|i| {
                 self.buffer[..after_byte + i].chars().count()
             }).unwrap_or(self.buffer.chars().count());
+            self.state.manual_scroll = false;
             self.update_ime_state();
         }
 
@@ -665,6 +671,7 @@ impl InlineInputBox {
                 if self.state.cursor > 0 {
                     self.state.cursor -= 1;
                     self.remove_char_at(self.state.cursor);
+                    self.state.manual_scroll = false;
                     self.update_ime_state();
                 }
             }
@@ -693,6 +700,7 @@ impl InlineInputBox {
             if !self.delete_selection() {
                 if self.state.cursor < self.buffer.chars().count() {
                     self.remove_char_at(self.state.cursor);
+                    self.state.manual_scroll = false;
                     self.update_ime_state();
                 }
             }
@@ -721,6 +729,7 @@ impl InlineInputBox {
                 let byte_pos = self.byte_at(self.state.cursor);
                 self.buffer.insert(byte_pos, '\n');
                 self.state.cursor += 1;
+                self.state.manual_scroll = false;
                 self.update_ime_state();
             }
         }
@@ -733,6 +742,7 @@ impl InlineInputBox {
                 let byte_pos = self.byte_at(self.state.cursor);
                 self.buffer.insert(byte_pos, ch);
                 self.state.cursor += 1;
+                self.state.manual_scroll = false;
                 self.update_ime_state();
             }
         }
@@ -743,6 +753,7 @@ impl InlineInputBox {
                 let byte_pos = self.byte_at(self.state.cursor);
                 self.buffer.insert_str(byte_pos, &text);
                 self.state.cursor += text.chars().count();
+                self.state.manual_scroll = false;
                 self.update_ime_state();
             }
         }
@@ -766,7 +777,11 @@ impl InlineInputBox {
         // Mouse wheel
         if self.multiline {
             let (x, y) = take_wheel();
-            if x.abs() > 1e-5 || y.abs() > 1e-5 {
+            if shift && (x.abs() > 1e-5 || y.abs() > 1e-5) {
+                self.state.scroll_x -= x * WHEEL_STEP;
+                self.state.scroll_x -= y * WHEEL_STEP;
+                self.state.manual_scroll = true;
+            } else if x.abs() > 1e-5 || y.abs() > 1e-5 {
                 self.state.scroll_x -= x * WHEEL_STEP;
                 self.state.scroll_y -= y * WHEEL_STEP;
                 self.state.manual_scroll = true;
@@ -775,7 +790,18 @@ impl InlineInputBox {
     }
 
     pub fn render(&mut self, ui: &mut Ui, rect: Rect, t: f32, placeholder: &str) {
-        self.rect = ui.rect_to_global(rect);
+        let global_rect = ui.rect_to_global(rect);
+        let screen = ui.screen_rect().feather(-0.04);
+        let w = global_rect.w.min(screen.w).max(0.0);
+        let h = global_rect.h.min(screen.h).max(0.0);
+        let global_rect = Rect::new(
+            global_rect.x.clamp(screen.x, screen.right() - w),
+            global_rect.y.clamp(screen.y, screen.bottom() - h),
+            w,
+            h,
+        );
+        self.rect = global_rect;
+        let rect = ui.rect_to_local(global_rect);
         self.state.touch_scale_x = if self.rect.w > 0.0 { rect.w / self.rect.w } else { 1.0 };
         self.state.touch_scale_y = if self.rect.h > 0.0 { rect.h / self.rect.h } else { 1.0 };
         let bx = rect.x;
@@ -833,13 +859,17 @@ impl InlineInputBox {
                 let cursor_y = line_num * line_h_with_space;
                 let full_text = ui.text(display).size(0.42).multiline().measure();
                 let text_x_adj = if full_text.w > max_w {
-                    let margin = max_w * 0.1;
-                    let lo = (cursor_w - max_w + margin).max(0.0);
-                    let hi = (cursor_w - margin).max(0.0).min(full_text.w - max_w);
-                    if lo <= hi {
-                        self.state.scroll_x = self.state.scroll_x.clamp(lo, hi);
+                    if self.state.manual_scroll {
+                        self.state.scroll_x = self.state.scroll_x.clamp(0.0, full_text.w - max_w);
                     } else {
-                        self.state.scroll_x = hi;
+                        let margin = max_w * 0.1;
+                        let lo = (cursor_w - max_w + margin).max(0.0);
+                        let hi = (cursor_w - margin).max(0.0).min(full_text.w - max_w);
+                        if lo <= hi {
+                            self.state.scroll_x = self.state.scroll_x.clamp(lo, hi);
+                        } else {
+                            self.state.scroll_x = hi;
+                        }
                     }
                     text_x - self.state.scroll_x
                 } else {
