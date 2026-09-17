@@ -38,8 +38,14 @@ impl InlineInputBtn {
         self.input.set_centered();
     }
 
-    pub fn confirm(&mut self, touch: &Touch) -> Option<String> {
-        if self.input.is_active() && self.input.touch(touch) {
+    pub fn touch(&mut self, touch: &Touch) {
+        if self.input.is_active() {
+            self.input.touch(touch);
+        }
+    }
+
+    pub fn confirm(&mut self) -> Option<String> {
+        if self.input.need_confirm() {
             Some(self.input.confirm())
         } else {
             None
@@ -147,6 +153,8 @@ struct State {
     touch_scale_x: f32,
     touch_scale_y: f32,
     manual_scroll: bool,
+
+    need_confirm: bool,
 }
 
 impl InlineInputBox {
@@ -183,6 +191,7 @@ impl InlineInputBox {
         self.state.scroll_x = 0.0;
         self.state.scroll_y = 0.0;
         self.state.manual_scroll = false;
+        self.state.need_confirm = false;
         miniquad::window::set_ime_enabled(true);
         miniquad::window::show_keyboard(true);
         miniquad::window::update_text_input_state(
@@ -200,6 +209,10 @@ impl InlineInputBox {
 
     pub fn is_active(&self) -> bool {
         self.state.active
+    }
+
+    pub fn need_confirm(&self) -> bool {
+        self.state.need_confirm
     }
 
     pub fn cancel(&mut self) {
@@ -226,6 +239,7 @@ impl InlineInputBox {
         self.state.selection_anchor = None;
         self.state.backspace_time = None;
         self.context_menu.visible = false;
+        self.state.need_confirm = false;
         miniquad::window::set_ime_enabled(false);
         miniquad::window::show_keyboard(false);
         miniquad::window::update_text_input_state(
@@ -400,6 +414,9 @@ impl InlineInputBox {
                         self.state.manual_scroll = false;
                         self.update_ime_state();
                     }
+                    if !self.context_menu.visible && !in_rect {
+                        self.state.need_confirm = true;
+                    }
                     !in_rect
                 }
             }
@@ -417,6 +434,8 @@ impl InlineInputBox {
                                 p.y.max(self.rect.y).min(self.rect.bottom() - CONTEXT_MENU_ITEM_Y * self.context_menu.items.len() as f32)
                             );
                         }
+                    } else {
+                        self.state.need_confirm = true;
                     }
                     false
                 }
@@ -434,6 +453,8 @@ impl InlineInputBox {
                         self.state.touch_start_scroll_x = self.state.scroll_x;
                         self.state.touch_start_scroll_y = self.state.scroll_y;
                         self.state.touch_is_moved = false;
+                    } else {
+                        self.state.need_confirm = true;
                     }
                     !in_rect
                 }
@@ -873,6 +894,10 @@ impl InlineInputBox {
             } else {
                 self.state.selection_anchor = Some(ime_state.selection_start);
             }
+        }
+
+        if !self.multiline && is_key_pressed(KeyCode::Enter) {
+            self.state.need_confirm = true;
         }
 
         if is_key_pressed(KeyCode::Escape) {

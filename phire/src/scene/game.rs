@@ -1522,6 +1522,33 @@ impl Scene for GameScene {
         self.chart.update(&mut self.res);
         let res = &mut self.res;
 
+        if let Some(text) = self.exercise_inputs.0.confirm() {
+            let offset = self.offset_chart().min(0.);
+            if let Some(t) = parse_time(&text) {
+                if !(offset..self.res.track_length.min(self.exercise_range.end - 3.).max(offset)).contains(&t) {
+                    show_message(tl!("ex-time-out-of-range")).error();
+                } else {
+                    self.exercise_range.start = t;
+                }
+            } else {
+                show_message(tl!("ex-invalid-format")).error();
+            }
+            return Ok(())
+        }
+        if let Some(text) = self.exercise_inputs.1.confirm() {
+            let offset = self.offset_chart().min(0.);
+            if let Some(t) = parse_time(&text) {
+                if !((self.exercise_range.start + 3.).max(offset).min(self.res.track_length)..self.res.track_length + 0.01).contains(&t) {
+                    show_message(tl!("ex-time-out-of-range")).error();
+                } else {
+                    self.exercise_range.end = t;
+                }
+            } else {
+                show_message(tl!("ex-invalid-format")).error();
+            }
+            return Ok(())
+        }
+
         if self.exercise_inputs.0.is_active() {
             self.exercise_inputs.0.input.update();
             return Ok(())
@@ -1597,32 +1624,8 @@ impl Scene for GameScene {
                 position: touch.position * self.touch_scale(),
                 ..touch.clone()
             };
-            if let Some(text) = self.exercise_inputs.0.confirm(&touch) {
-                let offset = self.offset_chart().min(0.);
-                if let Some(t) = parse_time(&text) {
-                    if !(offset..self.res.track_length.min(self.exercise_range.end - 3.).max(offset)).contains(&t) {
-                        show_message(tl!("ex-time-out-of-range")).error();
-                    } else {
-                        self.exercise_range.start = t;
-                    }
-                } else {
-                    show_message(tl!("ex-invalid-format")).error();
-                }
-                return Ok(true);
-            }
-            if let Some(text) = self.exercise_inputs.1.confirm(&touch) {
-                let offset = self.offset_chart().min(0.);
-                if let Some(t) = parse_time(&text) {
-                    if !((self.exercise_range.start + 3.).max(offset).min(self.res.track_length)..self.res.track_length + 0.01).contains(&t) {
-                        show_message(tl!("ex-time-out-of-range")).error();
-                    } else {
-                        self.exercise_range.end = t;
-                    }
-                } else {
-                    show_message(tl!("ex-invalid-format")).error();
-                }
-                return Ok(true);
-            }
+            self.exercise_inputs.0.touch(&touch);
+            self.exercise_inputs.1.touch(&touch);
             self.exercise_inputs.0.activate(&touch, 1.0, &fmt_time(self.exercise_range.start));
             self.exercise_inputs.1.activate(&touch, 1.0, &fmt_time(self.exercise_range.end));
         }

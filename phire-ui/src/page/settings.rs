@@ -314,7 +314,11 @@ impl GeneralList {
             #[cfg(any(target_os = "windows", target_os = "linux"))]
             fullscreen_btn: DRectButton::new(),
             mp_btn: DRectButton::new(),
-            mp_addr_input: InlineInputBtn::new(),
+            mp_addr_input: {
+                let mut input = InlineInputBtn::new();
+                input.set_centered();
+                input
+            },
             anti_aliasing_btn: DRectButton::new(),
             low_resolution_btn: DRectButton::new(),
             dynamic_resolution_btn: DRectButton::new(),
@@ -332,14 +336,7 @@ impl GeneralList {
     pub fn touch(&mut self, touch: &Touch, t: f32) -> Result<Option<bool>> {
         let data = get_data_mut();
         let config = &mut data.config;
-        if let Some(text) = self.mp_addr_input.confirm(touch) {
-            if let Err(err) = text.to_socket_addrs() {
-                show_error(anyhow::Error::new(err).context(tl!("item-mp-addr-invalid")));
-                return Ok(Some(false));
-            }
-            config.mp_address = text;
-            return Ok(Some(true));
-        }
+        self.mp_addr_input.touch(touch);
         if self.lang_btn.touch(touch, t) {
             return Ok(Some(false));
         }
@@ -378,9 +375,17 @@ impl GeneralList {
     }
 
     pub fn update(&mut self, t: f32) -> Result<bool> {
-        self.lang_btn.update(t);
-        self.mp_addr_input.update();
         let data = get_data_mut();
+        self.lang_btn.update(t);
+        if let Some(text) = self.mp_addr_input.confirm() {
+            if let Err(err) = text.to_socket_addrs() {
+                show_error(anyhow::Error::new(err).context(tl!("item-mp-addr-invalid")));
+                return Ok(false);
+            }
+            data.config.mp_address = text;
+            return Ok(true);
+        }
+        self.mp_addr_input.update();
         if self.lang_btn.changed() {
             data.language = Some(LANG_IDENTS[self.lang_btn.selected()].to_string());
             sync_data();
@@ -818,8 +823,16 @@ impl OtherList {
             touch_debug_btn: DRectButton::new(),
             chart_ratio_slider: Slider::new(0.05..1.0, 0.05),
             fade_slider: Slider::new(-2.0..2.0, 0.05),
-            watermark_input: InlineInputBtn::new(),
-            combo_input: InlineInputBtn::new(),
+            watermark_input: {
+                let mut input = InlineInputBtn::new();
+                input.set_centered();
+                input
+            },
+            combo_input: {
+                let mut input = InlineInputBtn::new();
+                input.set_centered();
+                input
+            },
             roman_btn: DRectButton::new(),
             chinese_btn: DRectButton::new(),
             rotation_mode: DRectButton::new(),
@@ -841,45 +854,14 @@ impl OtherList {
     pub fn touch(&mut self, touch: &Touch, t: f32) -> Result<Option<bool>> {
         let data = get_data_mut();
         let config = &mut data.config;
-        if let Some(text) = self.watermark_input.confirm(touch) {
-            if text.trim().is_empty() {
-                config.watermark = String::new();
-                return Ok(Some(true));
-            }
-            config.watermark = text;
-            return Ok(Some(true));
-        }
-
-        #[cfg(feature = "play")]
-        if let Some(text) = self.health_mode_input.confirm(touch) {
-            if text.trim().is_empty() {
-                config.health_mode = None;
-                return Ok(Some(true));
-            }
-            match HealthConfig::from_json(&text) {
-                Ok(health_mode) => {
-                    config.health_mode = Some(health_mode);
-                    return Ok(Some(true));
-                }
-                Err(_) => {
-                    show_message(tl!("illegal-input")).error();
-                    return Ok(Some(false));
-                }
-            }
-        }
+        self.watermark_input.touch(touch);
+        self.health_mode_input.touch(touch);
         #[cfg(feature = "play")]
         if self.health_mode_input.is_active() {
             return Ok(Some(false));
         }
 
-        if let Some(text) = self.combo_input.confirm(touch) {
-            if validate_combo(&text) || text.len() > 50 {
-                show_message(tl!("not-combo")).error();
-                return Ok(Some(false));
-            }
-            config.combo = text;
-            return Ok(Some(true));
-        }
+        self.combo_input.touch(touch);
 
         if let wt @ Some(_) = self.chart_debug_line_slider.touch(touch, t, &mut config.chart_debug_line) {
             return Ok(wt);
@@ -935,8 +917,43 @@ impl OtherList {
     }
 
     pub fn update(&mut self, _t: f32) -> Result<bool> {
+        let config = &mut get_data_mut().config;
         self.watermark_input.update();
+        if let Some(text) = self.watermark_input.confirm() {
+            if text.trim().is_empty() {
+                config.watermark = String::new();
+                return Ok(true);
+            }
+            config.watermark = text;
+            return Ok(true);
+        }
+
+        #[cfg(feature = "play")]
+        if let Some(text) = self.health_mode_input.confirm() {
+            if text.trim().is_empty() {
+                config.health_mode = None;
+                return Ok(true);
+            }
+            match HealthConfig::from_json(&text) {
+                Ok(health_mode) => {
+                    config.health_mode = Some(health_mode);
+                    return Ok(true);
+                }
+                Err(_) => {
+                    show_message(tl!("illegal-input")).error();
+                    return Ok(false);
+                }
+            }
+        }
         self.health_mode_input.update();
+        if let Some(text) = self.combo_input.confirm() {
+            if validate_combo(&text) || text.len() > 50 {
+                show_message(tl!("not-combo")).error();
+                return Ok(false);
+            }
+            config.combo = text;
+            return Ok(true);
+        }
         self.combo_input.update();
         Ok(false)
     }
