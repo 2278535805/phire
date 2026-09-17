@@ -16,20 +16,26 @@ const CONTEXT_MENU_ITEM_Y: f32 = 0.04;
 pub struct InlineInputBtn {
     pub input: InlineInputBox,
     pub btn: DRectButton,
-
-    multiline: bool,
-    password: bool,
 }
 
 impl InlineInputBtn {
-    pub fn new(multiline: bool, password: bool) -> Self {
+    pub fn new() -> Self {
         Self {
             input: InlineInputBox::new(),
             btn: DRectButton::new(),
-
-            multiline,
-            password,
         }
+    }
+
+    pub fn set_multiline(&mut self) {
+        self.input.set_multiline();
+    }
+
+    pub fn set_password(&mut self) {
+        self.input.set_password();
+    }
+
+    pub fn set_centered(&mut self) {
+        self.input.set_centered();
     }
 
     pub fn confirm(&mut self, touch: &Touch) -> Option<String> {
@@ -46,7 +52,7 @@ impl InlineInputBtn {
 
     pub fn activate(&mut self, touch: &Touch, t: f32, text: &str) {
         if !self.input.is_active() && self.btn.touch(touch, t) {
-            self.input.activate(text, self.multiline, self.password);
+            self.input.activate(text);
         }
     }
 
@@ -94,6 +100,7 @@ pub struct InlineInputBox {
     rect: Rect,
     multiline: bool,
     password: bool,
+    centered: bool,
 
     state: State,
     context_menu: ContextMenu,
@@ -149,16 +156,27 @@ impl InlineInputBox {
             rect: Rect::new(0., 0., 0., 0.),
             multiline: false,
             password: false,
+            centered: false,
             state: State::default(),
             context_menu: ContextMenu::default(),
         }
     }
 
-    pub fn activate(&mut self, initial: &str, multiline: bool, password: bool) {
+    pub fn set_multiline(&mut self) {
+        self.multiline = true;
+    }
+
+    pub fn set_password(&mut self) {
+        self.password = true;
+    }
+
+    pub fn set_centered(&mut self) {
+        self.centered = true;
+    }
+
+    pub fn activate(&mut self, initial: &str) {
         self.state.active = true;
         self.buffer = initial.to_string();
-        self.multiline = multiline;
-        self.password = password;
         self.state.cursor = initial.chars().count();
         self.state.selection_anchor = None;
         self.state.backspace_time = None;
@@ -288,20 +306,26 @@ impl InlineInputBox {
         );
     }
 
-    fn render_preedit(&self, ui: &mut Ui, x: f32, y: f32, t: f32) {
+    fn render_preedit(&self, ui: &mut Ui, x: f32, y: f32, t: f32, center_x: Option<f32>) {
         if let Some((text, cursor)) = get_ime_preedit() {
             let display_before = &text[..cursor];
             let cursor_w = ui.text(display_before).size(0.42).measure().w;
+            let mut start_x = x;
             let mut text = ui.text(&text)
                 .pos(x, y)
                 .anchor(0.0, 0.5)
                 .size(0.42)
                 .no_baseline()
                 .color(Color::new(1.0, 1.0, 1.0, t));
-            let r = text.measure();
+            let mut r = text.measure();
+            if let Some(cx) = center_x {
+                start_x = cx - r.w * 0.5;
+                text = text.pos(start_x, y);
+                r.x = start_x;
+            }
             text.ui.fill_rect(r, Color::new(0.0, 0.0, 0.0, t));
             text.draw();
-            let cx = x + cursor_w;
+            let cx = start_x + cursor_w;
             ui.fill_rect(Rect::new(cx - 0.001, r.top(), 0.003, r.h), Color::new(1.0, 1.0, 1.0, t * 0.9));
         }
     }
@@ -909,18 +933,21 @@ impl InlineInputBox {
                 let text_y = by + 0.02;
                 let line_h_with_space = ui.text("0\n0").size(0.42).multiline().measure().h - line_h;
                 if self.buffer.is_empty() {
+                    let ph_w = ui.text(placeholder).size(0.42).measure().w;
+                    let ph_x = if self.centered { bx + (bw - ph_w) * 0.5 } else { text_x };
+                    let cursor_x = if self.centered { bx + bw * 0.5 } else { text_x };
                     ui.text(placeholder)
-                        .pos(text_x, text_y)
+                        .pos(ph_x, text_y)
                         .anchor(0.0, 0.0)
                         .no_baseline()
                         .size(0.42)
                         .color(Color::new(1.0, 1.0, 1.0, t * 0.3))
                         .draw();
-                    ui.fill_rect(Rect::new(text_x, text_y, 0.003, line_h + 0.01), Color::new(1.0, 1.0, 1.0, t * 0.9));
-                    self.update_ime(ui, (text_x, text_y));
+                    ui.fill_rect(Rect::new(cursor_x, text_y, 0.003, line_h + 0.01), Color::new(1.0, 1.0, 1.0, t * 0.9));
+                    self.update_ime(ui, (cursor_x, text_y));
                     self.state.cursor_positions.clear();
-                    self.state.cursor_positions.push(ui.to_global((text_x, text_y)));
-                    self.render_preedit(ui, text_x, text_y + line_h / 2., t);
+                    self.state.cursor_positions.push(ui.to_global((cursor_x, text_y)));
+                    self.render_preedit(ui, cursor_x + 0.003, text_y + line_h / 2., t, if self.centered { Some(bx + bw * 0.5) } else { None });
                     return;
                 }
                 let display = if self.password {
@@ -977,6 +1004,18 @@ impl InlineInputBox {
                     text_y
                 };
                 let cursor_y_adj = text_y_adj + line_num * line_h_with_space;
+                let centered = self.centered && full_text.w <= max_w;
+                let line_widths: Option<Vec<f32>> = if centered {
+                    Some(display.split('\n').map(|line| ui.text(line).size(0.42).multiline().measure().w).collect())
+                } else {
+                    None
+                };
+                let line_x = |idx: usize| -> f32 {
+                    match &line_widths {
+                        Some(ws) => bx + (bw - ws[idx]) * 0.5,
+                        None => text_x_adj,
+                    }
+                };
                 if let Some((sel_start, sel_end)) = self.selection_range() {
                     let mut char_offset = 0usize;
                     for (line_idx, line) in display.split('\n').enumerate() {
@@ -998,7 +1037,7 @@ impl InlineInputBox {
                             let end_w = if end_byte == 0 { 0.0 } else { ui.text(&line[..end_byte]).size(0.42).multiline().measure().w };
 
                             let y = text_y_adj + line_idx as f32 * line_h_with_space;
-                            let x = text_x_adj + start_w;
+                            let x = line_x(line_idx) + start_w;
                             let w = end_w - start_w;
                             if w > 0.0 {
                                 ui.fill_rect(Rect::new(x, y, w, line_h + 0.01), Color::new(0.3, 0.5, 1.0, t * 0.3));
@@ -1008,13 +1047,24 @@ impl InlineInputBox {
                         char_offset += line_len + 1;
                     }
                 }
-                ui.text(display)
-                    .pos(text_x_adj, text_y_adj)
-                    .size(0.42)
-                    .color(Color::new(1.0, 1.0, 1.0, t))
-                    .multiline()
-                    .draw();
-                let cx = text_x_adj + cursor_w;
+                if line_widths.is_some() {
+                    for (line_idx, line) in display.split('\n').enumerate() {
+                        ui.text(line)
+                            .pos(line_x(line_idx), text_y_adj + line_idx as f32 * line_h_with_space)
+                            .size(0.42)
+                            .color(Color::new(1.0, 1.0, 1.0, t))
+                            .multiline()
+                            .draw();
+                    }
+                } else {
+                    ui.text(display)
+                        .pos(text_x_adj, text_y_adj)
+                        .size(0.42)
+                        .color(Color::new(1.0, 1.0, 1.0, t))
+                        .multiline()
+                        .draw();
+                }
+                let cx = line_x(line_num as usize) + cursor_w;
                 ui.fill_rect(Rect::new(cx, cursor_y_adj, 0.003, line_h + 0.01), Color::new(1.0, 1.0, 1.0, t * 0.9));
                 self.update_ime(ui, (cx, cursor_y_adj + 0.002));
                 self.state.cursor_positions.clear();
@@ -1036,28 +1086,30 @@ impl InlineInputBox {
                     } else {
                         ui.text(line_text).size(0.42).multiline().measure().w
                     };
-                    let x = text_x_adj + w;
+                    let x = line_x(line_num_cur) + w;
                     let y = text_y_adj + line_num_cur as f32 * line_h_with_space;
                     self.state.cursor_positions.push(ui.to_global((x, y)));
                 }
-                self.render_preedit(ui, cx + 0.003, cursor_y_adj + line_h / 2. + 0.002, t);
+                self.render_preedit(ui, cx + 0.003, cursor_y_adj + line_h / 2. + 0.002, t, if self.centered { Some(bx + bw * 0.5) } else { None });
             } else {
                 if self.buffer.is_empty() {
                     let text_y = by + bh * 0.5;
+                    let ph_w = ui.text(placeholder).size(0.42).measure().w;
+                    let ph_x = if self.centered { bx + (bw - ph_w) * 0.5 } else { text_x };
+                    let cursor_x = if self.centered { bx + bw * 0.5 } else { text_x };
                     ui.text(placeholder)
-                        .pos(text_x, text_y)
+                        .pos(ph_x, text_y)
                         .anchor(0.0, 0.5)
                         .no_baseline()
                         .size(0.42)
                         .color(Color::new(1.0, 1.0, 1.0, t * 0.3))
                         .draw();
-                    let cursor_x = text_x;
                     let cursor_y = by + 0.01;
                     ui.fill_rect(Rect::new(cursor_x, cursor_y, 0.003, bh - 0.02), Color::new(1.0, 1.0, 1.0, t * 0.9));
                     self.update_ime(ui, (cursor_x, text_y - line_h * 0.5));
                     self.state.cursor_positions.clear();
                     self.state.cursor_positions.push(ui.to_global((cursor_x, text_y)));
-                    self.render_preedit(ui, cursor_x + 0.003, text_y, t);
+                    self.render_preedit(ui, cursor_x + 0.003, text_y, t, if self.centered { Some(bx + bw * 0.5) } else { None });
                     return;
                 }
                 let text_y = by + bh * 0.5;
@@ -1085,7 +1137,11 @@ impl InlineInputBox {
                     text_x - self.state.scroll_x
                 } else {
                     self.state.scroll_x = 0.0;
-                    text_x
+                    if self.centered {
+                        bx + (bw - full_w) * 0.5
+                    } else {
+                        text_x
+                    }
                 };
                 // Draw selection highlight
                 if let Some((sel_start, sel_end)) = self.selection_range() {
@@ -1115,7 +1171,7 @@ impl InlineInputBox {
                     let x = text_x_adj + w;
                     self.state.cursor_positions.push(ui.to_global((x, text_y)));
                 }
-                self.render_preedit(ui, cx + 0.003, text_y, t);
+                self.render_preedit(ui, cx + 0.003, text_y, t, if self.centered { Some(bx + bw * 0.5) } else { None });
             }
         });
 

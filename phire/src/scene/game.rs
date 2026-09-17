@@ -632,7 +632,18 @@ impl GameScene {
             first_in: false,
             exercise_range,
             exercise_press: None,
-            exercise_inputs: (InlineInputBtn::new(false, false), InlineInputBtn::new(false, false)),
+            exercise_inputs: (
+                {
+                    let mut input = InlineInputBtn::new();
+                    input.set_centered();
+                    input
+                },
+                {
+                    let mut input = InlineInputBtn::new();
+                    input.set_centered();
+                    input
+                },
+            ),
 
             music,
             sfx_vec,

@@ -83,11 +83,11 @@ impl RenderConfigDialog {
             }
         }
         if self.resolution_button.touch(touch, t) {
-            self.resolution_input.activate(&self.resolution, false, false);
+            self.resolution_input.activate(&self.resolution);
         } else if self.fps_button.touch(touch, t) {
-            self.fps_input.activate(&self.fps, false, false);
+            self.fps_input.activate(&self.fps);
         } else if self.crf_button.touch(touch, t) {
-            self.crf_input.activate(&self.crf, false, false);
+            self.crf_input.activate(&self.crf);
         } else if self.cancel_button.touch(touch, t) {
             self.show = false;
             self.result = Some(None);
