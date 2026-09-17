@@ -1521,6 +1521,16 @@ impl Scene for GameScene {
         };
         self.chart.update(&mut self.res);
         let res = &mut self.res;
+
+        if self.exercise_inputs.0.is_active() {
+            self.exercise_inputs.0.input.update();
+            return Ok(())
+        }
+        if self.exercise_inputs.1.is_active() {
+            self.exercise_inputs.1.input.update();
+            return Ok(())
+        }
+
         if res.config.interactive && is_key_pressed(KeyCode::Space) {
             if tm.paused() {
                 if matches!(self.state, State::Playing) {
@@ -1550,14 +1560,6 @@ impl Scene for GameScene {
                 };
                 tm.pause();
             }
-        }
-        if self.exercise_inputs.0.is_active() {
-            self.exercise_inputs.0.input.update();
-            return Ok(())
-        }
-        if self.exercise_inputs.1.is_active() {
-            self.exercise_inputs.1.input.update();
-            return Ok(())
         }
         if Self::interactive(res, &self.state) {
             if is_key_pressed(KeyCode::Left) {
@@ -1602,7 +1604,6 @@ impl Scene for GameScene {
                         show_message(tl!("ex-time-out-of-range")).error();
                     } else {
                         self.exercise_range.start = t;
-                        show_message(tl!("ex-time-set")).ok();
                     }
                 } else {
                     show_message(tl!("ex-invalid-format")).error();
@@ -1616,7 +1617,6 @@ impl Scene for GameScene {
                         show_message(tl!("ex-time-out-of-range")).error();
                     } else {
                         self.exercise_range.end = t;
-                        show_message(tl!("ex-time-set")).ok();
                     }
                 } else {
                     show_message(tl!("ex-invalid-format")).error();
