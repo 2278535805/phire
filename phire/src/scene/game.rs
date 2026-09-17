@@ -1601,7 +1601,7 @@ impl Scene for GameScene {
             if let Some(text) = self.exercise_inputs.1.confirm(&touch) {
                 let offset = self.offset_chart().min(0.);
                 if let Some(t) = parse_time(&text) {
-                    if !((self.exercise_range.start + 3.).max(offset).min(self.res.track_length)..self.res.track_length).contains(&t) {
+                    if !((self.exercise_range.start + 3.).max(offset).min(self.res.track_length)..self.res.track_length + 0.01).contains(&t) {
                         show_message(tl!("ex-time-out-of-range")).error();
                     } else {
                         self.exercise_range.end = t;
