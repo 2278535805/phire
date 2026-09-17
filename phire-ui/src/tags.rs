@@ -77,7 +77,7 @@ impl Tags {
             }
         }
         if self.add.touch(touch, t) {
-            self.add_input.activate("", false, false);
+            self.add_input.activate("");
             return true;
         }
         false

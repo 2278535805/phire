@@ -20,7 +20,7 @@ mod text;
 pub use text::{DrawText, TextPainter};
 
 mod input;
-pub use input::{InlineInputBox};
+pub use input::{InlineInputBox, InlineInputBtn};
 
 pub use glyph_brush::ab_glyph::FontArc;
 
@@ -339,6 +339,9 @@ impl DRectButton {
     }
 
     pub fn progress(&mut self, t: f32) -> f32 {
+        if t < 0.0 {
+            return 1.0;
+        }
         if self.start_time.as_ref().is_some_and(|it| t > *it + Self::TIME) {
             self.start_time = None;
         }
@@ -365,6 +368,10 @@ impl DRectButton {
             button_hit();
         }
         res
+    }
+
+    pub fn touching(&self) -> bool {
+        self.inner.touching()
     }
 }
 
