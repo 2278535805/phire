@@ -7,7 +7,7 @@ use super::{
     draw_background,
     ending::RecordUpdateState,
     loading::{BasicPlayer, UpdateFn, UploadFn},
-    request_input, return_input, show_message, take_input, EndingScene, NextScene, Scene,
+    show_message, EndingScene, NextScene, Scene,
 };
 use crate::{
     bin::BinaryReader,
@@ -21,7 +21,7 @@ use crate::{
     parse::{RPE_WIDTH, parse_extra, parse_pec, parse_phigros, parse_rpe},
     task::Task,
     time::TimeManager,
-    ui::{InlineInputBtn, RectButton, Ui},
+    ui::{InlineInputBtn, Ui},
 };
 use anyhow::{bail, Context, Result};
 use concat_string::concat_string;
@@ -31,7 +31,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     io::Cursor,
     ops::{DerefMut, Range},
-    sync::{Arc, Mutex},
+    sync::Mutex,
 };
 use tracing::{debug, warn};
 
