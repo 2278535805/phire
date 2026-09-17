@@ -586,6 +586,10 @@ pub fn unzip_into<R: std::io::Read + std::io::Seek>(reader: R, dir: &crate::dir:
 }
 
 pub fn parse_time(s: &str) -> Option<f64> {
+    let (neg, s) = match s.strip_prefix('-') {
+        Some(rest) => (true, rest),
+        None => (false, s),
+    };
     if s.is_empty() {
         return None;
     }
@@ -603,6 +607,9 @@ pub fn parse_time(s: &str) -> Option<f64> {
     }
     if let Some(hrs) = iter.next() {
         res += hrs.parse::<u32>().ok()? as f64 * 3600.;
+    }
+    if neg {
+        res *= -1.;
     }
     Some(res)
 }

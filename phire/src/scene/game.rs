@@ -1086,7 +1086,7 @@ impl GameScene {
                     }
                 }
                 ui.dy(0.2);
-                let r = ui.text("-").size(0.8).anchor(0.5, 0.).no_baseline().draw();
+                let r = ui.text("-").size(0.8).anchor(0.5, 0.).draw();
                 let mut tx = ui
                     .text(fmt_time(self.exercise_range.start))
                     .pos(r.x - 0.02, 0.)
