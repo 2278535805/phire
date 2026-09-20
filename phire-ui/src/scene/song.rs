@@ -1166,7 +1166,7 @@ impl SongScene {
 
         self.edit_scroll.size((width, ui.top * 2. - h));
         self.edit_scroll.render(ui, |ui| {
-            let (w, mut h) = render_chart_info(ui, self.info_edit.as_mut().unwrap(), width);
+            let (w, mut h) = render_chart_info(ui, self.info_edit.as_mut().unwrap(), width, rt);
             h += 0.06;
             ui.dy(h);
             if ui.button("edit_tags", Rect::new(0.04, 0., 0.2, 0.07), tl!("edit-tags")) {
@@ -1516,6 +1516,14 @@ impl Scene for SongScene {
             return Ok(true);
         }
         if !self.side_enter_time.is_infinite() {
+            if matches!(self.side_content, SideContent::Edit) {
+                if let Some(edit) = &mut self.info_edit {
+                    if edit.is_active() {
+                        edit.touch(touch, rt);
+                        return Ok(true);
+                    }
+                }
+            }
             if self.side_enter_time > 0. && tm.real_time() as f32 > self.side_enter_time + EDIT_TRANSIT {
                 if touch.position.x < 1. - self.side_content.width() && touch.phase == TouchPhase::Started && self.save_task.is_none() {
                     if matches!(self.side_content, SideContent::Mods) {
@@ -1532,6 +1540,14 @@ impl Scene for SongScene {
                     SideContent::Edit => {
                         if self.edit_scroll.touch(touch, t) {
                             return Ok(true);
+                        }
+                        if self.edit_scroll.contains(touch) {
+                            if let Some(edit) = &mut self.info_edit {
+                                edit.touch(touch, rt);
+                                if edit.is_active() {
+                                    return Ok(true);
+                                }
+                            }
                         }
                     }
                     SideContent::Leaderboard => {
@@ -1683,6 +1699,11 @@ impl Scene for SongScene {
         let rt = tm.real_time() as f32;
         self.tags.update(rt);
         self.rate_dialog.update(rt);
+        if !self.side_enter_time.is_infinite() && matches!(self.side_content, SideContent::Edit) {
+            if let Some(edit) = &mut self.info_edit {
+                edit.update();
+            }
+        }
         if self.tags.confirmed.take() == Some(true) {
             let mut tags = self.tags.tags.tags().to_vec();
             tags.push(self.tags.division.to_owned());
