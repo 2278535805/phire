@@ -1504,7 +1504,6 @@ impl Scene for GameScene {
             if self.res.config.health_mode.is_some() && matches!(self.state, State::Playing) && matches!(self.mode, GameMode::Normal | GameMode::NoRetry | GameMode::View | GameMode::Replay) {
                 self.res.health.update(time as f32);
             }
-            self.gl.quad_gl.viewport(None);
         }
         if let Some(update) = &mut self.update_fn {
             update(self.res.time, &mut self.res, &mut self.judge);
@@ -1724,7 +1723,7 @@ impl Scene for GameScene {
         let h = 1. / res.aspect_ratio;
         set_camera(&Camera2D {
             zoom: vec2(1., asp2_window),
-            viewport: if res.chart_target.is_some() { None } else { viewport_window },
+            viewport: viewport_window,
             render_target: chart_onto.clone(),
             ..Default::default()
         });
@@ -1898,7 +1897,6 @@ impl Scene for GameScene {
             // render the texture onto screen
             if let Some(target) = &self.res.chart_target {
                 self.gl.flush();
-                self.gl.quad_gl.viewport(None);
                 set_camera(&Camera2D {
                     zoom: vec2(1., asp2_window),
                     render_target: self.res.camera.render_target.clone(),

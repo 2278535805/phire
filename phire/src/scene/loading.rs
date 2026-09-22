@@ -172,6 +172,7 @@ impl Scene for LoadingScene {
         set_camera(&Camera2D {
             zoom: vec2(1., asp),
             render_target: self.target.clone(),
+            viewport: cam.viewport,
             ..Default::default()
         });
         if self.config.render_bg {
