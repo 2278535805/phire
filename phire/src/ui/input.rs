@@ -26,16 +26,29 @@ impl InlineInputBtn {
         }
     }
 
-    pub fn set_multiline(&mut self) {
-        self.input.set_multiline();
+    pub fn set_multiline(mut self) -> Self {
+        self.input = self.input.set_multiline();
+        self
     }
 
-    pub fn set_password(&mut self) {
-        self.input.set_password();
+    pub fn set_password(mut self) -> Self {
+        self.input = self.input.set_password();
+        self
     }
 
-    pub fn set_centered(&mut self) {
-        self.input.set_centered();
+    pub fn set_centered(mut self) -> Self {
+        self.input = self.input.set_centered();
+        self
+    }
+
+    pub fn set_no_background_input(mut self) -> Self {
+        self.input = self.input.set_no_background();
+        self
+    }
+
+    pub fn set_no_background_btn(mut self) -> Self {
+        self.btn = self.btn.no_background();
+        self
     }
 
     pub fn touch(&mut self, touch: &Touch) {
@@ -73,7 +86,7 @@ impl InlineInputBtn {
             let (r, _path) = self.btn.build(ui, t, rect);
             self.input.render(ui, r, color.a, placeholder);
         } else {
-            self.btn.render_text(ui, rect, t, color.a, text, 0.4, false);
+            self.btn.render_text(ui, rect, t, color.a, text, 0.42, false);
         }
     }
 }
@@ -107,6 +120,7 @@ pub struct InlineInputBox {
     multiline: bool,
     password: bool,
     centered: bool,
+    render_background: bool,
 
     state: State,
     context_menu: ContextMenu,
@@ -165,21 +179,30 @@ impl InlineInputBox {
             multiline: false,
             password: false,
             centered: false,
+            render_background: true,
             state: State::default(),
             context_menu: ContextMenu::default(),
         }
     }
 
-    pub fn set_multiline(&mut self) {
+    pub fn set_multiline(mut self) -> Self {
         self.multiline = true;
+        self
     }
 
-    pub fn set_password(&mut self) {
+    pub fn set_password(mut self) -> Self {
         self.password = true;
+        self
     }
 
-    pub fn set_centered(&mut self) {
+    pub fn set_centered(mut self) -> Self {
         self.centered = true;
+        self
+    }
+
+    pub fn set_no_background(mut self) -> Self {
+        self.render_background = false;
+        self
     }
 
     pub fn activate(&mut self, initial: &str) {
@@ -939,14 +962,16 @@ impl InlineInputBox {
         let bw = rect.w;
         let bh = rect.h;
 
-        ui.fill_path(
-            &Rect::new(bx, by, bw, bh).rounded(0.008),
-            Color::new(0.35, 0.5, 1.0, t),
-        );
-        ui.fill_path(
-            &Rect::new(bx + 0.002, by + 0.002, bw - 0.004, bh - 0.004).rounded(0.006),
-            Color::new(0.15, 0.15, 0.18, t),
-        );
+        if self.render_background {
+            ui.fill_path(
+                &Rect::new(bx, by, bw, bh).rounded(0.008),
+                Color::new(0.35, 0.5, 1.0, t),
+            );
+            ui.fill_path(
+                &Rect::new(bx + 0.002, by + 0.002, bw - 0.004, bh - 0.004).rounded(0.006),
+                Color::new(0.15, 0.15, 0.18, t),
+            );
+        }
 
         let line_h = ui.text("0").size(0.42).measure().h;
         let text_x = bx + 0.02;

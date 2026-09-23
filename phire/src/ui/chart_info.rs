@@ -25,9 +25,7 @@ struct ChartInfoInputs {
 impl ChartInfoInputs {
     fn new() -> Self {
         fn input() -> InlineInputBtn {
-            let mut input = InlineInputBtn::new();
-            input.set_centered();
-            input
+            InlineInputBtn::new().set_centered()
         }
         Self {
             name: input(),

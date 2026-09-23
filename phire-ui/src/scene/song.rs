@@ -28,12 +28,12 @@ use phire::{
     info::{ChartFormat, ChartInfo},
     judge::{icon_index, Judge},
     scene::{
-        request_input, request_save_file, return_input, show_error, show_message, take_file, take_input, BasicPlayer, GameMode, LoadingScene, LocalSceneTask,
-        NextScene, Scene, SimpleRecord, UpdateFn, UploadFn,
+        request_save_file, show_error, show_message, take_file, BasicPlayer, GameMode, LoadingScene, LocalSceneTask, NextScene, Scene, SimpleRecord,
+        UpdateFn, UploadFn,
     },
     task::Task,
     time::TimeManager,
-    ui::{button_hit, render_chart_info, ChartInfoEdit, DRectButton, Dialog, LoadingParams, RectButton, Scroll, Ui, UI_AUDIO},
+    ui::{button_hit, render_chart_info, ChartInfoEdit, DRectButton, Dialog, InlineInputBtn, LoadingParams, RectButton, Scroll, Ui, UI_AUDIO},
 };
 use reqwest::Method;
 use sasa::{AudioClip, Frame, Music, MusicParams};
@@ -282,6 +282,8 @@ pub struct SongScene {
     info_scroll: Scroll,
 
     review_task: Option<Task<Result<String>>>,
+    review_input: InlineInputBtn,
+    review_input_action: Option<&'static str>,
     chart_should_delete: Arc<AtomicBool>,
 
     edit_tags_task: Option<Task<Result<()>>>,
@@ -472,6 +474,8 @@ impl SongScene {
             info_scroll: Scroll::new(),
 
             review_task: None,
+            review_input: InlineInputBtn::new().set_multiline(),
+            review_input_action: None,
             chart_should_delete: Arc::default(),
 
             edit_tags_task: None,
@@ -1483,6 +1487,11 @@ impl Scene for SongScene {
 
     fn touch(&mut self, tm: &mut TimeManager, touch: &Touch) -> Result<bool> {
         let t = tm.now() as f32;
+        if self.review_input_action.is_some() {
+            self.review_input.touch(touch);
+            self.review_input.activate(touch, t, "");
+            return Ok(true);
+        }
         if self.render_config_dialog.touch(touch, tm.real_time() as f32) {
             return Ok(true);
         }
@@ -1894,7 +1903,8 @@ impl Scene for SongScene {
                     }));
                 }
                 "review-deny" => {
-                    request_input("deny-reason", "", tl!("review-denied"));
+                    self.review_input_action = Some("deny-reason");
+                    self.review_input.input.activate("");
                 }
                 "review-del" => {
                     confirm_delete(self.chart_should_delete.clone());
@@ -1932,10 +1942,12 @@ impl Scene for SongScene {
                     }));
                 }
                 "stabilize-comment" => {
-                    request_input("stabilize-comment", "", tl!("stabilize-commented"));
+                    self.review_input_action = Some("stabilize-comment");
+                    self.review_input.input.activate("");
                 }
                 "stabilize-deny" => {
-                    request_input("stabilize-deny-reason", "", tl!("stabilize-denied"));
+                    self.review_input_action = Some("stabilize-deny-reason");
+                    self.review_input.input.activate("");
                 }
                 _ => {}
             }
@@ -2107,9 +2119,10 @@ impl Scene for SongScene {
                 self.ldb_task = None;
             }
         }
-        if let Some((id, text)) = take_input() {
-            match id.as_str() {
-                "deny-reason" => {
+        self.review_input.update();
+        if let Some(text) = self.review_input.confirm() {
+            match self.review_input_action.take() {
+                Some("deny-reason") => {
                     let id = self.info.id.unwrap();
                     self.review_task = Some(Task::new(async move {
                         recv_raw(Client::post(
@@ -2123,7 +2136,7 @@ impl Scene for SongScene {
                         Ok(tl!("review-denied").into_owned())
                     }));
                 }
-                "stabilize-comment" => {
+                Some("stabilize-comment") => {
                     let id = self.info.id.unwrap();
                     self.review_task = Some(Task::new(async move {
                         recv_raw(Client::post(
@@ -2136,7 +2149,7 @@ impl Scene for SongScene {
                         Ok(tl!("stabilize-commented").into())
                     }));
                 }
-                "stabilize-deny-reason" => {
+                Some("stabilize-deny-reason") => {
                     let id = self.info.id.unwrap();
                     self.review_task = Some(Task::new(async move {
                         let resp: StableR = recv_raw(Client::post(
@@ -2157,8 +2170,10 @@ impl Scene for SongScene {
                         .into())
                     }));
                 }
-                _ => return_input(id, text),
+                _ => {}
             }
+        } else if self.review_input_action.is_some() && !self.review_input.is_active() {
+            self.review_input_action = None;
         }
         if let Some(task) = &mut self.review_task {
             if let Some(res) = task.take() {
@@ -2436,6 +2451,20 @@ impl Scene for SongScene {
         self.tags.render(ui, rt);
         self.rate_dialog.render(ui, rt);
         self.render_config_dialog.render(ui, rt);
+
+        if let Some(action) = self.review_input_action {
+            let title = match action {
+                "stabilize-comment" => tl!("stabilize-comment"),
+                "stabilize-deny-reason" => tl!("stabilize-deny"),
+                _ => tl!("review-deny"),
+            };
+            ui.fill_rect(ui.screen_rect(), semi_black(0.7));
+            let wr = Ui::dialog_rect();
+            ui.fill_path(&wr.rounded(0.02), Color { a: 1., ..ui.background() });
+            let r = ui.text(title.clone()).pos(wr.x + 0.04, wr.y + 0.033).size(0.7).color(WHITE).draw();
+            let input_r = Rect::new(wr.x + 0.04, r.bottom() + 0.04, wr.w - 0.08, (wr.bottom() - r.bottom() - 0.08).max(0.1));
+            self.review_input.render(ui, input_r, t, WHITE, &title, "");
+        }
 
         self.sf.render(ui, t);
 

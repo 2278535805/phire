@@ -314,11 +314,7 @@ impl GeneralList {
             #[cfg(any(target_os = "windows", target_os = "linux"))]
             fullscreen_btn: DRectButton::new(),
             mp_btn: DRectButton::new(),
-            mp_addr_input: {
-                let mut input = InlineInputBtn::new();
-                input.set_centered();
-                input
-            },
+            mp_addr_input: InlineInputBtn::new().set_centered(),
             anti_aliasing_btn: DRectButton::new(),
             low_resolution_btn: DRectButton::new(),
             dynamic_resolution_btn: DRectButton::new(),
@@ -823,27 +819,15 @@ impl OtherList {
             touch_debug_btn: DRectButton::new(),
             chart_ratio_slider: Slider::new(0.05..1.0, 0.05),
             fade_slider: Slider::new(-2.0..2.0, 0.05),
-            watermark_input: {
-                let mut input = InlineInputBtn::new();
-                input.set_centered();
-                input
-            },
-            combo_input: {
-                let mut input = InlineInputBtn::new();
-                input.set_centered();
-                input
-            },
+            watermark_input: InlineInputBtn::new().set_centered(),
+            combo_input: InlineInputBtn::new().set_centered(),
             roman_btn: DRectButton::new(),
             chinese_btn: DRectButton::new(),
             rotation_mode: DRectButton::new(),
             #[cfg(feature = "play")]
             shake_play_mode_btn: DRectButton::new(),
             #[cfg(feature = "play")]
-            health_mode_input: {
-                let mut input = InlineInputBtn::new();
-                input.set_multiline();
-                input
-            },
+            health_mode_input: InlineInputBtn::new().set_multiline(),
         }
     }
 

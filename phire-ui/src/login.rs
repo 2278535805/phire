@@ -78,21 +78,13 @@ impl Login {
             input_email: DRectButton::new().with_delta(-0.002),
             input_email_box: InlineInputBox::new(),
             input_pwd: DRectButton::new().with_delta(-0.002),
-            input_pwd_box: {
-                let mut input = InlineInputBox::new();
-                input.set_password();
-                input
-            },
+            input_pwd_box: InlineInputBox::new().set_password(),
             input_reg_email: DRectButton::new().with_delta(-0.002),
             input_reg_email_box: InlineInputBox::new(),
             input_reg_name: DRectButton::new().with_delta(-0.002),
             input_reg_name_box: InlineInputBox::new(),
             input_reg_pwd: DRectButton::new().with_delta(-0.002),
-            input_reg_pwd_box: {
-                let mut input = InlineInputBox::new();
-                input.set_password();
-                input
-            },
+            input_reg_pwd_box: InlineInputBox::new().set_password(),
 
             btn_to_reg: DRectButton::new(),
             btn_to_login: DRectButton::new(),
