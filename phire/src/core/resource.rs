@@ -13,7 +13,7 @@ use macroquad::prelude::*;
 use macroquad::miniquad::{gl::GLuint, TextureId, TextureWrap};
 use sasa::{AudioClip, AudioManager, Sfx};
 use serde::Deserialize;
-use std::{cell::RefCell, collections::{BTreeMap, HashMap, VecDeque}, ops::DerefMut, path::Path, sync::atomic::AtomicU32};
+use std::{cell::RefCell, collections::{BTreeMap, HashMap, VecDeque}, ops::DerefMut, path::Path, rc::Rc, sync::{atomic::AtomicU32}};
 use rand_pcg::{
     Pcg32,
     rand_core::SeedableRng
@@ -489,7 +489,7 @@ pub struct Resource {
 
     pub emitter: ParticleEmitter,
 
-    pub audio: AudioManager,
+    pub audio: Rc<RefCell<AudioManager>>,
     pub music: AudioClip,
     pub track_length: f64,
     pub sfx_click: Sfx,
@@ -594,14 +594,14 @@ impl Resource {
             ..Default::default()
         };
 
-        let mut audio = create_audio_manger(&config)?;
+        let audio = Rc::new(RefCell::new(create_audio_manger(&config)?));
         let music = AudioClip::new(fs.load_file(&info.music).await?)?;
         let music_length = music.length();
         let track_length = config.play_end_time.unwrap_or(music_length).min(music_length);
         let (sfx_click_buffer, sfx_drag_buffer, sfx_flick_buffer) = sfx_buffer_size.unwrap_or((BUFFER_SIZE, BUFFER_SIZE, BUFFER_SIZE));
-        let sfx_click = audio.create_sfx(res_pack.sfx_click.clone(), Some(sfx_click_buffer))?;
-        let sfx_drag = audio.create_sfx(res_pack.sfx_drag.clone(), Some(sfx_drag_buffer))?;
-        let sfx_flick = audio.create_sfx(res_pack.sfx_flick.clone(), Some(sfx_flick_buffer))?;
+        let sfx_click = audio.borrow_mut().create_sfx(res_pack.sfx_click.clone(), Some(sfx_click_buffer))?;
+        let sfx_drag = audio.borrow_mut().create_sfx(res_pack.sfx_drag.clone(), Some(sfx_drag_buffer))?;
+        let sfx_flick = audio.borrow_mut().create_sfx(res_pack.sfx_flick.clone(), Some(sfx_flick_buffer))?;
         let frame_times: VecDeque<f64> = VecDeque::new();
 
         let aspect_ratio = config.aspect_ratio.unwrap_or(info.aspect_ratio);

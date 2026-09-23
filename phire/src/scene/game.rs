@@ -29,9 +29,7 @@ use macroquad::{prelude::*, window::InternalGlContext};
 use sasa::{Music, MusicParams, PlaySfxParams};
 use serde::{Deserialize, Serialize};
 use std::{
-    io::Cursor,
-    ops::{DerefMut, Range},
-    sync::Mutex,
+    io::Cursor, ops::{DerefMut, Range}, rc::Rc, sync::Mutex,
 };
 use tracing::{debug, warn};
 
@@ -593,7 +591,7 @@ impl GameScene {
         
         // Prepare extra sfx from chart.hitsounds
         chart.hitsounds.drain().for_each(|(name, clip)| {
-            if let Ok(clip) = res.audio.create_sfx(clip, Some(BUFFER_SIZE)) {
+            if let Ok(clip) = res.audio.borrow_mut().create_sfx(clip, Some(BUFFER_SIZE)) {
                 res.extra_sfxs.insert(name, clip);
             }
         });
@@ -671,7 +669,7 @@ impl GameScene {
     }
 
     fn new_music(res: &mut Resource) -> Result<Music> {
-        let music = res.audio.create_music(
+        let music = res.audio.borrow_mut().create_music(
             res.music.clone(),
             MusicParams {
                 amplifier: res.config.volume_music as _,
@@ -1159,7 +1157,7 @@ impl GameScene {
         self.info_offset +
         (self.res.config.audio_offset +
         if self.res.config.auto_tweak_offset {
-            get_audio_latency(&self.res.audio)
+            get_audio_latency(&self.res.audio.borrow())
         } else {
             0.
         }) * speed
@@ -1291,7 +1289,7 @@ impl Scene for GameScene {
     }
 
     fn pause(&mut self, tm: &mut TimeManager) -> Result<()> {
-        self.res.audio.close()?;
+        self.res.audio.borrow_mut().close()?;
         if !tm.paused() {
             self.pause_rewind = PauseRewind {
                 time: None,
@@ -1305,7 +1303,7 @@ impl Scene for GameScene {
     }
 
     fn resume(&mut self, tm: &mut TimeManager) -> Result<()> {
-        self.res.audio.start()?;
+        self.res.audio.borrow_mut().start()?;
         if tm.paused() && !matches!(self.state, State::Playing) {
             tm.resume();
         }
@@ -1334,7 +1332,7 @@ impl Scene for GameScene {
 
     fn update(&mut self, tm: &mut TimeManager) -> Result<()> {
         let time = tm.now();
-        self.res.audio.recover_if_needed()?;
+        self.res.audio.borrow_mut().recover_if_needed()?;
         if matches!(self.state, State::Playing) && time < self.res.track_length {
             tm.update(self.music.position());
         }
@@ -1459,6 +1457,7 @@ impl Scene for GameScene {
                             self.judge.result(track_complete),
                             self.res.challenge_icons[self.res.config.challenge_color.clone() as usize].clone(),
                             &self.res.config,
+                            Rc::clone(&self.res.audio),
                             self.res.res_pack.endings.clone(),
                             self.upload_fn.clone(),
                             self.player.as_ref().map(|it| it.rks),
