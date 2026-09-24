@@ -652,7 +652,7 @@ impl LatencyPage {
             .filter(|level| level.is_finite())
             .fold(0.0f32, f32::max)
             .max(0.001);
-        let point_count = n.min(480);
+        let point_count = n.min(240);
         let mut levels = Vec::with_capacity(point_count + 1);
         for point_index in 0..point_count {
             let start = point_index * n / point_count;

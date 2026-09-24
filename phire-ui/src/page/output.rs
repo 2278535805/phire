@@ -333,13 +333,13 @@ impl Page for OutputPage {
 
     fn render(&mut self, ui: &mut Ui, s: &mut SharedState) -> Result<()> {
         let t = s.t;
-        let aspect = 1. / screen_aspect();
         let config = &get_data().config;
         s.render_fader(ui, |ui, c| {
             let lf = -0.97;
             let mut r = ui.content_rect();
             r.w += r.x - lf;
             r.x = lf;
+            let asp = r.h / r.w;
             ui.fill_rect(r, semi_black(c.a * 0.4));
 
             if let Some(audio) = self.audio.as_mut() {
@@ -357,15 +357,15 @@ impl Page for OutputPage {
                     }
                     #[allow(unreachable_patterns)] _ => {}, // TODO: OHOS
                 }
-                let y = r.y + aspect * 0.05;
+                let y = r.y + asp * 0.05;
                 #[cfg(target_os = "android")]
-                let left_x = r.x + 0.06 * aspect;
+                let left_x = r.x + 0.06 * asp;
                 #[cfg(target_os = "android")]
-                let size = 0.42 * aspect;
+                let size = 0.42 * asp;
                 #[cfg(not(target_os = "android"))]
-                let left_x = r.x + 0.06 * aspect;
+                let left_x = r.x + 0.06 * asp;
                 #[cfg(not(target_os = "android"))]
-                let size = 0.50 * aspect;
+                let size = 0.60 * asp;
                 ui.text(format!("{}", audio.stream_info()))
                     .pos(left_x, y)
                     .anchor(0., 0.)
