@@ -13,6 +13,8 @@ use phire::{
 };
 use sasa::{AudioManager, Renderer};
 #[cfg(target_os = "windows")]
+use phire::config::WasapiTiming;
+#[cfg(target_os = "windows")]
 use sasa::BackendStreamInfo::Wasapi;
 #[cfg(not(any(target_os = "android", target_os = "windows")))]
 use sasa::BackendStreamInfo::Cpal;
@@ -153,8 +155,8 @@ pub struct OutputPage {
 
     #[cfg(any(target_os = "android", target_os = "windows"))]
     compat_btn: DRectButton,
-    #[cfg(any(target_os = "android", target_os = "windows"))]
-    compat: bool,
+    #[cfg(target_os = "windows")]
+    wasapi_mode_btn: DRectButton,
     audio_buffer_size_btn: DRectButton,
     base_buffer_size: Option<u32>,
     rebuild_needed: bool,
@@ -194,8 +196,8 @@ impl OutputPage {
 
             #[cfg(any(target_os = "android", target_os = "windows"))]
             compat_btn: DRectButton::new(),
-            #[cfg(any(target_os = "android", target_os = "windows"))]
-            compat: config.audio_compatibility,
+            #[cfg(target_os = "windows")]
+            wasapi_mode_btn: DRectButton::new(),
             audio_buffer_size_btn: DRectButton::new(),
             #[cfg(not(any(target_os = "android", target_os = "windows")))]
             base_buffer_size: Some(64),
@@ -276,7 +278,17 @@ impl Page for OutputPage {
             let config = &mut get_data_mut().config;
             config.audio_buffer_size = None;
             config.audio_compatibility ^= true;
-            self.compat = config.audio_compatibility;
+            self.rebuild_needed = true;
+            save_data()?;
+            return Ok(true);
+        }
+        #[cfg(target_os = "windows")]
+        if self.wasapi_mode_btn.touch(touch, t) {
+            let config = &mut get_data_mut().config;
+            match config.audio_wasapi_mode {
+                WasapiTiming::Polling => config.audio_wasapi_mode = WasapiTiming::Events,
+                WasapiTiming::Events => config.audio_wasapi_mode = WasapiTiming::Polling,
+            }
             self.rebuild_needed = true;
             save_data()?;
             return Ok(true);
@@ -322,6 +334,7 @@ impl Page for OutputPage {
     fn render(&mut self, ui: &mut Ui, s: &mut SharedState) -> Result<()> {
         let t = s.t;
         let aspect = 1. / screen_aspect();
+        let config = &get_data().config;
         s.render_fader(ui, |ui, c| {
             let lf = -0.97;
             let mut r = ui.content_rect();
@@ -337,7 +350,7 @@ impl Page for OutputPage {
                     },
                     #[cfg(target_os = "windows")]
                     Wasapi(info) => {
-                        self.base_buffer_size = (!(cfg!(target_os = "windows") && self.compat))
+                        self.base_buffer_size = (!(cfg!(target_os = "windows") && config.audio_compatibility))
                             .then(|| info.sample_rate.zip(info.min_period_hns))
                             .flatten()
                             .map(|(sample_rate, period_hns)| (period_hns as f64 / 10_000_000.0 * sample_rate as f64) as u32);
@@ -374,6 +387,10 @@ impl Page for OutputPage {
             let mut y = r.center().y - 0.30;
             #[cfg(any(target_os = "android", target_os = "windows"))]
             let mut y = r.center().y - 0.35; // compat_btn
+            #[cfg(target_os = "windows")]
+            if !config.audio_compatibility {
+                y -= 0.05; // wasapi_btn
+            }
 
             let active = *self.params.active.lock().unwrap();
             let start_label = if active { tl!("stop") } else { tl!("start") };
@@ -389,15 +406,25 @@ impl Page for OutputPage {
             #[cfg(any(target_os = "android", target_os = "windows"))]
             {
                 y += 0.10;
-                let compat_label = if self.compat {
-                    ttl!("switch-on")
-                } else {
-                    ttl!("switch-off")
-                };
-                let compat_rect = Rect::new(right_center - 0.22, y, 0.44, 0.08);
+                let label = if config.audio_compatibility { ttl!("switch-on") } else { ttl!("switch-off") };
+                let r = Rect::new(right_center - 0.22, y, 0.44, 0.08);
                 self.compat_btn
-                    .render_text(ui, compat_rect, t, c.a, compat_label, 0.45, self.compat);
+                    .render_text(ui, r, t, c.a, label, 0.45, config.audio_compatibility);
                 ui.text(tl!("compatibility"))
+                    .pos(right_center + 0.25, y + 0.04)
+                    .anchor(0., 0.5)
+                    .size(0.32)
+                    .color(Color::new(1., 1., 1., 0.7 * c.a))
+                    .draw();
+            }
+            #[cfg(target_os = "windows")]
+            if !config.audio_compatibility {
+                y += 0.10;
+                let label = if matches!(config.audio_wasapi_mode, WasapiTiming::Events) { tl!("wasapi-mode-events") } else { tl!("wasapi-mode-polling") };
+                let rect = Rect::new(right_center - 0.22, y, 0.44, 0.08);
+                self.wasapi_mode_btn
+                    .render_text(ui, rect, t, c.a, label, 0.45, false);
+                ui.text(tl!("wasapi-mode"))
                     .pos(right_center + 0.25, y + 0.04)
                     .anchor(0., 0.5)
                     .size(0.32)
@@ -406,7 +433,6 @@ impl Page for OutputPage {
             }
             if self.base_buffer_size.is_some() {
                 y += 0.10;
-                let config = &get_data().config;
                 let text = match config.audio_buffer_size {
                     None => tl!("auto").to_string(),
                     Some(n) => format!("{}", n),
@@ -549,10 +575,13 @@ impl Page for OutputPage {
                     }
                     #[cfg(target_os = "windows")]
                     Wasapi(info) => {
-                        if let Some(settings_buffer_size) = info.settings.buffer_size {
-                            if let Some(actual_frames_per_callback) = info.actual_frames_per_callback {
-                                if settings_buffer_size != actual_frames_per_callback {
-                                    warn_str.push(tl!("failed-buffer-size"));
+                        if let Some(buffer_size) = info.settings.buffer_size {
+                            if let Some(period_hns) = info.actual_period_hns {
+                                if let Some(sample_rate) = info.sample_rate {
+                                    let buffer_size_hns = sasa::backend::wasapi::calculate_period_100ns(buffer_size as i64, sample_rate as i64);
+                                    if buffer_size_hns != period_hns as i64 {
+                                        warn_str.push(tl!("failed-buffer-size"));
+                                    }
                                 }
                             }
                         }

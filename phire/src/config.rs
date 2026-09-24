@@ -42,6 +42,34 @@ impl fmt::Display for ChallengeModeColor {
     }
 }
 
+#[cfg(target_os = "windows")]
+use sasa::backend::wasapi::Timing;
+
+#[cfg(target_os = "windows")]
+#[derive(Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum WasapiTiming {
+    Events,
+    Polling,
+}
+
+#[cfg(target_os = "windows")]
+impl WasapiTiming {
+    pub fn to_timing(&self) -> Timing {
+        match self {
+            WasapiTiming::Events => Timing::Events,
+            WasapiTiming::Polling => Timing::Polling,
+        }
+    }
+
+    pub fn to_string(&self) -> String {
+        match self {
+            WasapiTiming::Events => "Events".to_string(),
+            WasapiTiming::Polling => "Polling".to_string(),
+        }
+    }
+}
+
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(default)]
 #[serde(rename_all = "camelCase")]
@@ -54,6 +82,8 @@ pub struct Config {
     pub aspect_ratio: Option<f32>,
     pub audio_buffer_size: Option<u32>,
     pub audio_compatibility: bool,
+    #[cfg(target_os = "windows")]
+    pub audio_wasapi_mode: WasapiTiming,
     pub challenge_color: ChallengeModeColor,
     pub challenge_rank: u32,
     pub chart_debug_line: f32,
@@ -153,6 +183,8 @@ impl Default for Config {
             audio_compatibility: false,
             #[cfg(target_os = "windows")]
             audio_compatibility: true,
+            #[cfg(target_os = "windows")]
+            audio_wasapi_mode: WasapiTiming::Polling,
             challenge_color: ChallengeModeColor::Rainbow,
             challenge_rank: 3,
             chart_debug_line: 0.0,

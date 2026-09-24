@@ -406,21 +406,9 @@ pub fn create_audio_manger(config: &Config) -> Result<AudioManager> {
     #[cfg(target_os = "android")]
     {
         use sasa::backend::oboe::*;
-        let sharing_mode = if config.audio_compatibility {
-            SharingMode::Shared
-        } else {
-            SharingMode::Exclusive
-        };
-        let usage = if config.audio_compatibility {
-            Usage::Media
-        } else {
-            Usage::Game
-        };
-        let mmap = if config.audio_compatibility {
-            false
-        } else {
-            true
-        };
+        let sharing_mode = if config.audio_compatibility { SharingMode::Shared } else { SharingMode::Exclusive };
+        let usage = if config.audio_compatibility { Usage::Media } else { Usage::Game };
+        let mmap = !config.audio_compatibility;
         let mut audio = AudioManager::new(OboeBackend::new(OboeSettings {
             buffer_size: config.audio_buffer_size,
             performance_mode: PerformanceMode::LowLatency,
@@ -435,16 +423,13 @@ pub fn create_audio_manger(config: &Config) -> Result<AudioManager> {
     #[cfg(target_os = "windows")]
     {
         use sasa::backend::wasapi::*;
-        let share_mode = if config.audio_compatibility {
-            ShareMode::Shared
-        } else {
-            ShareMode::Exclusive
-        };
+        let share_mode = if config.audio_compatibility { ShareMode::Shared } else { ShareMode::Exclusive };
         let mut audio = AudioManager::new(WasapiBackend::new(WasapiSettings {
             buffer_size: config.audio_buffer_size,
             share_mode,
             stream_category: StreamCategory::Media,
             stream_option: Some(StreamOption::Raw),
+            timing: config.audio_wasapi_mode.to_timing(),
             ..Default::default()
         }));
         audio.start().context(tl!("start-audio-failed"))?;
