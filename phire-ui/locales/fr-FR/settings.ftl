@@ -33,6 +33,8 @@ item-opt = Optimisation agressive
 item-opt-sub = Cela améliorera les performances, mais pourra entraîner des comportements incorrects
 item-speed = Vitesse
 item-note-size = Taille des notes
+item-play-config = Réglages du jugement
+item-play-config-sub = Personnaliser les fenêtres de jugement Perfect / Good / Bad
 
 item-touch-debug = Mode de débogage tactile
 item-touch-debug-sub = Afficher les points de contact

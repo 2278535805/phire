@@ -99,3 +99,4 @@ wasm-bindgen-futures = "0.4"
 web-sys = { version = "0.3", features = ["Location", "Performance", "UrlSearchParams", "Window"] }
 zip = "4.6.1"
 zstd = "0.13.3"
+zeroize = "1.9.0"

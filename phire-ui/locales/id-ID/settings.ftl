@@ -35,5 +35,7 @@ item-opt = Optimizasi agresif
 item-opt-sub = Meningkatkan performa, tapi akan mungkin merusak beberapa fungsi aplikasi
 item-speed = Kecepatan
 item-note-size = Ukuran note
+item-play-config = Pengaturan penilaian
+item-play-config-sub = Sesuaikan jendela penilaian Perfect / Good / Bad
 
 load-cali-failed = Gagal memuat audio

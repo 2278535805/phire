@@ -35,6 +35,8 @@ item-opt = 고성능 최적화
 item-opt-sub = 성능을 향상시킬 수 있지만, 부정확한 동작을 유발할 수 있습니다.
 item-speed = 노트 속도
 item-note-size = 노트 크기
+item-play-config = 판정 설정
+item-play-config-sub = Perfect / Good / Bad 판정 시간 조절
 
 item-touch-debug = 터치 디버그 모드
 item-touch-debug-sub = 터치 지점 표시

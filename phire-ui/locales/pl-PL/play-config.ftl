@@ -1,0 +1,20 @@
+label = Ustawienia oceny
+
+perfect = Ocena Perfect
+perfect-sub = Okno czasu dla Perfect
+good = Ocena Good
+good-sub = Okno czasu dla Good
+bad = Ocena Bad
+bad-sub = Okno czasu dla Bad
+rks-factor = Współczynnik RKS
+rks-factor-sub = Luźniejsza ocena obniża współczynnik RKS
+reset = Resetuj
+save = Zapisz
+delete = Usuń
+delete-failed = Nie udało się usunąć konfiguracji
+rename = Zmień nazwę
+add-config = Nowy
+new-config = Konfig
+cloud-tag = Chmura
+local-tag = Lokalnie
+sync-failed = Nie udało się zsynchronizować konfiguracji

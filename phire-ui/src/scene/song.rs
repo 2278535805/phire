@@ -3,7 +3,7 @@ phire::tl_file!("song");
 use super::{confirm_delete, confirm_dialog, fs_from_path, render_ldb, LdbDisplayItem, ProfileScene};
 use crate::{
     charts_view::NEED_UPDATE,
-    client::{basic_client_builder, recv_raw, Chart, Client, Permission, Ptr, Record, ResponseDto, UserManager, CLIENT_TOKEN},
+    client::{basic_client_builder, recv_raw, sync_active_play_config, Chart, Client, Permission, Ptr, Record, ResponseDto, UserManager, CLIENT_TOKEN},
     data::{BriefChartInfo, LocalChart},
     dir, get_data, get_data_mut,
     icons::Icons,
@@ -42,13 +42,16 @@ use serde_json::json;
 use std::{
     any::Any, borrow::Cow, collections::{HashMap, VecDeque, hash_map}, fs::File, io::{Cursor, Write}, path::Path, println, sync::{
         Arc, Mutex, Weak, atomic::{AtomicBool, AtomicI32, Ordering},
-    }, thread_local,
+    }, thread_local, time::SystemTime,
 };
 use tokio::net::TcpStream;
 use tracing::warn;
 use uuid::Uuid;
 use walkdir::WalkDir;
 use zip::{write::FileOptions, CompressionMethod, ZipWriter};
+
+#[cfg(feature = "closed")]
+use crate::inner::*;
 
 const FADE_IN_TIME: f32 = 0.3;
 const EDIT_TRANSIT: f32 = 0.32;
@@ -260,8 +263,8 @@ pub struct SongScene {
 
     should_update: Arc<AtomicBool>,
 
-    my_rating_task: Option<Task<Result<i16>>>,
-    my_rate_score: Option<i16>,
+    my_rating_task: Option<Task<Result<f32>>>,
+    my_rate_score: Option<f32>,
 
     stabilize_task: Option<Task<Result<()>>>,
     should_stabilize: Arc<AtomicBool>,
@@ -609,6 +612,7 @@ impl SongScene {
 
                     let song = entity.song.as_ref();
                     let info = ChartInfo {
+                        guid: Some(entity.id.clone()),
                         uploader: Some(entity.owner_id),
                         name: entity
                             .title.clone()
@@ -689,7 +693,7 @@ impl SongScene {
         self.ldb = None;
         self.ldb_task = Some(Task::new(async move {
             let resp: ResponseDto<Vec<Record>> = recv_raw(
-                Client::get(format!("/charts/{chart_id}/leaderboard")).query(&[("topRange", "15"), ("neighborhoodRange", "1")]),
+                Client::get(format!("/charts/{chart_id}/leaderboard")).query(&[("topRange", "25"), ("neighborhoodRange", "3")]),
             )
             .await?
             .json()
@@ -697,17 +701,17 @@ impl SongScene {
             let mut records = resp.data.unwrap_or_default();
             if ldb_std {
                 records.sort_by(|a, b| {
-                    a.std_deviation
-                        .partial_cmp(&b.std_deviation)
-                        .unwrap_or(std::cmp::Ordering::Equal)
-                        .then_with(|| b.accuracy.partial_cmp(&a.accuracy).unwrap_or(std::cmp::Ordering::Equal))
+                    a.std_deviation.total_cmp(&b.std_deviation)
+                        .then_with(|| b.accuracy.total_cmp(&a.accuracy))
+                        .then_with(|| b.score.cmp(&a.score))
                         .then_with(|| a.date_created.cmp(&b.date_created))
                 });
             } else {
                 records.sort_by(|a, b| {
-                    b.score
-                        .cmp(&a.score)
-                        .then_with(|| b.accuracy.partial_cmp(&a.accuracy).unwrap_or(std::cmp::Ordering::Equal))
+                    b.rks.total_cmp(&a.rks)
+                        .then_with(|| b.accuracy.total_cmp(&a.accuracy))
+                        .then_with(|| b.score.cmp(&a.score))
+                        .then_with(|| a.std_deviation.total_cmp(&b.std_deviation))
                         .then_with(|| a.date_created.cmp(&b.date_created))
                 });
             }
@@ -833,11 +837,11 @@ impl SongScene {
         #[cfg(feature = "closed")]
         let rated = {
             let config = &get_data().config;
-            !config.offline_mode && id.is_some() && !mods.contains(Mods::AUTOPLAY) && config.speed >= 1.0 - 1e-3
+            !config.offline_mode && chart_guid.is_some() && !mods.contains(Mods::AUTOPLAY) && (config.speed - 1.0).abs() <= 1e-3
         };
         #[cfg(not(feature = "closed"))]
         let rated = false;
-        if !rated && id.is_some() && mode == GameMode::Normal {
+        if !rated && chart_guid.is_some() && mode == GameMode::Normal {
             show_message(tl!("warn-unrated")).warn();
         }
         let update_fn = client.and_then(|mut client| {
@@ -962,30 +966,83 @@ impl SongScene {
                 id: it.id,
                 rks: it.rks,
             });
-            let upload_fn: Option<UploadFn> = if chart_guid.is_some() && get_data().tokens.is_some() {
-                let chart_id = chart_guid.unwrap();
-                let f: UploadFn = Arc::new(move |_data| {
-                    let chart_id = chart_id.clone();
-                    Task::new(async move {
-                        let _resp: ResponseDto<serde_json::Value> = recv_raw(
-                            Client::get("/player/play").query(&[("chartId", chart_id.as_str())]),
-                        )
-                        .await?
-                        .json()
-                        .await?;
-                        // TODO: 从游戏二进制数据中提取判定计数（encode_record 在 closed 特性中）
-                        // TODO: extract judgment counts (perfect/goodEarly/goodLate/bad/miss/maxCombo/stdDeviation)
-                        //       from game binary data (encode_record in closed feature)
-                        // TODO: 计算 HMAC-SHA256(digest, app_secret)，其中
-                        //       digest = "{chartId}:{configurationId}:{playerId}:{maxCombo}:{perfect}:{goodEarly}:{goodLate}:{bad}:{miss}:{timestamp}"
-                        // TODO: 发送 POST /records {token, checksum, maxCombo, perfect, goodEarly, goodLate, bad, miss, stdDeviation, hmac, deviceInfo}
-                        Err::<RecordUpdateState, _>(anyhow!("score upload not yet implemented"))
-                    })
-                });
-                Some(f)
+            let configuration_id = if chart_guid.is_some() && get_data().tokens.is_some() && rated {
+                sync_active_play_config().await?
             } else {
                 None
             };
+            if let Some(pc) = get_data().active_play_config() {
+                config.perfect_judgment = pc.perfect_judgment;
+                config.good_judgment = pc.good_judgment;
+                config.bad_judgment = pc.bad_judgment;
+            }
+            #[cfg(feature = "closed")]
+            let upload_fn: Option<UploadFn> = if chart_guid.is_some() && get_data().tokens.is_some() && rated {
+                let chart_id = chart_guid.unwrap();
+                let player_id = get_data().me.as_ref().map(|it| it.id).unwrap();
+                let previous_best_score = get_data()
+                    .charts
+                    .iter()
+                    .find(|it| it.local_path == local_path)
+                    .and_then(|it| it.record.as_ref().map(|r| r.score))
+                    .unwrap_or(0);
+                let session_task: Arc<Mutex<Option<(Result<PlaySession, String>, SystemTime)>>> = Arc::new(Mutex::new(None));
+
+                let refresh: Arc<dyn Fn() -> Task<()> + Send + Sync> = {
+                    let session_task = session_task.clone();
+                    let chart_id = chart_id.clone();
+                    Arc::new(move || {
+                        let chart_id = chart_id.clone();
+                        let configuration_id = configuration_id.clone();
+                        let session_task = session_task.clone();
+                        Task::new(async move {
+                            *session_task.lock().unwrap() = Some((start_play(chart_id, configuration_id).await.map_err(|e| e.to_string()), SystemTime::now()));
+                        })
+                    })
+                };
+
+                let upload: Arc<dyn Fn(Vec<u8>) -> Task<Result<RecordUpdateState>>> = {
+                    let session_task = session_task.clone();
+                    Arc::new(move |data| {
+                        let chart_id = chart_id.clone();
+                        let session_task = session_task.clone();
+                        Task::new(async move {
+                            let (session_result, session_time) = session_task
+                                .lock()
+                                .unwrap()
+                                .clone()
+                                .ok_or_else(|| anyhow!("no session"))?;
+                            let play_session = session_result.map_err(|e| anyhow!("{e}"))?;
+                            let record = decode_record(&data)?;
+                            let improvement = record.score.saturating_sub(previous_best_score);
+                            let best = improvement > 0;
+                            let result = upload_score(&play_session, &chart_id, &record, player_id, session_time).await;
+                            let result = match result {
+                                Ok(result) => {
+                                    debug!("upload result: {:?}", result);
+                                    result
+                                },
+                                Err(err) => {
+                                    error!("failed to upload score: {:?}", err);
+                                    return Err(err);
+                                }
+                            };
+                            RECORD_ID.store(1,Ordering::Relaxed);
+                            Ok(RecordUpdateState {
+                                best,
+                                improvement,
+                                gain_exp: result.experience_delta,
+                                new_rks: result.player.rks,
+                            })
+                        })
+                    })
+                };
+                Some(UploadFn { refresh, upload })
+            } else {
+                None
+            };
+            #[cfg(not(feature = "closed"))]
+            let upload_fn: Option<UploadFn> = None;
             if is_unlock {
                 let chart = get_data_mut().charts.iter_mut().find(|it| it.local_path == local_path).unwrap();
                 if !chart.played_unlock {
@@ -1106,7 +1163,7 @@ impl SongScene {
                     alt: Some(if self.ldb_std {
                         format!("{:.2}%", it.inner.accuracy * 100.)
                     } else {
-                        format!("{:.2}%", it.inner.accuracy * 100.)
+                        format!("{:.2}", it.inner.rks)
                     }),
                     btn: &mut it.btn,
                 })
@@ -1310,7 +1367,7 @@ impl Scene for SongScene {
         let res = match res.downcast::<SimpleRecord>() {
             Err(res) => res,
             Ok(rec) => {
-                if self.my_rate_score == Some(0) && rng().random_ratio(2, 5) {
+                if self.my_rate_score == Some(0.) && rng().random_ratio(2, 5) {
                     self.rate_dialog.enter(tm.real_time() as _);
                 }
                 self.update_record(*rec)?;
@@ -2141,19 +2198,33 @@ impl Scene for SongScene {
         let r = Rect::new(1. - pad - w, ui.top - pad - w, w, w);
         let (r, _) = self.play_btn.render_shadow(ui, r, t, c.a, |_| semi_white(0.3 * c.a));
         let r = r.feather(-0.04);
-        ui.fill_rect(
-            r,
-            (
-                if self.local_path.is_some() {
-                    Texture2D::clone(&self.icons.play)
-                } else {
-                    Texture2D::clone(&self.icons.download)
-                },
-                r,
-                ScaleType::Fit,
+        if self.scene_task.is_some() {
+            ui.loading(
+                r.center().x,
+                r.center().y,
+                t,
                 c,
-            ),
-        );
+                LoadingParams {
+                    radius: 0.05,
+                    width: 0.014,
+                    ..Default::default()
+                },
+            );
+        } else {
+            ui.fill_rect(
+                r,
+                (
+                    if self.local_path.is_some() {
+                        Texture2D::clone(&self.icons.play)
+                    } else {
+                        Texture2D::clone(&self.icons.download)
+                    },
+                    r,
+                    ScaleType::Fit,
+                    c,
+                ),
+            );
+        }
 
         ui.scope(|ui| {
             ui.dx(1. - 0.03);

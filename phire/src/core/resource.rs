@@ -20,7 +20,7 @@ use rand_pcg::{
 };
 use rustc_hash::FxHashMap;
 
-pub const MAX_SIZE: usize = 256; // needs tweaking
+pub const MAX_SIZE: usize = 1024; // needs tweaking
 pub static DPI_VALUE: AtomicU32 = AtomicU32::new(250);
 pub const BUFFER_SIZE: usize = 1024;
 pub const RNG_SEED: u64 = 0x7a_61_6b_6f;

@@ -1,0 +1,20 @@
+label = ตั้งค่าการตีจังหวะ
+
+perfect = การตีจังหวะ Perfect
+perfect-sub = ช่วงเวลา Perfect
+good = การตีจังหวะ Good
+good-sub = ช่วงเวลา Good
+bad = การตีจังหวะ Bad
+bad-sub = ช่วงเวลา Bad
+rks-factor = ค่า RKS factor
+rks-factor-sub = การตีจังหวะที่หลวมกว่าจะลดค่า RKS factor
+reset = รีเซ็ต
+save = บันทึก
+delete = ลบ
+delete-failed = ลบคอนฟิกไม่สำเร็จ
+rename = เปลี่ยนชื่อ
+add-config = เพิ่ม
+new-config = คอนฟิก
+cloud-tag = คลาวด์
+local-tag = ท้องถิ่น
+sync-failed = ซิงค์คอนฟิกไม่สำเร็จ

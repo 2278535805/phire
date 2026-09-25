@@ -117,8 +117,8 @@ impl LibraryPage {
             tags: TagsDialog::new(true).tap_mut(|it| it.perms = get_data().me.as_ref().map(|it| it.perms()).unwrap_or_default()),
             tags_last_show: false,
             rating: RateDialog::new(icon_star, true).tap_mut(|it| {
-                it.rate.score = 3;
-                it.rate_upper.as_mut().unwrap().score = 10;
+                it.rate.score = 1.;
+                it.rate_upper.as_mut().unwrap().score = 5.;
             }),
             rating_last_show: false,
             filter_show_tag: true,

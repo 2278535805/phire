@@ -1,7 +1,7 @@
 phire::tl_file!("login");
 
 use crate::{
-    client::{Client, LoginParams, User, UserManager},
+    client::{download_play_configurations_with_owner, Client, LoginParams, User, UserManager},
     get_data_mut,
     page::Fader,
     save_data,
@@ -216,7 +216,9 @@ impl Login {
                         password: &pwd,
                     })
                     .await?;
-                    Ok(Some(Client::get_me().await?))
+                    let me = Client::get_me().await?;
+                    download_play_configurations_with_owner(me.id).await?;
+                    Ok(Some(me))
                 });
                 return true;
             }

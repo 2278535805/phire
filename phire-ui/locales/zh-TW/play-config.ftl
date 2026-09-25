@@ -1,0 +1,20 @@
+label = 判定設定
+
+perfect = Perfect 判定
+perfect-sub = Perfect 判定時間視窗
+good = Good 判定
+good-sub = Good 判定時間視窗
+bad = Bad 判定
+bad-sub = Bad 判定時間視窗
+rks-factor = RKS 係數
+rks-factor-sub = 判定越寬鬆，RKS 係數越低
+reset = 重設
+save = 儲存
+delete = 刪除
+delete-failed = 刪除設定失敗
+rename = 重新命名
+add-config = 新增
+new-config = 配置
+cloud-tag = 雲端
+local-tag = 本機
+sync-failed = 同步設定失敗
