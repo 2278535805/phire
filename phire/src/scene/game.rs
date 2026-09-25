@@ -7,7 +7,7 @@ use super::{
     draw_background,
     ending::RecordUpdateState,
     loading::{BasicPlayer, UpdateFn, UploadFn},
-    request_input, return_input, show_message, take_input, EndingScene, NextScene, Scene,
+    show_message, EndingScene, NextScene, Scene,
 };
 use crate::{
     bin::BinaryReader,
@@ -21,7 +21,7 @@ use crate::{
     parse::{RPE_WIDTH, parse_extra, parse_pec, parse_phigros, parse_rpe},
     task::Task,
     time::TimeManager,
-    ui::{RectButton, Ui}
+    ui::{InlineInputBtn, Ui},
 };
 use anyhow::{bail, Context, Result};
 use concat_string::concat_string;
@@ -29,9 +29,7 @@ use macroquad::{prelude::*, window::InternalGlContext};
 use sasa::{Music, MusicParams, PlaySfxParams};
 use serde::{Deserialize, Serialize};
 use std::{
-    io::Cursor,
-    ops::{DerefMut, Range},
-    sync::{Arc, Mutex},
+    io::Cursor, ops::{DerefMut, Range}, rc::Rc, sync::Mutex,
 };
 use tracing::{debug, warn};
 
@@ -141,7 +139,7 @@ pub struct GameScene {
     first_in: bool,
     exercise_range: Range<f64>,
     exercise_press: Option<(i8, u64)>,
-    exercise_btns: (RectButton, RectButton),
+    exercise_inputs: (InlineInputBtn, InlineInputBtn),
 
     pub music: Music,
     sfx_vec: Option<(Vec<f64>, Vec<f64>, Vec<f64>)>,
@@ -593,7 +591,7 @@ impl GameScene {
         
         // Prepare extra sfx from chart.hitsounds
         chart.hitsounds.drain().for_each(|(name, clip)| {
-            if let Ok(clip) = res.audio.create_sfx(clip, Some(BUFFER_SIZE)) {
+            if let Ok(clip) = res.audio.borrow_mut().create_sfx(clip, Some(BUFFER_SIZE)) {
                 res.extra_sfxs.insert(name, clip);
             }
         });
@@ -632,7 +630,10 @@ impl GameScene {
             first_in: false,
             exercise_range,
             exercise_press: None,
-            exercise_btns: (RectButton::new(), RectButton::new()),
+            exercise_inputs: (
+                InlineInputBtn::new().set_centered(),
+                InlineInputBtn::new().set_centered(),
+            ),
 
             music,
             sfx_vec,
@@ -660,7 +661,7 @@ impl GameScene {
     }
 
     fn new_music(res: &mut Resource) -> Result<Music> {
-        let music = res.audio.create_music(
+        let music = res.audio.borrow_mut().create_music(
             res.music.clone(),
             MusicParams {
                 amplifier: res.config.volume_music as _,
@@ -1086,29 +1087,30 @@ impl GameScene {
                     }
                 }
                 ui.dy(0.2);
-                let r = ui.text(tl!("to")).size(0.8).anchor(0.5, 0.).draw();
+                let r = ui.text("-").size(0.8).anchor(0.5, 0.).draw();
                 let mut tx = ui
                     .text(fmt_time(self.exercise_range.start))
                     .pos(r.x - 0.02, 0.)
                     .anchor(1., 0.)
-                    .size(0.8)
+                    .size(1.0)
                     .color(BLACK);
                 let re = tx.measure();
-                self.exercise_btns.0.set(tx.ui, re);
-                tx.ui
-                    .fill_rect(re.feather(0.01), Color::new(1., 1., 1., if self.exercise_btns.0.touching() { 0.5 } else { 1. }));
-                tx.draw();
+                self.exercise_inputs.0.render(tx.ui, re, -1.0, WHITE, "hh:mm:ss.ms", &fmt_time(self.exercise_range.start));
+                // tx.ui
+                //     .fill_rect(re.feather(0.01), Color::new(1., 1., 1., if self.exercise_inputs.0.btn.touching() { 0.5 } else { 1. }));
+                // tx.draw();
 
                 let mut tx = ui
                     .text(fmt_time(self.exercise_range.end))
                     .pos(r.right() + 0.02, 0.)
-                    .size(0.8)
+                    .size(1.0)
                     .color(BLACK);
                 let re = tx.measure();
-                self.exercise_btns.1.set(tx.ui, re);
-                tx.ui
-                    .fill_rect(re.feather(0.01), Color::new(1., 1., 1., if self.exercise_btns.1.touching() { 0.5 } else { 1. }));
-                tx.draw();
+                self.exercise_inputs.1.render(tx.ui, re, -1.0, WHITE, "hh:mm:ss.ms", &fmt_time(self.exercise_range.end));
+                // tx.ui
+                //     .fill_rect(re.feather(0.01), Color::new(1., 1., 1., if self.exercise_inputs.1.btn.touching() { 0.5 } else { 1. }));
+                // tx.draw();
+
                 for touch in ui.ensure_touches() {
                     touch.position /= asp;
                 }
@@ -1147,7 +1149,7 @@ impl GameScene {
         self.info_offset +
         (self.res.config.audio_offset +
         if self.res.config.auto_tweak_offset {
-            get_audio_latency(&self.res.audio)
+            get_audio_latency(&self.res.audio.borrow())
         } else {
             0.
         }) * speed
@@ -1279,7 +1281,7 @@ impl Scene for GameScene {
     }
 
     fn pause(&mut self, tm: &mut TimeManager) -> Result<()> {
-        self.res.audio.close()?;
+        self.res.audio.borrow_mut().close()?;
         if !tm.paused() {
             self.pause_rewind = PauseRewind {
                 time: None,
@@ -1293,7 +1295,7 @@ impl Scene for GameScene {
     }
 
     fn resume(&mut self, tm: &mut TimeManager) -> Result<()> {
-        self.res.audio.start()?;
+        self.res.audio.borrow_mut().start()?;
         if tm.paused() && !matches!(self.state, State::Playing) {
             tm.resume();
         }
@@ -1322,7 +1324,7 @@ impl Scene for GameScene {
 
     fn update(&mut self, tm: &mut TimeManager) -> Result<()> {
         let time = tm.now();
-        self.res.audio.recover_if_needed()?;
+        self.res.audio.borrow_mut().recover_if_needed()?;
         if matches!(self.state, State::Playing) && time < self.res.track_length {
             tm.update(self.music.position());
         }
@@ -1447,6 +1449,7 @@ impl Scene for GameScene {
                             self.judge.result(track_complete),
                             self.res.challenge_icons[self.res.config.challenge_color.clone() as usize].clone(),
                             &self.res.config,
+                            Rc::clone(&self.res.audio),
                             self.res.res_pack.endings.clone(),
                             self.upload_fn.clone(),
                             self.player.as_ref().map(|it| it.rks),
@@ -1492,7 +1495,6 @@ impl Scene for GameScene {
             if self.res.config.health_mode.is_some() && matches!(self.state, State::Playing) && matches!(self.mode, GameMode::Normal | GameMode::NoRetry | GameMode::View | GameMode::Replay) {
                 self.res.health.update(time as f32);
             }
-            self.gl.quad_gl.viewport(None);
         }
         if let Some(update) = &mut self.update_fn {
             update(self.res.time, &mut self.res, &mut self.judge);
@@ -1509,6 +1511,43 @@ impl Scene for GameScene {
         };
         self.chart.update(&mut self.res);
         let res = &mut self.res;
+
+        if let Some(text) = self.exercise_inputs.0.confirm() {
+            let offset = self.offset_chart().min(0.);
+            if let Some(t) = parse_time(&text) {
+                if !(offset..self.res.track_length.min(self.exercise_range.end - 3.).max(offset)).contains(&t) {
+                    show_message(tl!("ex-time-out-of-range")).error();
+                } else {
+                    self.exercise_range.start = t;
+                }
+            } else {
+                show_message(tl!("ex-invalid-format")).error();
+            }
+            return Ok(())
+        }
+        if let Some(text) = self.exercise_inputs.1.confirm() {
+            let offset = self.offset_chart().min(0.);
+            if let Some(t) = parse_time(&text) {
+                if !((self.exercise_range.start + 3.).max(offset).min(self.res.track_length)..self.res.track_length + 0.01).contains(&t) {
+                    show_message(tl!("ex-time-out-of-range")).error();
+                } else {
+                    self.exercise_range.end = t;
+                }
+            } else {
+                show_message(tl!("ex-invalid-format")).error();
+            }
+            return Ok(())
+        }
+
+        if self.exercise_inputs.0.is_active() {
+            self.exercise_inputs.0.input.update();
+            return Ok(())
+        }
+        if self.exercise_inputs.1.is_active() {
+            self.exercise_inputs.1.input.update();
+            return Ok(())
+        }
+
         if res.config.interactive && is_key_pressed(KeyCode::Space) {
             if tm.paused() {
                 if matches!(self.state, State::Playing) {
@@ -1566,36 +1605,6 @@ impl Scene for GameScene {
         for effect in &mut self.effects {
             effect.update(&self.res);
         }
-        if let Some((id, text)) = take_input() {
-            let offset = self.offset_chart().min(0.);
-            match id.as_str() {
-                "exercise_start" => {
-                    if let Some(t) = parse_time(&text) {
-                        if !(offset..self.res.track_length.min(self.exercise_range.end - 3.).max(offset)).contains(&t) {
-                            show_message(tl!("ex-time-out-of-range")).error();
-                        } else {
-                            self.exercise_range.start = t;
-                            show_message(tl!("ex-time-set")).ok();
-                        }
-                    } else {
-                        show_message(tl!("ex-invalid-format")).error();
-                    }
-                }
-                "exercise_end" => {
-                    if let Some(t) = parse_time(&text) {
-                        if !((self.exercise_range.start + 3.).max(offset).min(self.res.track_length)..self.res.track_length).contains(&t) {
-                            show_message(tl!("ex-time-out-of-range")).error();
-                        } else {
-                            self.exercise_range.end = t;
-                            show_message(tl!("ex-time-set")).ok();
-                        }
-                    } else {
-                        show_message(tl!("ex-invalid-format")).error();
-                    }
-                }
-                _ => return_input(id, text),
-            }
-        }
         Ok(())
     }
 
@@ -1605,14 +1614,10 @@ impl Scene for GameScene {
                 position: touch.position * self.touch_scale(),
                 ..touch.clone()
             };
-            if self.exercise_btns.0.touch(&touch) {
-                request_input("exercise_start", &fmt_time(self.exercise_range.start), tl!("ex-time-start"));
-                return Ok(true);
-            }
-            if self.exercise_btns.1.touch(&touch) {
-                request_input("exercise_end", &fmt_time(self.exercise_range.end), tl!("ex-time-end"));
-                return Ok(true);
-            }
+            self.exercise_inputs.0.touch(&touch);
+            self.exercise_inputs.1.touch(&touch);
+            self.exercise_inputs.0.activate(&touch, 1.0, &fmt_time(self.exercise_range.start));
+            self.exercise_inputs.1.activate(&touch, 1.0, &fmt_time(self.exercise_range.end));
         }
         Ok(false)
     }
@@ -1709,7 +1714,7 @@ impl Scene for GameScene {
         let h = 1. / res.aspect_ratio;
         set_camera(&Camera2D {
             zoom: vec2(1., asp2_window),
-            viewport: if res.chart_target.is_some() { None } else { viewport_window },
+            viewport: viewport_window,
             render_target: chart_onto.clone(),
             ..Default::default()
         });
@@ -1883,7 +1888,6 @@ impl Scene for GameScene {
             // render the texture onto screen
             if let Some(target) = &self.res.chart_target {
                 self.gl.flush();
-                self.gl.quad_gl.viewport(None);
                 set_camera(&Camera2D {
                     zoom: vec2(1., asp2_window),
                     render_target: self.res.camera.render_target.clone(),

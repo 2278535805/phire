@@ -20,7 +20,7 @@ mod text;
 pub use text::{DrawText, TextPainter};
 
 mod input;
-pub use input::{InlineInputBox};
+pub use input::{InlineInputBox, InlineInputBtn};
 
 pub use glyph_brush::ab_glyph::FontArc;
 
@@ -193,6 +193,7 @@ pub struct DRectButton {
     pub config: ShadowConfig,
     delta: f32,
     play_sound: bool,
+    render_background: bool,
 }
 impl Default for DRectButton {
     fn default() -> Self {
@@ -210,6 +211,7 @@ impl DRectButton {
             config: ShadowConfig::default(),
             delta: -0.004,
             play_sound: true,
+            render_background: true,
         }
     }
 
@@ -253,7 +255,9 @@ impl DRectButton {
         let oh = r.h;
         let (r, path) = self.build(ui, t, r);
         let ct = r.center();
-        ui.fill_path(&path, if chosen { semi_white(alpha) } else { semi_black(alpha * 0.4) });
+        if self.render_background {
+            ui.fill_path(&path, if chosen { semi_white(alpha) } else { semi_black(alpha * 0.4) });
+        }
         ui.text(text)
             .pos(ct.x, ct.y)
             .anchor(0.5, 0.5)
@@ -315,6 +319,12 @@ impl DRectButton {
     }
 
     #[inline]
+    pub fn no_background(mut self) -> Self {
+        self.render_background = false;
+        self
+    }
+
+    #[inline]
     pub fn with_radius(mut self, radius: f32) -> Self {
         self.config.radius = radius;
         self
@@ -339,6 +349,9 @@ impl DRectButton {
     }
 
     pub fn progress(&mut self, t: f32) -> f32 {
+        if t < 0.0 {
+            return 1.0;
+        }
         if self.start_time.as_ref().is_some_and(|it| t > *it + Self::TIME) {
             self.start_time = None;
         }
@@ -365,6 +378,10 @@ impl DRectButton {
             button_hit();
         }
         res
+    }
+
+    pub fn touching(&self) -> bool {
+        self.inner.touching()
     }
 }
 

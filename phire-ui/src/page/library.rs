@@ -15,9 +15,9 @@ use anyhow::{anyhow, Result};
 use macroquad::prelude::*;
 use phire::{
     ext::{semi_black, RectExt, SafeTexture, ScaleType},
-    scene::{request_file, request_input, return_input, show_error, show_message, take_input, NextScene},
+    scene::{request_file, show_error, show_message, NextScene},
     task::Task,
-    ui::{button_hit, DRectButton, RectButton, Ui},
+    ui::{button_hit, DRectButton, InlineInputBtn, RectButton, Ui},
 };
 use std::{
     any::Any,
@@ -64,6 +64,7 @@ pub struct LibraryPage {
 
     search_btn: DRectButton,
     search_str: String,
+    search_input: InlineInputBtn,
     search_clr_btn: RectButton,
 
     order_btn: DRectButton,
@@ -106,6 +107,7 @@ impl LibraryPage {
 
             search_btn: DRectButton::new(),
             search_str: String::new(),
+            search_input: InlineInputBtn::new(),
             search_clr_btn: RectButton::new(),
 
             order_btn: DRectButton::new(),
@@ -271,6 +273,10 @@ impl Page for LibraryPage {
 
     fn touch(&mut self, touch: &Touch, s: &mut SharedState) -> Result<bool> {
         let t = s.t;
+        self.search_input.touch(touch);
+        if self.search_input.is_active() {
+            return Ok(true);
+        }
         if self.order_menu.showing() {
             self.order_menu.touch(touch, t);
             return Ok(true);
@@ -340,10 +346,7 @@ impl Page for LibraryPage {
                     self.load_online();
                     return Ok(true);
                 }
-                if !self.search_clr_btn.rect.contains(touch.position) && self.search_btn.touch(touch, t) {
-                    request_input("search", &self.search_str, tl!("search"));
-                    return Ok(true);
-                }
+                self.search_input.activate(touch, t, &self.search_str);
                 if self.order_btn.touch(touch, t) {
                     self.need_show_order_menu = true;
                     return Ok(true);
@@ -407,14 +410,11 @@ impl Page for LibraryPage {
             s.reload_local_charts();
             self.sync_local(s);
         }
-        if let Some((id, text)) = take_input() {
-            if id == "search" {
-                self.search_str = text;
-                self.current_page = 0;
-                self.load_online();
-            } else {
-                return_input(id, text);
-            }
+        self.search_input.update();
+        if let Some(text) = self.search_input.confirm() {
+            self.search_str = text;
+            self.current_page = 0;
+            self.load_online();
         }
         if self.order_menu.changed() {
             self.current_order = self.order_menu.selected();
@@ -472,14 +472,8 @@ impl Page for LibraryPage {
                         r.x += r.w;
                     }
                     ui.fill_rect(r, (Texture2D::clone(&self.icons.search), r, ScaleType::Fit, c));
-                    ui.text(&self.search_str)
-                        .pos(r.right() + 0.01, r.center().y)
-                        .anchor(0., 0.5)
-                        .no_baseline()
-                        .size(0.6)
-                        .max_width(rt - r.right() - 0.02)
-                        .color(c)
-                        .draw();
+                    let tr = Rect::new(r.right() + 0.01, r.y, (rt - r.right() - 0.02).max(0.), r.h);
+                    self.search_input.render(ui, tr, t, c, &tl!("search"), &self.search_str);
                     let mut r = r.feather(0.01);
                     r.x = 1. - w - r.w - 0.05;
                     if empty {

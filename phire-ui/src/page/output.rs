@@ -13,6 +13,8 @@ use phire::{
 };
 use sasa::{AudioManager, Renderer};
 #[cfg(target_os = "windows")]
+use phire::config::WasapiTiming;
+#[cfg(target_os = "windows")]
 use sasa::BackendStreamInfo::Wasapi;
 #[cfg(not(any(target_os = "android", target_os = "windows")))]
 use sasa::BackendStreamInfo::Cpal;
@@ -153,8 +155,8 @@ pub struct OutputPage {
 
     #[cfg(any(target_os = "android", target_os = "windows"))]
     compat_btn: DRectButton,
-    #[cfg(any(target_os = "android", target_os = "windows"))]
-    compat: bool,
+    #[cfg(target_os = "windows")]
+    wasapi_mode_btn: DRectButton,
     audio_buffer_size_btn: DRectButton,
     base_buffer_size: Option<u32>,
     rebuild_needed: bool,
@@ -194,8 +196,8 @@ impl OutputPage {
 
             #[cfg(any(target_os = "android", target_os = "windows"))]
             compat_btn: DRectButton::new(),
-            #[cfg(any(target_os = "android", target_os = "windows"))]
-            compat: config.audio_compatibility,
+            #[cfg(target_os = "windows")]
+            wasapi_mode_btn: DRectButton::new(),
             audio_buffer_size_btn: DRectButton::new(),
             #[cfg(not(any(target_os = "android", target_os = "windows")))]
             base_buffer_size: Some(64),
@@ -276,7 +278,17 @@ impl Page for OutputPage {
             let config = &mut get_data_mut().config;
             config.audio_buffer_size = None;
             config.audio_compatibility ^= true;
-            self.compat = config.audio_compatibility;
+            self.rebuild_needed = true;
+            save_data()?;
+            return Ok(true);
+        }
+        #[cfg(target_os = "windows")]
+        if self.wasapi_mode_btn.touch(touch, t) {
+            let config = &mut get_data_mut().config;
+            match config.audio_wasapi_mode {
+                WasapiTiming::Polling => config.audio_wasapi_mode = WasapiTiming::Events,
+                WasapiTiming::Events => config.audio_wasapi_mode = WasapiTiming::Polling,
+            }
             self.rebuild_needed = true;
             save_data()?;
             return Ok(true);
@@ -321,12 +333,13 @@ impl Page for OutputPage {
 
     fn render(&mut self, ui: &mut Ui, s: &mut SharedState) -> Result<()> {
         let t = s.t;
-        let aspect = 1. / screen_aspect();
+        let config = &get_data().config;
         s.render_fader(ui, |ui, c| {
             let lf = -0.97;
             let mut r = ui.content_rect();
             r.w += r.x - lf;
             r.x = lf;
+            let asp = r.h / r.w;
             ui.fill_rect(r, semi_black(c.a * 0.4));
 
             if let Some(audio) = self.audio.as_mut() {
@@ -337,22 +350,22 @@ impl Page for OutputPage {
                     },
                     #[cfg(target_os = "windows")]
                     Wasapi(info) => {
-                        self.base_buffer_size = (!(cfg!(target_os = "windows") && self.compat))
+                        self.base_buffer_size = (!(cfg!(target_os = "windows") && config.audio_compatibility))
                             .then(|| info.sample_rate.zip(info.min_period_hns))
                             .flatten()
                             .map(|(sample_rate, period_hns)| (period_hns as f64 / 10_000_000.0 * sample_rate as f64) as u32);
                     }
                     #[allow(unreachable_patterns)] _ => {}, // TODO: OHOS
                 }
-                let y = r.y + aspect * 0.05;
+                let y = r.y + asp * 0.05;
                 #[cfg(target_os = "android")]
-                let left_x = r.x + 0.06 * aspect;
+                let left_x = r.x + 0.06 * asp;
                 #[cfg(target_os = "android")]
-                let size = 0.42 * aspect;
+                let size = 0.42 * asp;
                 #[cfg(not(target_os = "android"))]
-                let left_x = r.x + 0.06 * aspect;
+                let left_x = r.x + 0.06 * asp;
                 #[cfg(not(target_os = "android"))]
-                let size = 0.50 * aspect;
+                let size = 0.60 * asp;
                 ui.text(format!("{}", audio.stream_info()))
                     .pos(left_x, y)
                     .anchor(0., 0.)
@@ -369,111 +382,121 @@ impl Page for OutputPage {
                     .draw();
             }
 
-            let right_center = r.right() * 0.5  - 0.1;
-            #[cfg(not(any(target_os = "android", target_os = "windows")))]
-            let mut y = r.center().y - 0.30;
-            #[cfg(any(target_os = "android", target_os = "windows"))]
-            let mut y = r.center().y - 0.35; // compat_btn
+            let compat_row = cfg!(any(target_os = "android", target_os = "windows"));
+            let wasapi_row = cfg!(target_os = "windows") && !config.audio_compatibility;
+            let buffer_row = self.base_buffer_size.is_some();
+            let extra_rows = compat_row as u8 + wasapi_row as u8 + buffer_row as u8;
+            let start = 0.30 + 0.05 * (compat_row as u8 + wasapi_row as u8) as f32;
+            let span = 0.51 + 0.10 * extra_rows as f32;
+            let gap = 0.03;
+            let scale = ((r.h - gap * 2.).max(0.) / span).min(1.0);
+
+            let right_center = r.right() * 0.5 - 0.1;
+            let mut y = (r.center().y - start * scale).min(r.bottom() - gap - span * scale).max(r.y + gap);
+            let btn_w = 0.44 * scale;
+            let btn_h = 0.08 * scale;
+            let label_size = 0.32 * scale;
 
             let active = *self.params.active.lock().unwrap();
             let start_label = if active { tl!("stop") } else { tl!("start") };
-            let btn_rect = Rect::new(right_center - 0.22, y, 0.44, 0.08);
-            self.play_btn.render_text(ui, btn_rect, t, c.a, start_label, 0.45, active);
+            let btn_rect = Rect::new(right_center - btn_w * 0.5, y, btn_w, btn_h);
+            self.play_btn.render_text(ui, btn_rect, t, c.a, start_label, 0.45 * scale, active);
             ui.text(tl!("title"))
-                .pos(right_center + 0.25, y + 0.04)
+                .pos(right_center + 0.25 * scale, y + 0.04 * scale)
                 .anchor(0., 0.5)
-                .size(0.32)
+                .size(label_size)
                 .color(Color::new(1., 1., 1., 0.7 * c.a))
                 .draw();
 
             #[cfg(any(target_os = "android", target_os = "windows"))]
             {
-                y += 0.10;
-                let compat_label = if self.compat {
-                    ttl!("switch-on")
-                } else {
-                    ttl!("switch-off")
-                };
-                let compat_rect = Rect::new(right_center - 0.22, y, 0.44, 0.08);
+                y += 0.10 * scale;
+                let label = if config.audio_compatibility { ttl!("switch-on") } else { ttl!("switch-off") };
+                let r = Rect::new(right_center - btn_w * 0.5, y, btn_w, btn_h);
                 self.compat_btn
-                    .render_text(ui, compat_rect, t, c.a, compat_label, 0.45, self.compat);
+                    .render_text(ui, r, t, c.a, label, 0.45 * scale, config.audio_compatibility);
                 ui.text(tl!("compatibility"))
-                    .pos(right_center + 0.25, y + 0.04)
+                    .pos(right_center + 0.25 * scale, y + 0.04 * scale)
                     .anchor(0., 0.5)
-                    .size(0.32)
+                    .size(label_size)
+                    .color(Color::new(1., 1., 1., 0.7 * c.a))
+                    .draw();
+            }
+            #[cfg(target_os = "windows")]
+            if !config.audio_compatibility {
+                y += 0.10 * scale;
+                let label = if matches!(config.audio_wasapi_mode, WasapiTiming::Events) { tl!("wasapi-mode-events") } else { tl!("wasapi-mode-polling") };
+                let rect = Rect::new(right_center - btn_w * 0.5, y, btn_w, btn_h);
+                self.wasapi_mode_btn.render_text(ui, rect, t, c.a, label, 0.45 * scale, false);
+                ui.text(tl!("wasapi-mode"))
+                    .pos(right_center + 0.25 * scale, y + 0.04 * scale)
+                    .anchor(0., 0.5)
+                    .size(label_size)
                     .color(Color::new(1., 1., 1., 0.7 * c.a))
                     .draw();
             }
             if self.base_buffer_size.is_some() {
-                y += 0.10;
-                let config = &get_data().config;
+                y += 0.10 * scale;
                 let text = match config.audio_buffer_size {
                     None => tl!("auto").to_string(),
                     Some(n) => format!("{}", n),
                 };
-                let buf_rect = Rect::new(right_center - 0.22, y, 0.44, 0.08);
+                let buf_rect = Rect::new(right_center - btn_w * 0.5, y, btn_w, btn_h);
                 self.audio_buffer_size_btn
-                    .render_text(ui, buf_rect, t, c.a, &text, 0.45, config.audio_buffer_size.is_some());
+                    .render_text(ui, buf_rect, t, c.a, &text, 0.45 * scale, config.audio_buffer_size.is_some());
                 ui.text(tl!("buffer-size"))
-                    .pos(right_center + 0.25, y + 0.04)
+                    .pos(right_center + 0.25 * scale, y + 0.04 * scale)
                     .anchor(0., 0.5)
-                    .size(0.32)
+                    .size(label_size)
                     .color(Color::new(1., 1., 1., 0.7 * c.a))
                     .draw();
             }
-            y += 0.10;
+            y += 0.10 * scale;
 
             let freq = FREQ_VALUES[self.freq_idx];
             *self.params.frequency.lock().unwrap() = freq as f64;
             let freq_text = format!("{:.0} Hz", freq);
-            let freq_rect = Rect::new(right_center - 0.22, y, 0.44, 0.08);
-            self.freq_btn.render_text(ui, freq_rect, t, c.a, freq_text, 0.45, false);
+            let freq_rect = Rect::new(right_center - btn_w * 0.5, y, btn_w, btn_h);
+            self.freq_btn.render_text(ui, freq_rect, t, c.a, freq_text, 0.45 * scale, false);
             ui.text(tl!("freq"))
-                .pos(right_center + 0.25, y + 0.04)
+                .pos(right_center + 0.25 * scale, y + 0.04 * scale)
                 .anchor(0., 0.5)
-                .size(0.32)
+                .size(label_size)
                 .color(Color::new(1., 1., 1., 0.7 * c.a))
                 .draw();
-            y += 0.10;
+            y += 0.10 * scale;
 
             *self.params.amplitude.lock().unwrap() = AMP_VALUES[self.amp_idx];
             let amp_text = format!("{:.0}%", AMP_VALUES[self.amp_idx] * 100.0);
-            let amp_rect = Rect::new(right_center - 0.22, y, 0.44, 0.08);
-            self.amp_btn.render_text(ui, amp_rect, t, c.a, amp_text, 0.45, false);
+            let amp_rect = Rect::new(right_center - btn_w * 0.5, y, btn_w, btn_h);
+            self.amp_btn.render_text(ui, amp_rect, t, c.a, amp_text, 0.45 * scale, false);
             ui.text(tl!("volume"))
-                .pos(right_center + 0.25, y + 0.04)
+                .pos(right_center + 0.25 * scale, y + 0.04 * scale)
                 .anchor(0., 0.5)
-                .size(0.32)
+                .size(label_size)
                 .color(Color::new(1., 1., 1., 0.7 * c.a))
                 .draw();
-            y += 0.12;
+            y += 0.12 * scale;
 
             ui.text(tl!("waveform"))
                 .pos(right_center, y)
                 .anchor(0.5, 0.)
-                .size(0.5)
+                .size(0.5 * scale)
                 .color(Color::new(1., 1., 1., 0.6 * c.a))
                 .draw();
-            y += 0.06;
+            y += 0.07 * scale;
 
-            let btn_w = 0.16;
-            let btn_h = 0.06;
-            let total_w = WAVEFORMS.len() as f32 * btn_w + (WAVEFORMS.len() - 1) as f32 * 0.015;
+            let wf_w = 0.16 * scale;
+            let wf_h = 0.06 * scale;
+            let wf_gap = 0.015 * scale;
+            let total_w = WAVEFORMS.len() as f32 * wf_w + (WAVEFORMS.len() - 1) as f32 * wf_gap;
             let start_x = right_center - total_w / 2.0;
             for (i, (name, _)) in WAVEFORMS.iter().enumerate() {
-                let bx = start_x + i as f32 * (btn_w + 0.015);
+                let bx = start_x + i as f32 * (wf_w + wf_gap);
                 let sel = i == self.waveform_idx;
-                self.wf_btns[i].render_text(
-                    ui,
-                    Rect::new(bx, y, btn_w, btn_h),
-                    t,
-                    c.a,
-                    *name,
-                    0.30,
-                    sel,
-                );
+                self.wf_btns[i].render_text(ui, Rect::new(bx, y, wf_w, wf_h), t, c.a, *name, 0.30 * scale, sel);
             }
-            y += 0.08;
+            y += 0.09 * scale;
 
             if let Some(audio) = self.audio.as_mut() {
                 let audio_latency = get_audio_latency(audio);
@@ -486,7 +509,7 @@ impl Page for OutputPage {
                 ui.text(latency_text)
                     .pos(right_center, y)
                     .anchor(0.5, 0.)
-                    .size(0.4)
+                    .size(0.4 * scale)
                     .color(Color::new(1., 1., 1., 0.7 * c.a))
                     .draw();
 
@@ -549,10 +572,13 @@ impl Page for OutputPage {
                     }
                     #[cfg(target_os = "windows")]
                     Wasapi(info) => {
-                        if let Some(settings_buffer_size) = info.settings.buffer_size {
-                            if let Some(actual_frames_per_callback) = info.actual_frames_per_callback {
-                                if settings_buffer_size != actual_frames_per_callback {
-                                    warn_str.push(tl!("failed-buffer-size"));
+                        if let Some(buffer_size) = info.settings.buffer_size {
+                            if let Some(period_hns) = info.actual_period_hns {
+                                if let Some(sample_rate) = info.sample_rate {
+                                    let buffer_size_hns = sasa::backend::wasapi::calculate_period_100ns(buffer_size as i64, sample_rate as i64);
+                                    if buffer_size_hns != period_hns as i64 {
+                                        warn_str.push(tl!("failed-buffer-size"));
+                                    }
                                 }
                             }
                         }
@@ -576,11 +602,11 @@ impl Page for OutputPage {
                             warn_str_merge.push_str("  ");
                         }
                     }
-                    y += 0.06;
+                    y += 0.06 * scale;
                     ui.text(warn_str_merge)
                         .pos(right_center, y)
                         .anchor(0.0, 0.0)
-                        .size(0.4)
+                        .size(0.4 * scale)
                         .color(Color::new(1., 1., 1., 0.7 * c.a))
                         .centered_multiline()
                         .draw();

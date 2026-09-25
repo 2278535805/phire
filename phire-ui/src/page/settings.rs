@@ -10,7 +10,7 @@ use phire::{
     health::{HealthConfig, HealthType},
     l10n::{LANG_IDENTS, LANG_NAMES, LanguageIdentifier},
     scene::{show_error, show_message},
-    ui::{DRectButton, InlineInputBox, Scroll, Slider, Ui},
+    ui::{DRectButton, InlineInputBtn, Scroll, Slider, Ui},
 };
 use std::{borrow::Cow, net::ToSocketAddrs, sync::atomic::Ordering};
 #[cfg(target_os = "android")]
@@ -288,8 +288,7 @@ struct GeneralList {
     #[cfg(any(target_os = "windows", target_os = "linux"))]
     fullscreen_btn: DRectButton,
     mp_btn: DRectButton,
-    mp_addr_btn: DRectButton,
-    mp_addr_input: InlineInputBox,
+    mp_addr_input: InlineInputBtn,
     anti_aliasing_btn: DRectButton,
     low_resolution_btn: DRectButton,
     dynamic_resolution_btn: DRectButton,
@@ -315,8 +314,7 @@ impl GeneralList {
             #[cfg(any(target_os = "windows", target_os = "linux"))]
             fullscreen_btn: DRectButton::new(),
             mp_btn: DRectButton::new(),
-            mp_addr_btn: DRectButton::new(),
-            mp_addr_input: InlineInputBox::new(),
+            mp_addr_input: InlineInputBtn::new().set_centered(),
             anti_aliasing_btn: DRectButton::new(),
             low_resolution_btn: DRectButton::new(),
             dynamic_resolution_btn: DRectButton::new(),
@@ -333,19 +331,8 @@ impl GeneralList {
 
     pub fn touch(&mut self, touch: &Touch, t: f32) -> Result<Option<bool>> {
         let data = get_data_mut();
-        if self.mp_addr_input.is_active() {
-            if self.mp_addr_input.touch(touch) {
-                let text = self.mp_addr_input.confirm();
-                if let Err(err) = text.to_socket_addrs() {
-                    show_error(anyhow::Error::new(err).context(tl!("item-mp-addr-invalid")));
-                    return Ok(Some(false));
-                }
-                data.config.mp_address = text;
-                return Ok(Some(true));
-            }
-            return Ok(Some(false));
-        }
         let config = &mut data.config;
+        self.mp_addr_input.touch(touch);
         if self.lang_btn.touch(touch, t) {
             return Ok(Some(false));
         }
@@ -363,10 +350,7 @@ impl GeneralList {
             config.mp_enabled ^= true;
             return Ok(Some(true));
         }
-        if self.mp_addr_btn.touch(touch, t) {
-            self.mp_addr_input.activate(&config.mp_address, false, false);
-            return Ok(Some(true));
-        }
+        self.mp_addr_input.activate(touch, t, &config.mp_address);
         if self.anti_aliasing_btn.touch(touch, t) {
             config.sample_count = if config.sample_count == 1 { 2 } else { 1 };
             return Ok(Some(true));
@@ -387,11 +371,17 @@ impl GeneralList {
     }
 
     pub fn update(&mut self, t: f32) -> Result<bool> {
-        self.lang_btn.update(t);
-        if self.mp_addr_input.is_active() {
-            let _ = self.mp_addr_input.update();
-        }
         let data = get_data_mut();
+        self.lang_btn.update(t);
+        if let Some(text) = self.mp_addr_input.confirm() {
+            if let Err(err) = text.to_socket_addrs() {
+                show_error(anyhow::Error::new(err).context(tl!("item-mp-addr-invalid")));
+                return Ok(false);
+            }
+            data.config.mp_address = text;
+            return Ok(true);
+        }
+        self.mp_addr_input.update();
         if self.lang_btn.changed() {
             data.language = Some(LANG_IDENTS[self.lang_btn.selected()].to_string());
             sync_data();
@@ -436,11 +426,7 @@ impl GeneralList {
         }
         item! {
             render_title(ui, c, tl!("item-mp-addr"), Some(tl!("item-mp-addr-sub")));
-            if self.mp_addr_input.is_active() {
-                self.mp_addr_input.render(ui, rr, c.a, &tl!("item-mp-addr"));
-            } else {
-                self.mp_addr_btn.render_text(ui, rr, t, c.a, &config.mp_address, 0.4, false);
-            }
+            self.mp_addr_input.render(ui, rr, t, c, &tl!("item-mp-addr"), &config.mp_address);
         }
         item! {
             render_title(ui, c, tl!("item-anti-aliasing"), None);
@@ -814,18 +800,15 @@ struct OtherList {
     touch_debug_btn: DRectButton,
     chart_ratio_slider: Slider,
     fade_slider: Slider,
-    watermark: DRectButton,
-    watermark_input: InlineInputBox,
-    combo_btn: DRectButton,
-    combo_input: InlineInputBox,
+    watermark_input: InlineInputBtn,
+    combo_input: InlineInputBtn,
     roman_btn: DRectButton,
     chinese_btn: DRectButton,
     rotation_mode: DRectButton,
     #[cfg(feature = "play")]
     shake_play_mode_btn: DRectButton,
     #[cfg(feature = "play")]
-    health_mode_btn: DRectButton,
-    health_mode_input: InlineInputBox,
+    health_mode_input: InlineInputBtn,
 }
 
 impl OtherList {
@@ -836,18 +819,15 @@ impl OtherList {
             touch_debug_btn: DRectButton::new(),
             chart_ratio_slider: Slider::new(0.05..1.0, 0.05),
             fade_slider: Slider::new(-2.0..2.0, 0.05),
-            watermark: DRectButton::new(),
-            watermark_input: InlineInputBox::new(),
-            combo_btn: DRectButton::new(),
-            combo_input: InlineInputBox::new(),
+            watermark_input: InlineInputBtn::new().set_centered(),
+            combo_input: InlineInputBtn::new().set_centered(),
             roman_btn: DRectButton::new(),
             chinese_btn: DRectButton::new(),
             rotation_mode: DRectButton::new(),
             #[cfg(feature = "play")]
             shake_play_mode_btn: DRectButton::new(),
             #[cfg(feature = "play")]
-            health_mode_btn: DRectButton::new(),
-            health_mode_input: InlineInputBox::new(),
+            health_mode_input: InlineInputBtn::new().set_multiline(),
         }
     }
 
@@ -857,55 +837,16 @@ impl OtherList {
 
     pub fn touch(&mut self, touch: &Touch, t: f32) -> Result<Option<bool>> {
         let data = get_data_mut();
-        if self.watermark_input.is_active() {
-            if self.watermark_input.touch(touch) {
-                let text = self.watermark_input.confirm();
-                if text.trim().is_empty() {
-                    data.config.watermark = String::new();
-                    return Ok(Some(true));
-                }
-                data.config.watermark = text;
-                return Ok(Some(true));
-            }
-            return Ok(Some(false));
-        }
-
+        let config = &mut data.config;
+        self.watermark_input.touch(touch);
+        self.health_mode_input.touch(touch);
         #[cfg(feature = "play")]
         if self.health_mode_input.is_active() {
-            if self.health_mode_input.touch(touch) {
-                let text = self.health_mode_input.confirm();
-                if text.trim().is_empty() {
-                    data.config.health_mode = None;
-                    return Ok(Some(true));
-                }
-                match HealthConfig::from_json(&text) {
-                    Ok(health_mode) => {
-                        data.config.health_mode = Some(health_mode);
-                        return Ok(Some(true));
-                    }
-                    Err(_) => {
-                        show_message(tl!("illegal-input")).error();
-                        return Ok(Some(false));
-                    }
-                }
-            }
             return Ok(Some(false));
         }
 
-        if self.combo_input.is_active() {
-            if self.combo_input.touch(touch) {
-                let text = self.combo_input.confirm();
-                if validate_combo(&text) || text.len() > 50 {
-                    show_message(tl!("not-combo")).error();
-                    return Ok(Some(false));
-                }
-                data.config.combo = text;
-                return Ok(Some(true));
-            }
-            return Ok(Some(false));
-        }
+        self.combo_input.touch(touch);
 
-        let config = &mut data.config;
         if let wt @ Some(_) = self.chart_debug_line_slider.touch(touch, t, &mut config.chart_debug_line) {
             return Ok(wt);
         }
@@ -922,14 +863,8 @@ impl OtherList {
         if let wt @ Some(_) = self.fade_slider.touch(touch, t, &mut config.fade) {
             return Ok(wt);
         }
-        if self.watermark.touch(touch, t) {
-            self.watermark_input.activate(&config.watermark, false, false);
-            return Ok(Some(true));
-        }
-        if self.combo_btn.touch(touch, t) {
-            self.combo_input.activate(&config.combo, false, false);
-            return Ok(Some(true));
-        }
+        self.watermark_input.activate(touch, t, &config.watermark);
+        self.combo_input.activate(touch, t, &config.combo);
         if self.roman_btn.touch(touch, t) {
             config.roman ^= true;
             if config.roman && config.roman == config.chinese {
@@ -954,28 +889,56 @@ impl OtherList {
             return Ok(Some(true));
         }
         #[cfg(feature = "play")]
-        if self.health_mode_btn.touch(touch, t) {
+        {
             let text = if let Some(health_mode) = config.health_mode.clone() {
                 health_mode.to_json()?
             } else {
                 String::new()
             };
-            self.health_mode_input.activate(&text, true, false);
-            return Ok(Some(true));
+            self.health_mode_input.activate(touch, t, &text);
         }
         Ok(None)
     }
 
     pub fn update(&mut self, _t: f32) -> Result<bool> {
-        if self.watermark_input.is_active() {
-            self.watermark_input.update();
+        let config = &mut get_data_mut().config;
+        self.watermark_input.update();
+        if let Some(text) = self.watermark_input.confirm() {
+            if text.trim().is_empty() {
+                config.watermark = String::new();
+                return Ok(true);
+            }
+            config.watermark = text;
+            return Ok(true);
         }
-        if self.health_mode_input.is_active() {
-            self.health_mode_input.update();
+
+        #[cfg(feature = "play")]
+        if let Some(text) = self.health_mode_input.confirm() {
+            if text.trim().is_empty() {
+                config.health_mode = None;
+                return Ok(true);
+            }
+            match HealthConfig::from_json(&text) {
+                Ok(health_mode) => {
+                    config.health_mode = Some(health_mode);
+                    return Ok(true);
+                }
+                Err(_) => {
+                    show_message(tl!("illegal-input")).error();
+                    return Ok(false);
+                }
+            }
         }
-        if self.combo_input.is_active() {
-            self.combo_input.update();
+        self.health_mode_input.update();
+        if let Some(text) = self.combo_input.confirm() {
+            if validate_combo(&text) || text.len() > 50 {
+                show_message(tl!("not-combo")).error();
+                return Ok(false);
+            }
+            config.combo = text;
+            return Ok(true);
         }
+        self.combo_input.update();
         Ok(false)
     }
 
@@ -1015,19 +978,11 @@ impl OtherList {
         }
         item! {
             render_title(ui, c, tl!("item-watermark"), None);
-            if self.watermark_input.is_active() {
-                self.watermark_input.render(ui, rr, c.a, &tl!("item-watermark"));
-            } else {
-                self.watermark.render_text(ui, rr, t, c.a, &config.watermark, 0.4, false);
-            }
+            self.watermark_input.render(ui, rr, t, c, &tl!("item-watermark"), &config.watermark);
         }
         item! {
             render_title(ui, c, tl!("item-combo"), None);
-            if self.combo_input.is_active() {
-                self.combo_input.render(ui, rr, c.a, &tl!("item-combo"));
-            } else {
-                self.combo_btn.render_text(ui, rr, t, c.a, &config.combo, 0.4, false);
-            }
+            self.combo_input.render(ui, rr, t, c, &tl!("item-combo"), &config.combo);
         }
         item! {
             render_title(ui, c, tl!("item-roman"), None);
@@ -1049,18 +1004,18 @@ impl OtherList {
         #[cfg(feature = "play")]
         item! {
             render_title(ui, c, tl!("item-health-mode"), Some(tl!("item-health-mode-sub")));
-            if self.health_mode_input.is_active() {
-                let edit_rect = ui.rect_to_local(r);
-                self.health_mode_input.render(ui, edit_rect, c.a, &tl!("item-health-mode"));
+            let rrr = if self.health_mode_input.is_active() {
+                ui.rect_to_local(r)
             } else {
-                let text = match config.health_mode.clone().map(|it| it.mode) {
-                    None => "OFF",
-                    Some(HealthType::Classic{}) => "classic",
-                    Some(HealthType::ComboHeal{ .. }) => "comboHeal",
-                    Some(HealthType::SpeedBased{ .. }) => "speedBased",
-                };
-                self.health_mode_btn.render_text(ui, rr, t, c.a, text, 0.4, false);
-            }
+                rr
+            };
+            let text = match config.health_mode.clone().map(|it| it.mode) {
+                None => "OFF",
+                Some(HealthType::Classic{}) => "classic",
+                Some(HealthType::ComboHeal{ .. }) => "comboHeal",
+                Some(HealthType::SpeedBased{ .. }) => "speedBased",
+            };
+            self.health_mode_input.render(ui, rrr, t, c, &tl!("item-health-mode"), &text);
         }
 
         (w, h)

@@ -2154,8 +2154,8 @@ dependencies = [
 
 [[package]]
 name = "macroquad"
-version = "0.4.15"
-source = "git+https://github.com/2278535805/macroquad#8586a4876e65c4d8b151ef48da598d009ef49f5c"
+version = "0.4.16"
+source = "git+https://github.com/2278535805/macroquad#6f24a0c9fabb265eaa70d4749efe6a7926f2341f"
 dependencies = [
  "fontdue",
  "glam 0.27.0",
@@ -2168,7 +2168,7 @@ dependencies = [
 [[package]]
 name = "macroquad_macro"
 version = "0.1.8"
-source = "git+https://github.com/2278535805/macroquad#8586a4876e65c4d8b151ef48da598d009ef49f5c"
+source = "git+https://github.com/2278535805/macroquad#6f24a0c9fabb265eaa70d4749efe6a7926f2341f"
 
 [[package]]
 name = "malloc_buf"
@@ -2242,7 +2242,7 @@ checksum = "6877bb514081ee2a7ff5ef9de3281f14a4dd4bceac4c09388074a6b5df8a139a"
 [[package]]
 name = "miniquad"
 version = "0.4.10"
-source = "git+https://github.com/2278535805/miniquad#82538d37d6939ca70819dca8bfd01c213300f642"
+source = "git+https://github.com/2278535805/miniquad#cccbc8194b8ad77e36d078b11ff01d4e617198d2"
 dependencies = [
  "hms-opengtx-binding",
  "jni",
