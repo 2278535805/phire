@@ -81,11 +81,11 @@ macro_rules! validate_events {
                 true
             }
         });
-        for i in 0..$pgr.len() {
-            if $pgr[i].start_time == $pgr[i].end_time {
-                bail!("event {} start time {} equals end time {}", i, $pgr[i].start_time, $pgr[i].end_time);
-            }
-        }
+        // for i in 0..$pgr.len() {
+        //     if $pgr[i].start_time == $pgr[i].end_time {
+        //         bail!("event {} start time {} equals end time {}", i, $pgr[i].start_time, $pgr[i].end_time);
+        //     }
+        // }
         // for i in 0..($pgr.len() - 1) {
         //     if $pgr[i].end_time != $pgr[i + 1].start_time {
         //         ptl!(bail "event-not-contiguous");
