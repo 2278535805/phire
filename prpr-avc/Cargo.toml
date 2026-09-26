@@ -6,12 +6,11 @@ edition = "2021"
 [lib]
 
 [dependencies]
-anyhow = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
+sasa = { workspace = true, default-features = false }
 
-[target.'cfg(target_os = "android")'.dependencies]
-sasa = { workspace = true, default-features = false, features = ["oboe"] }
-
-[target.'cfg(not(target_os = "android"))'.dependencies]
-sasa = { workspace = true, default-features = false, features = ["cpal"]  }
+[build-dependencies]
+flate2 = "1"
+tar = "0.4"
+ureq = "2"

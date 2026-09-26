@@ -1,17 +1,16 @@
 use crate::{
-    config::Config,
-    core::{BadNote, Chart, NOTE_WIDTH_RATIO_BASE, Note, NoteKind, Point, Resource, Vector},
-    ext::{NotNanExt, get_viewport},
+    config::Config, core::{BadNote, Chart, NOTE_WIDTH_RATIO_BASE, Note, NoteKind, Point, Resource, Vector}, ext::{NotNanExt, get_frame_latency, get_viewport},
 };
+use anyhow::Result;
 use macroquad::prelude::{
     utils::{register_input_subscriber, repeat_all_miniquad_input},
     *,
 };
 use macroquad::miniquad::{EventHandler, MouseButton};
 use once_cell::sync::Lazy;
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use sasa::{PlaySfxParams, Sfx};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::{cell::RefCell, collections::HashMap, num::FpCategory};
 
 pub const FLICK_SPEED_THRESHOLD: f32 = 0.8;
@@ -122,6 +121,113 @@ fn check_hitsound(map: &mut HashMap<String, u8, rustc_hash::FxBuildHasher>, sfx:
     }
 }
 
+pub const REPLAY_VERSION: u32 = 1;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ReplayPhase {
+    Started,
+    Moved,
+    Stationary,
+    Ended,
+    Cancelled,
+}
+
+impl From<TouchPhase> for ReplayPhase {
+    fn from(value: TouchPhase) -> Self {
+        match value {
+            TouchPhase::Started => Self::Started,
+            TouchPhase::Moved => Self::Moved,
+            TouchPhase::Stationary => Self::Stationary,
+            TouchPhase::Ended => Self::Ended,
+            TouchPhase::Cancelled => Self::Cancelled,
+        }
+    }
+}
+
+impl From<ReplayPhase> for TouchPhase {
+    fn from(value: ReplayPhase) -> Self {
+        match value {
+            ReplayPhase::Started => Self::Started,
+            ReplayPhase::Moved => Self::Moved,
+            ReplayPhase::Stationary => Self::Stationary,
+            ReplayPhase::Ended => Self::Ended,
+            ReplayPhase::Cancelled => Self::Cancelled,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct ReplayTouch {
+    pub id: u64,
+    pub phase: ReplayPhase,
+    pub position: [f32; 2],
+    /// `None` means the event time is not precisely known (same frame as the touch state)
+    pub time: Option<f64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReplayFrame {
+    /// raw `res.time` snapshot when this frame was recorded
+    pub time: f64,
+    pub touches: Vec<ReplayTouch>,
+    /// number of key press events received this frame
+    pub keys_down: u32,
+    /// net key press/release delta of this frame (tracks held keys for holds)
+    pub key_delta: i32,
+    /// touch ids whose flick got triggered this frame
+    pub flicks: Vec<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReplayHit {
+    pub time: f64,
+    pub kind: String,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ReplayData {
+    pub version: u32,
+    /// playback speed used during recording
+    pub speed: f32,
+    pub frames: Vec<ReplayFrame>,
+    pub hits: Vec<ReplayHit>,
+}
+
+impl ReplayData {
+    pub fn to_json(&self) -> Result<String> {
+        Ok(serde_json::to_string(self)?)
+    }
+
+    pub fn from_json(s: &str) -> Result<Self> {
+        let data: Self = serde_json::from_str(s)?;
+        if data.version != REPLAY_VERSION {
+            anyhow::bail!("unsupported replay version {}", data.version);
+        }
+        Ok(data)
+    }
+
+    pub fn save(&self, path: &str) -> Result<()> {
+        std::fs::write(path, self.to_json()?)?;
+        Ok(())
+    }
+
+    pub fn load(path: &str) -> Result<Self> {
+        Self::from_json(&String::from_utf8(std::fs::read(path)?)?)
+    }
+}
+
+#[derive(Default)]
+pub struct ReplayRecorder {
+    pub frames: Vec<ReplayFrame>,
+}
+
+pub struct ReplayPlayer {
+    pub data: ReplayData,
+    pub frame_index: usize,
+    pub keys_down: u32,
+    pub current_touches: Vec<Touch>,
+}
+
 pub struct FlickTracker {
     threshold: f32,
     last_point: Point,
@@ -187,7 +293,7 @@ pub enum Judgement {
     Miss,
 }
 
-// #[cfg(not(feature = "closed"))]
+#[cfg(not(feature = "closed"))]
 #[derive(Default)]
 pub(crate) struct JudgeInner {
     perfect_diffs: Vec<f64>,
@@ -200,7 +306,7 @@ pub(crate) struct JudgeInner {
     num_of_notes: u32,
 }
 
-// #[cfg(not(feature = "closed"))]
+#[cfg(not(feature = "closed"))]
 impl JudgeInner {
     pub fn new(num_of_notes: u32) -> Self {
         Self {
@@ -229,6 +335,21 @@ impl JudgeInner {
         self.counts[what as usize] += 1;
         match what {
             Perfect | Good => {
+                self.combo += 1;
+                if self.combo > self.max_combo {
+                    self.max_combo = self.combo;
+                }
+            }
+            _ => {
+                self.combo = 0;
+            }
+        }
+    }
+
+    pub fn commit_diff(&mut self, what: Judgement) {
+        self.counts[what as usize] += 1;
+        match what {
+            Judgement::Perfect | Judgement::Good => {
                 self.combo += 1;
                 if self.combo > self.max_combo {
                     self.max_combo = self.combo;
@@ -271,11 +392,11 @@ impl JudgeInner {
         }
     }
 
-    pub fn result(&self, track_complete: bool, limit_bad: f64) -> PlayResult {
+    pub fn result(&self, track_complete: bool) -> PlayResult {
         let early = self.good_diffs.iter().filter(|it| **it < 0.).count() as u32;
         let n = self.perfect_diffs.len() + self.good_diffs.len() + self.bad_diffs.len();
         let std = if n == 0 {
-            limit_bad as f32
+            LIMIT_BAD as f32
         } else {
             let n = n as f64;
             let all_diffs = self.perfect_diffs.iter().chain(self.good_diffs.iter()).chain(self.bad_diffs.iter());
@@ -303,10 +424,15 @@ impl JudgeInner {
     pub fn counts(&self) -> [u32; 4] {
         self.counts
     }
+
+    pub fn is_vaild(&self) -> bool {
+        self.combo == 0
+        || self.perfect_diffs.len() + self.good_diffs.len() + self.bad_diffs.len() > 0
+    }
 }
 
-// #[cfg(feature = "closed")]
-// use inner::*;
+#[cfg(feature = "closed")]
+use crate::inner::*;
 
 #[repr(C)]
 pub struct Judge {
@@ -324,6 +450,9 @@ pub struct Judge {
 
     pub(crate) inner: JudgeInner,
     pub judgements: RefCell<Vec<(f64, u32, u32, Result<Judgement, bool>)>>,
+
+    pub replay_recorder: Option<ReplayRecorder>,
+    pub replay_player: Option<ReplayPlayer>,
 }
 
 static SUBSCRIBER_ID: Lazy<usize> = Lazy::new(register_input_subscriber);
@@ -360,7 +489,64 @@ impl Judge {
 
             inner: JudgeInner::new(chart.lines.iter().map(|it| it.notes.iter().filter(|it| !it.fake).count() as u32).sum()),
             judgements: RefCell::new(Vec::new()),
+
+            replay_recorder: None,
+            replay_player: None,
         }
+    }
+
+    pub fn start_recording(&mut self) {
+        self.replay_recorder = Some(ReplayRecorder::default());
+    }
+
+    /// Collects recorded frames and resolves hit sounds from the judgement log.
+    /// The recorder itself stays armed (emptied) so that a retry of the same scene
+    /// instance keeps recording from scratch.
+    pub fn stop_recording(&mut self, chart: &Chart, speed: f32) -> ReplayData {
+        let frames = std::mem::take(&mut self.replay_recorder.get_or_insert_with(ReplayRecorder::default).frames);
+        let judgements = std::mem::take(&mut *self.judgements.borrow_mut());
+        let mut hits: Vec<ReplayHit> = judgements
+            .iter()
+            .filter_map(|(t, line_id, note_id, res)| {
+                let note = &chart.lines[*line_id as usize].notes[*note_id as usize];
+                if note.fake {
+                    return None;
+                }
+                let kind = match res {
+                    Err(_) => "click".to_owned(), // hold
+                    Ok(Judgement::Bad) | Ok(Judgement::Miss) => return None,
+                    Ok(_) => {
+                        if matches!(note.kind, NoteKind::Hold { .. }) {
+                            return None;
+                        }
+                        match &note.hitsound {
+                            HitSound::Click => "click".to_owned(),
+                            HitSound::Drag => "drag".to_owned(),
+                            HitSound::Flick => "flick".to_owned(),
+                            HitSound::Custom(name) => name.clone(),
+                            HitSound::None => return None,
+                        }
+                    }
+                };
+                Some(ReplayHit { time: *t, kind })
+            })
+            .collect();
+        hits.sort_by(|a, b| a.time.total_cmp(&b.time));
+        ReplayData {
+            version: REPLAY_VERSION,
+            speed,
+            frames,
+            hits,
+        }
+    }
+
+    pub fn load_replay(&mut self, data: ReplayData) {
+        self.replay_player = Some(ReplayPlayer {
+            data,
+            frame_index: 0,
+            keys_down: 0,
+            current_touches: Vec::new(),
+        });
     }
 
     pub fn set_limits(&mut self, perfect: f64, good: f64, bad: f64) {
@@ -374,6 +560,14 @@ impl Judge {
         self.trackers.clear();
         self.inner.reset();
         self.judgements.borrow_mut().clear();
+        if let Some(recorder) = &mut self.replay_recorder {
+            recorder.frames.clear();
+        }
+        if let Some(player) = &mut self.replay_player {
+            player.frame_index = 0;
+            player.keys_down = 0;
+            player.current_touches.clear();
+        }
     }
 
     pub fn commit(&mut self, t: f64, what: Judgement, line_id: u32, note_id: u32, diff: f64) {
@@ -421,14 +615,10 @@ impl Judge {
         )
     }
 
-    fn touch_transform(flip_x: bool, scale: f32, angle: f32, low_resolution_mode: bool) -> impl Fn(&mut Touch) {
+    fn touch_transform(flip_x: bool, scale: f32, angle: f32, resolution_ratio: f32) -> impl Fn(&mut Touch) {
         let vp = get_viewport();
         move |touch| {
-            let p = if low_resolution_mode {
-                vec2(touch.position.x / 2., touch.position.y / 2.)
-            } else {
-                touch.position
-            };
+            let p = vec2(touch.position.x * resolution_ratio, touch.position.y * resolution_ratio);
             touch.position = vec2(
                 (p.x - vp.0 as f32) / vp.2 as f32 * 2. - 1.,
                 ((p.y - (vp.3 as f32 - (vp.1 + vp.3) as f32)) / vp.3 as f32 * 2. - 1.) / (vp.2 as f32 / vp.3 as f32),
@@ -441,10 +631,10 @@ impl Judge {
         }
     }
 
-    pub fn get_touches(scale: f32, low_resolution_mode: bool) -> Vec<Touch> {
+    pub fn get_touches(scale: f32, resolution_ratio: f32) -> Vec<Touch> {
         TOUCHES.with(|it| {
             let guard = it.borrow();
-            let tr = Self::touch_transform(false, scale, 0., low_resolution_mode);
+            let tr = Self::touch_transform(false, scale, 0., resolution_ratio);
             guard
                 .touches
                 .iter()
@@ -472,7 +662,11 @@ impl Judge {
 
         let uptime = get_uptime();
 
-        let t = res.time;
+        let t = if res.config.auto_tweak_offset {
+            res.time - (res.config.judge_offset + get_frame_latency(&res.frame_times)) * res.config.speed as f64
+        } else {
+            res.time - res.config.judge_offset * res.config.speed as f64
+        };
         // TODO optimize
         let mut touches: HashMap<u64, Touch> = {
             let mut touches: Vec<Touch> = touches().into_iter().map(|t| Touch { id: t.id, phase: t.phase, position: t.position, time: f64::NEG_INFINITY }).collect();
@@ -503,7 +697,7 @@ impl Judge {
                     time: f64::NEG_INFINITY,
                 });
             }
-            let tr = Self::touch_transform(res.config.flip_x(), res.config.chart_ratio, angle, res.config.low_resolution_mode);
+            let tr = Self::touch_transform(res.config.flip_x(), res.config.chart_ratio, angle, res.resolution_ratio);
             touches
                 .into_iter()
                 .map(|mut it| {
@@ -516,7 +710,9 @@ impl Judge {
             let guard = it.borrow();
             (guard.touches.clone(), guard.keys_down)
         });
-        self.key_down_count = self.key_down_count.saturating_add_signed(TOUCHES.with(|it| it.borrow().key_delta));
+        let key_delta = TOUCHES.with(|it| it.borrow().key_delta);
+        self.key_down_count = self.key_down_count.saturating_add_signed(key_delta);
+        let mut frame_flicks: Vec<u64> = Vec::new();
         {
             fn to_local(Vec2 { x, y }: Vec2) -> Point {
                 Point::new(x / screen_width() * 2. - 1., y / screen_height() * 2. - 1.)
@@ -548,7 +744,11 @@ impl Judge {
                     }
                     TouchPhase::Moved | TouchPhase::Stationary => {
                         if let Some(tracker) = self.trackers.get_mut(&id) {
+                            let was_flicked = tracker.flicked;
                             tracker.push(t, p);
+                            if !was_flicked && tracker.flicked {
+                                frame_flicks.push(id);
+                            }
                         }
                     }
                     TouchPhase::Ended | TouchPhase::Cancelled => {
@@ -568,6 +768,156 @@ impl Judge {
                 it
             })
             .collect();
+        if let Some(recorder) = &mut self.replay_recorder {
+            // normalize the aspect-dependent y back to screen-relative coordinates so
+            // replays render correctly on viewports with a different aspect ratio
+            let vp = get_viewport();
+            let ar = vp.2 as f32 / vp.3 as f32;
+            recorder.frames.push(ReplayFrame {
+                time: res.time - res.config.judge_offset,
+                touches: touches
+                    .iter()
+                    .map(|it| ReplayTouch {
+                        id: it.id,
+                        phase: it.phase.into(),
+                        position: [it.position.x, it.position.y * ar],
+                        time: if it.time.is_infinite() { None } else { Some(it.time) },
+                    })
+                    .collect(),
+                keys_down,
+                key_delta,
+                flicks: frame_flicks,
+            });
+        }
+        self.run_judgement(res, chart, bad_notes, t, spd, x_diff_max, touches, keys_down);
+    }
+
+    pub fn update_replay(&mut self, res: &mut Resource, chart: &mut Chart, bad_notes: &mut Vec<BadNote>) {
+        res.played_hitsounds_count.clear();
+        let spd = res.config.speed as f64;
+        let x_diff_max: f64 = if res.config.full_scrrn_judge() {
+            2. / res.config.chart_ratio as f64
+        } else {
+            0.21 / (16. / 9.) * 2.
+        };
+        let now = res.time;
+
+        let mut keys_down = 0u32;
+        if let Some(player) = self.replay_player.as_mut() {
+            // ids whose Started phase appeared within this consumed batch; their press
+            // state must survive until judgement even if later frames show movement
+            let mut fresh_started: FxHashSet<u64> = FxHashSet::default();
+            let mut presses = 0u32;
+            let mut held_delta = 0i32;
+            while player.frame_index < player.data.frames.len() && player.data.frames[player.frame_index].time <= now {
+                let frame = player.data.frames[player.frame_index].clone();
+                for rt in &frame.touches {
+                    if rt.phase == ReplayPhase::Started {
+                        self.trackers
+                            .entry(rt.id)
+                            .or_insert_with(|| FlickTracker::new(res.dpi, frame.time as _, Point::new(rt.position[0], rt.position[1])));
+                    }
+                }
+                for id in &frame.flicks {
+                    self.trackers
+                        .entry(*id)
+                        .or_insert_with(|| FlickTracker::new(res.dpi, frame.time as _, Point::new(0., 0.)));
+                    if let Some(tracker) = self.trackers.get_mut(id) {
+                        tracker.flicked = true;
+                    }
+                }
+                for rt in &frame.touches {
+                    match rt.phase {
+                        ReplayPhase::Started => {
+                            fresh_started.insert(rt.id);
+                            player.current_touches.retain(|it| it.id != rt.id);
+                            player.current_touches.push(Touch {
+                                id: rt.id,
+                                phase: TouchPhase::Started,
+                                position: vec2(rt.position[0], rt.position[1]),
+                                time: rt.time.unwrap_or(f64::NEG_INFINITY),
+                            });
+                        }
+                        ReplayPhase::Ended | ReplayPhase::Cancelled => {
+                            fresh_started.remove(&rt.id);
+                            player.current_touches.retain(|it| it.id != rt.id);
+                            self.trackers.remove(&rt.id);
+                        }
+                        phase => {
+                            if let Some(it) = player.current_touches.iter_mut().find(|it| it.id == rt.id) {
+                                if !fresh_started.contains(&rt.id) {
+                                    it.phase = phase.into();
+                                    it.position = vec2(rt.position[0], rt.position[1]);
+                                }
+                            } else {
+                                player.current_touches.push(Touch {
+                                    id: rt.id,
+                                    phase: phase.into(),
+                                    position: vec2(rt.position[0], rt.position[1]),
+                                    time: rt.time.unwrap_or(f64::NEG_INFINITY),
+                                });
+                            }
+                        }
+                    }
+                }
+                // a finger absent from this frame's snapshot has been lifted
+                let present: FxHashSet<u64> = frame.touches.iter().map(|it| it.id).collect();
+                player.current_touches.retain(|it| present.contains(&it.id));
+                presses += frame.keys_down;
+                held_delta += frame.key_delta;
+                player.frame_index += 1;
+            }
+            // every press of the batch must reach the hit loop, and the held-key count
+            // is maintained via the recorded deltas just like during live play
+            keys_down = presses;
+            player.keys_down = player.keys_down.saturating_add_signed(held_delta);
+        }
+        let touches = self.replay_touches();
+        self.key_down_count = self
+            .replay_player
+            .as_ref()
+            .map(|it| it.keys_down)
+            .unwrap_or(keys_down);
+        self.run_judgement(res, chart, bad_notes, now, spd, x_diff_max, touches, keys_down);
+        if let Some(player) = self.replay_player.as_mut() {
+            for it in player.current_touches.iter_mut() {
+                it.phase = TouchPhase::Stationary;
+            }
+        }
+        self.last_time = now / spd;
+    }
+
+    /// Replay touch states converted into the current viewport's judge coordinate space.
+    /// Stored positions are aspect-normalized; the y axis is re-scaled to whatever
+    /// viewport the replay is running on.
+    pub fn replay_touches(&self) -> Vec<Touch> {
+        let Some(player) = &self.replay_player else {
+            return Vec::new();
+        };
+        let vp = get_viewport();
+        let ar = vp.2 as f32 / vp.3 as f32;
+        player
+            .current_touches
+            .iter()
+            .map(|it| {
+                let mut t = it.clone();
+                t.position.y /= ar;
+                t
+            })
+            .collect()
+    }
+
+    fn run_judgement(
+        &mut self,
+        res: &mut Resource,
+        chart: &mut Chart,
+        bad_notes: &mut Vec<BadNote>,
+        t: f64,
+        spd: f64,
+        x_diff_max: f64,
+        touches: Vec<Touch>,
+        keys_down: u32,
+    ) {
         // pos[line][touch]
         let mut pos = Vec::<Vec<Option<Point>>>::with_capacity(chart.lines.len());
         for id in 0..chart.lines.len() {
@@ -985,7 +1335,7 @@ impl Judge {
     }
 
     fn auto_play_update(&mut self, res: &mut Resource, chart: &mut Chart) {
-        let t = res.time - res.config.judge_offset;
+        let t = res.time - res.config.autoplay_judge_offset;
         let (judge_type, judge_type_hold, judge_time, fx_color) = if res.config.all_bad {
             (Judgement::Bad, Judgement::Good, self.limit_bad, Color::new(0., 0., 0., 0.))
         } else if res.config.all_good {
@@ -1021,8 +1371,7 @@ impl Judge {
                     if note.time >= res.config.play_start_time && !res.disable_hit_fx {
                         note.hitsound.play(res);
                     }
-                    self.judgements.borrow_mut().push((t, line_id as _, *id, Err(true)));
-                    // AutoPlay 无需输出打击时间差
+                    // self.judgements.borrow_mut().push((t, line_id as _, *id, Err(true)));
                     // JudgeStatus::Hold(true, t, (t - note.time) / spd, false, f32::INFINITY)
                     JudgeStatus::Hold(true, t, judge_time, true, f64::INFINITY)
                 } else {
@@ -1042,51 +1391,38 @@ impl Judge {
             }
         }
         for (line_id, id) in judgements.into_iter() {
-            let mut note_transform = {
-                let line = &mut chart.lines[line_id];
-                let note = &mut line.notes[id as usize];
-                let nt = if matches!(note.kind, NoteKind::Hold { .. }) { t } else { note.time };
-                line.object.set_time(nt);
-                note.object.set_time(nt);
-                note.object.now(res)
-            };
             let line = &chart.lines[line_id];
             let note = &line.notes[id as usize];
-            if !note.above {
-                note_transform.append_nonuniform_scaling_mut(&Vector::new(1.0, -1.0));
-            }
             match note.kind {
-                NoteKind::Click => {
-                    let color = if let Some(color) = note.hit_fx_color.now_opt() {
-                        color
-                    } else {
-                        fx_color
-                    };
-                    self.commit(t, judge_type, line_id as _, id, 0.);
-                    if note.time >= res.config.play_start_time && !res.disable_hit_fx {
-                        res.with_model(line.now_transform(res, &chart.lines) * note_transform, |res| {
-                            res.emit_at_origin(note.rotation(line), color)
-                        });
-                        if !res.config.all_bad {
-                            note.hitsound.play(res)
-                        }
-                    }
-                }
                 NoteKind::Hold { .. } => {
-                    self.commit(t, judge_type_hold, line_id as _, id, 0.);
+                    self.inner.commit_diff(judge_type_hold);
                 }
                 _ => {
-                    let color = if let Some(color) = note.hit_fx_color.now_opt() {
-                        color
-                    } else {
-                        res.res_pack.info.fx_perfect()
-                    };
-                    self.commit(t, Judgement::Perfect, line_id as _, id, 0.);
+                    self.inner.commit_diff(judge_type);
                     if note.time >= res.config.play_start_time && !res.disable_hit_fx {
+                        let mut note_transform = {
+                            // let nt = if matches!(note.kind, NoteKind::Hold { .. }) { t } else { note.time };
+                            let nt = note.time;
+                            chart.lines[line_id].object.set_time(nt);
+                            chart.lines[line_id].notes[id as usize].object.set_time(nt);
+                            chart.lines[line_id].notes[id as usize].object.now(res)
+                        };
+                        let line = &chart.lines[line_id];
+                        let note = &line.notes[id as usize];
+                        if !note.above {
+                            note_transform.append_nonuniform_scaling_mut(&Vector::new(1.0, -1.0));
+                        }
+                        let color = if let Some(color) = note.hit_fx_color.now_opt() {
+                            color
+                        } else {
+                            if matches!(note.kind, NoteKind::Click { .. }) { fx_color } else { res.res_pack.info.fx_perfect() }
+                        };
                         res.with_model(line.now_transform(res, &chart.lines) * note_transform, |res| {
-                            res.emit_at_origin(note.rotation(line), color)
+                            res.emit_at_origin(note.rotation(&line), color)
                         });
-                        note.hitsound.play(res)
+                        if !(matches!(note.kind, NoteKind::Click { .. }) && res.config.all_bad) {
+                            note.hitsound.play(res)
+                        }
                     }
                 },
             };
@@ -1098,13 +1434,13 @@ impl Judge {
             .flat_map(|it| it.notes.iter())
             .filter(|it| !it.fake && matches!(it.judge, JudgeStatus::NotJudged | JudgeStatus::PreJudge))
         {
-            self.commit(0., Judgement::Perfect, 0, 0, 0.);
+            self.inner.commit_diff(Judgement::Perfect);
         }
     }
 
     #[inline]
     pub fn result(&self, track_complete: bool) -> PlayResult {
-        self.inner.result(track_complete, self.limit_bad)
+        self.inner.result(track_complete)
     }
 
     #[inline]
@@ -1115,6 +1451,11 @@ impl Judge {
     #[inline]
     pub fn counts(&self) -> [u32; 4] {
         self.inner.counts()
+    }
+
+    #[inline]
+    pub fn is_vaild(&self) -> bool {
+        self.inner.is_vaild()
     }
 }
 

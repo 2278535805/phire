@@ -1,8 +1,8 @@
+use macroquad::miniquad::{self as miniquad, gl::GLuint};
 use macroquad::{
     texture::{RenderTarget, Texture2D},
     window::get_internal_gl,
 };
-use macroquad::miniquad::{self as miniquad, gl::GLuint};
 
 pub struct MSRenderTarget {
     dim: (u32, u32),
@@ -36,6 +36,18 @@ fn get_fbo(target: &RenderTarget) -> GLuint {
 
 pub fn internal_id(target: RenderTarget) -> GLuint {
     get_fbo(&target)
+}
+
+pub fn read_render_target_rgba8(target: RenderTarget, dim: (u32, u32), output: &mut Vec<u8>) {
+    let gl = unsafe { get_internal_gl() };
+    let size = dim.0 as usize * dim.1 as usize * 4;
+    output.resize(size, 0);
+    unsafe {
+        gl.quad_context
+            .begin_pass(Some(target.render_pass.raw_miniquad_id()), miniquad::PassAction::Nothing);
+        miniquad::gl::glReadPixels(0, 0, dim.0 as i32, dim.1 as i32, miniquad::gl::GL_RGBA, miniquad::gl::GL_UNSIGNED_BYTE, output.as_mut_ptr() as _);
+        gl.quad_context.end_render_pass();
+    }
 }
 
 fn create_render_target_rgb8(width: u32, height: u32, sample_count: i32) -> RenderTarget {

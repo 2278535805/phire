@@ -21,6 +21,7 @@ item-lowq = Low quality mode
 item-lowq-sub = Enable this if the UI is laggy
 item-anti-aliasing = Anti-aliasing
 item-low-resolution = Low resolution mode
+item-dynamic-resolution = Dynamic resolution mode
 item-insecure = Insecure mode
 item-insecure-sub = Enable this if you can't use online functionalities. Makes your connection insecure!
 
@@ -34,6 +35,8 @@ item-bgm = BGM volume
 item-high-precision-hit-effect = High Precision Hit Effect
 item-high-precision-hit-effect-sub = Enables music-clock-synced high precision hit sounds when AUTOPLAY is on
 item-cali = Adjust offset
+item-audio-offset = Audio Offset
+item-judge-offset = Judge Offset
 item-exclusive-audio = Exclusive Audio
 item-exclusive-audio-sub = Use exclusive access to reduce latency, but may prevent the sound from being recorded
 item-audio-compatibility = Audio Compatibility Mode
@@ -79,7 +82,12 @@ item-health-mode-sub = classic | comboHeal | speedBased
 item-max-health = Max Health
 item-initial-health = Initial Health
 
+item-latency-test = Tap to Tone Latency
+item-output-test = Audio Output Test
 load-cali-failed = Failed to load audio
+load-latency-failed = Failed to load latency test
+load-output-failed = Failed to load output test
+permission-required = Permissions denied
 not-combo = Cannot be COMBO
 illegal-input = Illegal input
 

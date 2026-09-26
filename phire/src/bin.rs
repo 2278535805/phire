@@ -463,7 +463,6 @@ impl BinaryData for JudgeLine {
     fn read_binary<R: Read>(r: &mut BinaryReader<R>) -> Result<Self> {
         r.reset_time();
         let object = r.read()?;
-        let color = r.read()?;
         let kind = match r.read::<u8>()? {
             0 => JudgeLineKind::Normal,
             1 => JudgeLineKind::Texture(Texture2D::empty().into(), r.read()?),
@@ -471,6 +470,7 @@ impl BinaryData for JudgeLine {
             3 => JudgeLineKind::Paint(r.read()?, RefCell::default()),
             _ => bail!("invalid judge line kind"),
         };
+        let color = r.read()?;
         let height = r.read()?;
         let mut notes = r.array()?;
         let parent = r.read()?;

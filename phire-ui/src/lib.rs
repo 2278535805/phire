@@ -19,7 +19,7 @@ mod scene;
 mod tags;
 mod uml;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use data::Data;
 use macroquad::prelude::*;
 use phire::{
@@ -29,10 +29,12 @@ use phire::{
     log,
     scene::{show_error, show_message},
     time::TimeManager,
-    ui::{FontArc, TextPainter},
+    ui::{FontArc, TextPainter, UI_AUDIO},
     Main,
 };
 use scene::MainScene;
+#[cfg(not(feature = "play"))]
+use std::collections::VecDeque;
 use std::sync::{mpsc, Mutex};
 use tracing::{error, info};
 
@@ -44,7 +46,7 @@ use std::time::Duration;
 use nalgebra::Vector3;
 
 static ACTIVITY_LIFECYCLE: Mutex<Option<mpsc::Sender<bool>>> = Mutex::new(None);
-static ACTIVITY_FOUCUS: Mutex<Option<mpsc::Sender<bool>>> = Mutex::new(None);
+static ACTIVITY_FOCUS: Mutex<Option<mpsc::Sender<bool>>> = Mutex::new(None);
 static ANTI_ADDICTION_CALLBACK: Mutex<Option<mpsc::Sender<i32>>> = Mutex::new(None);
 static DATA_PATH: Mutex<Option<String>> = Mutex::new(None);
 static CACHE_DIR: Mutex<Option<String>> = Mutex::new(None);
@@ -171,15 +173,17 @@ async fn the_main() -> Result<()> {
     character::init_characters().await?;
     miniquad::window::set_ime_enabled(false);
 
+    let window_subscriber = macroquad::input::utils::register_input_subscriber();
+
     let activity_lifecycle = {
         let (tx, rx) = mpsc::channel();
         *ACTIVITY_LIFECYCLE.lock().unwrap() = Some(tx);
         rx
     };
 
-    let activity_foucus = {
+    let activity_focus = {
         let (tx, rx) = mpsc::channel();
-        *ACTIVITY_FOUCUS.lock().unwrap() = Some(tx);
+        *ACTIVITY_FOCUS.lock().unwrap() = Some(tx);
         rx
     };
 
@@ -211,6 +215,10 @@ async fn the_main() -> Result<()> {
 
     let mut main = Main::new(Box::new(MainScene::new().await?), TimeManager::default(), None).await?;
 
+    if let Err(err) = UI_AUDIO.with(|it| it.borrow_mut().start()).context(ttl!("start-audio-failed")) {
+        show_error(err);
+    }
+
     let tm = TimeManager::default();
 
     #[cfg(not(feature = "play"))]
@@ -220,6 +228,10 @@ async fn the_main() -> Result<()> {
     let mut exit_time = f64::INFINITY;
 
     'app: loop {
+        macroquad::input::utils::repeat_all_miniquad_input(
+            &mut WindowLifecycleHandler,
+            window_subscriber,
+        );
         if main.paused() {
             match activity_lifecycle.recv() {
                 Ok(false) => {
@@ -232,11 +244,11 @@ async fn the_main() -> Result<()> {
 
         let frame_start = tm.real_time();
         let res = || -> Result<()> {
-            if let Ok(paused) = activity_foucus.try_recv() {
-                if paused {
-                    main.foucus_pause()?;
+            if let Ok(has_focus) = activity_focus.try_recv() {
+                if has_focus {
+                    main.focus_resume()?;
                 } else {
-                    main.foucus_resume()?;
+                    main.focus_pause()?;
                 }
             }
             main.update()?;
@@ -370,6 +382,25 @@ fn on_pause_resume(pause: bool) {
     }
 }
 
+fn on_focus_change(has_focus: bool) {
+    if let Some(tx) = ACTIVITY_FOCUS.lock().unwrap().as_mut() {
+        let _ = tx.send(has_focus);
+    }
+}
+
+struct WindowLifecycleHandler;
+
+impl miniquad::EventHandler for WindowLifecycleHandler {
+    fn update(&mut self) {}
+    fn draw(&mut self) {}
+    fn window_minimized_event(&mut self) {
+        on_focus_change(false);
+    }
+    fn window_restored_event(&mut self) {
+        on_focus_change(true);
+    }
+}
+
 #[cfg(target_os = "android")]
 unsafe fn string_from_java(env: *mut ndk_sys::JNIEnv, s: ndk_sys::jstring) -> String {
     let get_string_utf_chars = (**env).GetStringUTFChars.unwrap();
@@ -383,47 +414,41 @@ unsafe fn string_from_java(env: *mut ndk_sys::JNIEnv, s: ndk_sys::jstring) -> St
 }
 
 #[cfg(target_os = "android")]
-#[no_mangle]
-pub extern "C" fn Java_quad_1native_QuadNative_libActivityOnPause(_: *mut std::ffi::c_void, _: *const std::ffi::c_void) {
+#[export_name = "Java_quad_1native_QuadNative_libActivityOnPause"]
+pub extern "system" fn activity_on_pause(_: *mut std::ffi::c_void, _: *const std::ffi::c_void) {
     anti_addiction_action("leaveGame", None);
-    if let Some(tx) = ACTIVITY_LIFECYCLE.lock().unwrap().as_mut() {
-        let _ = tx.send(true);
-    }
+    on_pause_resume(true);
 }
 
 #[cfg(target_os = "android")]
-#[no_mangle]
-pub extern "C" fn Java_quad_1native_QuadNative_libActivityOnResume(_: *mut std::ffi::c_void, _: *const std::ffi::c_void) {
+#[export_name = "Java_quad_1native_QuadNative_libActivityOnResume"]
+pub extern "system" fn activity_on_resume(_: *mut std::ffi::c_void, _: *const std::ffi::c_void) {
     anti_addiction_action("enterGame", None);
-    if let Some(tx) = ACTIVITY_LIFECYCLE.lock().unwrap().as_mut() {
-        let _ = tx.send(false);
-    }
+    on_pause_resume(false);
 }
 
 #[cfg(target_os = "android")]
-#[no_mangle]
-pub extern "C" fn Java_quad_1native_QuadNative_libActivityOnWindowFocusChanged(_: *mut std::ffi::c_void, _: *const std::ffi::c_void, has_focus: ndk_sys::jboolean) {
-    if let Some(tx) = ACTIVITY_FOUCUS.lock().unwrap().as_mut() {
-        let _ = tx.send(has_focus == 0);
-    }
+#[export_name = "Java_quad_1native_QuadNative_libActivityOnWindowFocusChanged"]
+pub extern "system" fn activity_on_window_focus_changed(_: *mut std::ffi::c_void, _: *const std::ffi::c_void, has_focus: ndk_sys::jboolean) {
+    on_focus_change(has_focus != 0);
 }
 
 #[cfg(target_os = "android")]
-#[no_mangle]
-pub extern "C" fn Java_quad_1native_QuadNative_libActivityOnDestroy(_: *mut std::ffi::c_void, _: *const std::ffi::c_void) {
+#[export_name = "Java_quad_1native_QuadNative_libActivityOnDestroy"]
+pub extern "system" fn activity_on_destroy(_: *mut std::ffi::c_void, _: *const std::ffi::c_void) {
     // std::process::exit(0);
 }
 
 #[cfg(target_os = "android")]
-#[no_mangle]
-pub unsafe extern "C" fn Java_quad_1native_QuadNative_setDataPath(_: *mut std::ffi::c_void, _: *const std::ffi::c_void, path: ndk_sys::jstring) {
+#[export_name = "Java_quad_1native_QuadNative_setDataPath"]
+pub unsafe extern "system" fn set_data_path(_: *mut std::ffi::c_void, _: *const std::ffi::c_void, path: ndk_sys::jstring) {
     let env = crate::miniquad::native::attach_jni_env();
     *DATA_PATH.lock().unwrap() = Some(string_from_java(env, path));
 }
 
 #[cfg(target_os = "android")]
-#[no_mangle]
-pub unsafe extern "C" fn Java_quad_1native_QuadNative_setTempDir(_: *mut std::ffi::c_void, _: *const std::ffi::c_void, path: ndk_sys::jstring) {
+#[export_name = "Java_quad_1native_QuadNative_setTempDir"]
+pub unsafe extern "system" fn set_temp_dir(_: *mut std::ffi::c_void, _: *const std::ffi::c_void, path: ndk_sys::jstring) {
     let env = crate::miniquad::native::attach_jni_env();
     let path = string_from_java(env, path);
     std::env::set_var("TMPDIR", path.clone());
@@ -431,14 +456,14 @@ pub unsafe extern "C" fn Java_quad_1native_QuadNative_setTempDir(_: *mut std::ff
 }
 
 #[cfg(target_os = "android")]
-#[no_mangle]
-pub unsafe extern "C" fn Java_quad_1native_QuadNative_setDpi(_: *mut std::ffi::c_void, _: *const std::ffi::c_void, dpi: ndk_sys::jint) {
+#[export_name = "Java_quad_1native_QuadNative_setDpi"]
+pub unsafe extern "system" fn set_dpi(_: *mut std::ffi::c_void, _: *const std::ffi::c_void, dpi: ndk_sys::jint) {
     phire::core::DPI_VALUE.store(dpi as _, std::sync::atomic::Ordering::SeqCst);
 }
 
 #[cfg(target_os = "android")]
-#[no_mangle]
-pub unsafe extern "C" fn Java_quad_1native_QuadNative_setChosenFile(_: *mut std::ffi::c_void, _: *const std::ffi::c_void, file: ndk_sys::jstring) {
+#[export_name = "Java_quad_1native_QuadNative_setChosenFile"]
+pub unsafe extern "system" fn set_chosen_file(_: *mut std::ffi::c_void, _: *const std::ffi::c_void, file: ndk_sys::jstring) {
     use phire::scene::CHOSEN_FILE;
 
     let env = crate::miniquad::native::attach_jni_env();
@@ -446,29 +471,59 @@ pub unsafe extern "C" fn Java_quad_1native_QuadNative_setChosenFile(_: *mut std:
 }
 
 #[cfg(target_os = "android")]
-#[no_mangle]
-pub unsafe extern "C" fn Java_quad_1native_QuadNative_markImport(_: *mut std::ffi::c_void, _: *const std::ffi::c_void) {
+#[export_name = "Java_quad_1native_QuadNative_markImport"]
+pub unsafe extern "system" fn set_import(_: *mut std::ffi::c_void, _: *const std::ffi::c_void) {
     use phire::scene::CHOSEN_FILE;
 
     CHOSEN_FILE.lock().unwrap().0 = Some("_import".to_owned());
 }
 
 #[cfg(target_os = "android")]
-#[no_mangle]
-pub unsafe extern "C" fn Java_quad_1native_QuadNative_markImportRespack(_: *mut std::ffi::c_void, _: *const std::ffi::c_void) {
+#[export_name = "Java_quad_1native_QuadNative_markImportRespack"]
+pub unsafe extern "system" fn set_import_respack(_: *mut std::ffi::c_void, _: *const std::ffi::c_void) {
     use phire::scene::CHOSEN_FILE;
 
     CHOSEN_FILE.lock().unwrap().0 = Some("_import_respack".to_owned());
 }
 
 #[cfg(target_os = "android")]
-#[no_mangle]
-pub unsafe extern "C" fn Java_quad_1native_QuadNative_setInputText(_: *mut std::ffi::c_void, _: *const std::ffi::c_void, text: ndk_sys::jstring) {
+#[export_name = "Java_quad_1native_QuadNative_setInputText"]
+pub unsafe extern "system" fn set_input_text(_: *mut std::ffi::c_void, _: *const std::ffi::c_void, text: ndk_sys::jstring) {
     use phire::scene::INPUT_TEXT;
 
     let env = crate::miniquad::native::attach_jni_env();
     INPUT_TEXT.lock().unwrap().1 = Some(string_from_java(env, text));
 }
+
+#[cfg(target_os = "android")]
+pub fn check_record_audio_permission() -> bool {
+    unsafe {
+        let env = miniquad::native::attach_jni_env();
+        let ctx = ndk_context::android_context().context();
+        let class = (**env).GetObjectClass.unwrap()(env, ctx);
+        let method =
+            (**env).GetMethodID.unwrap()(env, class, b"checkRecordAudioPermission\0".as_ptr() as _, b"()Z\0".as_ptr() as _);
+        (**env).CallBooleanMethod.unwrap()(env, ctx, method) != 0
+    }
+}
+
+#[cfg(target_os = "android")]
+pub fn request_record_audio_permission() {
+    unsafe {
+        let env = miniquad::native::attach_jni_env();
+        let ctx = ndk_context::android_context().context();
+        let class = (**env).GetObjectClass.unwrap()(env, ctx);
+        let method =
+            (**env).GetMethodID.unwrap()(env, class, b"requestRecordAudioPermission\0".as_ptr() as _, b"()V\0".as_ptr() as _);
+        (**env).CallVoidMethod.unwrap()(env, ctx, method);
+    }
+}
+
+#[cfg(not(target_os = "android"))]
+pub fn check_record_audio_permission() -> bool { true }
+
+#[cfg(not(target_os = "android"))]
+pub fn request_record_audio_permission() {}
 
 #[cfg(not(all(target_os = "android", feature = "aa")))]
 pub fn anti_addiction_action(_action: &str, _arg: Option<String>) {}
@@ -495,8 +550,8 @@ pub fn anti_addiction_action(action: &str, arg: Option<String>) {
 }
 
 #[cfg(target_os = "android")]
-#[no_mangle]
-pub unsafe extern "C" fn Java_quad_1native_QuadNative_antiAddictionCallback(
+#[export_name = "Java_quad_1native_QuadNative_antiAddictionCallback"]
+pub unsafe extern "system" fn anti_addiction_callback(
     _: *mut std::ffi::c_void,
     _: *const std::ffi::c_void,
     #[allow(dead_code)] code: ndk_sys::jint,
@@ -509,8 +564,8 @@ pub unsafe extern "C" fn Java_quad_1native_QuadNative_antiAddictionCallback(
 }
 
 #[cfg(target_os = "android")]
-#[no_mangle]
-pub unsafe extern "C" fn Java_quad_1native_QuadNative_updateGyroScope(
+#[export_name = "Java_quad_1native_QuadNative_updateGyroScope"]
+pub unsafe extern "system" fn update_gyro_scope(
     env: ndk_sys::JNIEnv,
     _class: ndk_sys::jclass,
     x: ndk_sys::jfloat,
@@ -526,8 +581,8 @@ pub unsafe extern "C" fn Java_quad_1native_QuadNative_updateGyroScope(
 }
 
 #[cfg(target_os = "android")]
-#[no_mangle]
-pub unsafe extern "C" fn Java_quad_1native_QuadNative_updateGravity(
+#[export_name = "Java_quad_1native_QuadNative_updateGravity"]
+pub unsafe extern "system" fn update_gravity(
     env: ndk_sys::JNIEnv,
     _class: ndk_sys::jclass,
     roll: ndk_sys::jfloat,

@@ -19,7 +19,7 @@ impl Default for TimeManager {
 
 impl TimeManager {
     pub fn from_config(config: &Config) -> Self {
-        Self::new(1., config.auto_tweak_offset)
+        Self::new(1., config.adjust_time)
     }
 
     pub fn manual(get_time_fn: Box<dyn Fn() -> f64>) -> Self {
@@ -30,7 +30,7 @@ impl TimeManager {
             pause_time: None,
             speed: 1.0,
             wait: f64::NEG_INFINITY,
-            force: 1e-2,
+            force: 0.1,
 
             get_time_fn,
         }
@@ -56,7 +56,7 @@ impl TimeManager {
             pause_time: None,
             speed,
             wait: f64::NEG_INFINITY,
-            force: 1e-2,
+            force: 0.1,
 
             get_time_fn: Box::new(get_time_fn),
         }

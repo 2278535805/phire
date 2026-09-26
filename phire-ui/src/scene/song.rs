@@ -1,9 +1,9 @@
 phire::tl_file!("song");
 
-use super::{confirm_delete, confirm_dialog, fs_from_path, render_ldb, LdbDisplayItem, ProfileScene};
+use super::{confirm_delete, confirm_dialog, fs_from_path, render_ldb, LdbDisplayItem, ProfileScene, RenderConfigDialog, RenderScene};
 use crate::{
     charts_view::NEED_UPDATE,
-    client::{basic_client_builder, recv_raw, sync_active_play_config, Chart, Client, Permission, Ptr, Record, ResponseDto, UserManager, CLIENT_TOKEN},
+    client::{basic_client_builder, recv_raw, Chart, Client, Permission, Ptr, Record, ResponseDto, UserManager, CLIENT_TOKEN},
     data::{BriefChartInfo, LocalChart},
     dir, get_data, get_data_mut,
     icons::Icons,
@@ -28,27 +28,42 @@ use phire::{
     info::{ChartFormat, ChartInfo},
     judge::{icon_index, Judge},
     scene::{
-        request_input, return_input, show_error, show_message, take_input, BasicPlayer, GameMode, LoadingScene, LocalSceneTask, NextScene,
-        RecordUpdateState, Scene, SimpleRecord, UpdateFn, UploadFn,
+        request_save_file, show_error, show_message, take_file, BasicPlayer, GameMode, LoadingScene, LocalSceneTask, NextScene, Scene, SimpleRecord,
+        UpdateFn, UploadFn,
     },
     task::Task,
     time::TimeManager,
-    ui::{button_hit, render_chart_info, ChartInfoEdit, DRectButton, Dialog, LoadingParams, RectButton, Scroll, Ui, UI_AUDIO},
+    ui::{button_hit, render_chart_info, ChartInfoEdit, DRectButton, Dialog, InlineInputBtn, LoadingParams, RectButton, Scroll, Ui, UI_AUDIO},
 };
 use reqwest::Method;
 use sasa::{AudioClip, Frame, Music, MusicParams};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize};
 use serde_json::json;
 use std::{
-    any::Any, borrow::Cow, collections::{HashMap, VecDeque, hash_map}, fs::File, io::{Cursor, Write}, path::Path, println, sync::{
-        Arc, Mutex, Weak, atomic::{AtomicBool, AtomicI32, Ordering},
-    }, thread_local, time::SystemTime,
+    any::Any, borrow::Cow, collections::{HashMap, VecDeque, hash_map},
+    fs::File,
+    io::{Cursor, Write},
+    path::Path,
+    sync::{
+        Arc,
+        Mutex,
+        Weak,
+        atomic::{AtomicBool, AtomicI32, Ordering}
+    },
+    thread_local,
 };
 use tokio::net::TcpStream;
 use tracing::warn;
 use uuid::Uuid;
 use walkdir::WalkDir;
 use zip::{write::FileOptions, CompressionMethod, ZipWriter};
+
+#[cfg(feature = "closed")]
+use crate::client::sync_active_play_config;
+#[cfg(feature = "closed")]
+use phire::scene::RecordUpdateState;
+#[cfg(feature = "closed")]
+use std::time::SystemTime;
 
 #[cfg(feature = "closed")]
 use crate::inner::*;
@@ -58,6 +73,14 @@ const EDIT_TRANSIT: f32 = 0.32;
 
 static CONFIRM_UPLOAD: AtomicBool = AtomicBool::new(false);
 pub static RECORD_ID: AtomicI32 = AtomicI32::new(-1);
+
+fn safe_filename(name: String) -> String {
+    name
+        .trim()
+        .chars()
+        .filter(|&it| it.is_alphanumeric() || " !#$%&'()+,-.;=@[]^_`{}~".contains(it))
+        .collect()
+}
 
 fn create_music(clip: AudioClip) -> Result<Music> {
     let mut music = UI_AUDIO.with(|it| {
@@ -225,6 +248,12 @@ pub struct SongScene {
     need_show_menu: bool,
     should_delete: Arc<AtomicBool>,
     menu_options: Vec<&'static str>,
+    render_path: Option<String>,
+    render_config_dialog: RenderConfigDialog,
+    render_config: Option<((u32, u32), u32, i32)>,
+    replay_export: bool,
+    replay_preview: Arc<AtomicBool>,
+    replay_export_request: Arc<AtomicBool>,
 
     info_edit: Option<ChartInfoEdit>,
     edit_btn: RectButton,
@@ -253,6 +282,8 @@ pub struct SongScene {
     info_scroll: Scroll,
 
     review_task: Option<Task<Result<String>>>,
+    review_input: InlineInputBtn,
+    review_input_action: Option<&'static str>,
     chart_should_delete: Arc<AtomicBool>,
 
     edit_tags_task: Option<Task<Result<()>>>,
@@ -328,6 +359,7 @@ impl SongScene {
         } else {
             chart.illu
         };
+        illu.notify();
         let record = get_data()
             .charts
             .iter()
@@ -408,6 +440,12 @@ impl SongScene {
             need_show_menu: false,
             should_delete: Arc::new(AtomicBool::default()),
             menu_options: Vec::new(),
+            render_path: None,
+            render_config_dialog: RenderConfigDialog::new(),
+            render_config: None,
+            replay_export: false,
+            replay_preview: Arc::new(AtomicBool::default()),
+            replay_export_request: Arc::new(AtomicBool::default()),
 
             info_edit: None,
             edit_btn: RectButton::new(),
@@ -436,6 +474,8 @@ impl SongScene {
             info_scroll: Scroll::new(),
 
             review_task: None,
+            review_input: InlineInputBtn::new().set_multiline(),
+            review_input_action: None,
             chart_should_delete: Arc::default(),
 
             edit_tags_task: None,
@@ -760,6 +800,17 @@ impl SongScene {
         if self.info.id.is_some() {
             self.menu_options.push("rate");
         }
+        if self.local_path.is_some() {
+            self.menu_options.push("render");
+            if phire::scene::LAST_REPLAY
+                .lock()
+                .unwrap()
+                .as_ref()
+                .is_some_and(|(name, _)| *name == self.info.name)
+            {
+                self.menu_options.push("replay");
+            }
+        }
         if let Some(local_path) = &self.local_path {
             self.menu_options.push("exercise");
             self.menu_options.push("offset");
@@ -837,7 +888,7 @@ impl SongScene {
         #[cfg(feature = "closed")]
         let rated = {
             let config = &get_data().config;
-            !config.offline_mode && chart_guid.is_some() && !mods.contains(Mods::AUTOPLAY) && (config.speed - 1.0).abs() <= 1e-3
+            !config.offline_mode && chart_guid.is_some() && !mods.contains(Mods::AUTOPLAY) && !mods.contains(Mods::FULL_SCREEN_JUDGE) && mode != GameMode::TweakOffset && (config.speed - 1.0).abs() <= 1e-3
         };
         #[cfg(not(feature = "closed"))]
         let rated = false;
@@ -882,7 +933,7 @@ impl SongScene {
                                 reconnect_task = None;
                             }
                         }
-                        let points: Vec<_> = Judge::get_touches(1.0, false)
+                        let points: Vec<_> = Judge::get_touches(1.0, 1.0)
                             .into_iter()
                             .filter_map(|it| {
                                 if matches!(it.phase, TouchPhase::Stationary) {
@@ -966,6 +1017,7 @@ impl SongScene {
                 id: it.id,
                 rks: it.rks,
             });
+            #[cfg(feature = "closed")]
             let configuration_id = if chart_guid.is_some() && get_data().tokens.is_some() && rated {
                 sync_active_play_config().await?
             } else {
@@ -1054,7 +1106,7 @@ impl SongScene {
                     .await
                     .map(|it| NextScene::Overlay(Box::new(it)))
             } else {
-                LoadingScene::new(None, mode, info, &config, fs, player, upload_fn, update_fn)
+                LoadingScene::new(None, mode, info, &config, fs, player, upload_fn, update_fn, None)
                     .await
                     .map(|it| NextScene::Overlay(Box::new(it)))
             }
@@ -1118,7 +1170,7 @@ impl SongScene {
 
         self.edit_scroll.size((width, ui.top * 2. - h));
         self.edit_scroll.render(ui, |ui| {
-            let (w, mut h) = render_chart_info(ui, self.info_edit.as_mut().unwrap(), width);
+            let (w, mut h) = render_chart_info(ui, self.info_edit.as_mut().unwrap(), width, rt);
             h += 0.06;
             ui.dy(h);
             if ui.button("edit_tags", Rect::new(0.04, 0., 0.2, 0.07), tl!("edit-tags")) {
@@ -1403,6 +1455,7 @@ impl Scene for SongScene {
     }
 
     fn pause(&mut self, _tm: &mut TimeManager) -> Result<()> {
+        UI_AUDIO.with(|it| it.borrow_mut().close())?;
         if let Some(preview) = &mut self.preview {
             preview.pause()?;
         }
@@ -1410,8 +1463,9 @@ impl Scene for SongScene {
     }
 
     fn resume(&mut self, _tm: &mut TimeManager) -> Result<()> {
+        UI_AUDIO.with(|it| it.borrow_mut().start())?;
         if let Some(preview) = &mut self.preview {
-            preview.play()?;
+            preview.fade_in(0.5)?;
         }
         Ok(())
     }
@@ -1425,7 +1479,7 @@ impl Scene for SongScene {
         }
         if let Some(music) = &mut self.preview {
             music.seek_to(0.)?;
-            music.play()?;
+            music.fade_in(0.5)?;
         }
         self.update_menu();
         Ok(())
@@ -1433,6 +1487,14 @@ impl Scene for SongScene {
 
     fn touch(&mut self, tm: &mut TimeManager, touch: &Touch) -> Result<bool> {
         let t = tm.now() as f32;
+        if self.review_input_action.is_some() {
+            self.review_input.touch(touch);
+            self.review_input.activate(touch, t, "");
+            return Ok(true);
+        }
+        if self.render_config_dialog.touch(touch, tm.real_time() as f32) {
+            return Ok(true);
+        }
         if self.scene_task.is_some()
             || self.save_task.is_some()
             || self.upload_task.is_some()
@@ -1463,6 +1525,14 @@ impl Scene for SongScene {
             return Ok(true);
         }
         if !self.side_enter_time.is_infinite() {
+            if matches!(self.side_content, SideContent::Edit) {
+                if let Some(edit) = &mut self.info_edit {
+                    if edit.is_active() {
+                        edit.touch(touch, rt);
+                        return Ok(true);
+                    }
+                }
+            }
             if self.side_enter_time > 0. && tm.real_time() as f32 > self.side_enter_time + EDIT_TRANSIT {
                 if touch.position.x < 1. - self.side_content.width() && touch.phase == TouchPhase::Started && self.save_task.is_none() {
                     if matches!(self.side_content, SideContent::Mods) {
@@ -1479,6 +1549,14 @@ impl Scene for SongScene {
                     SideContent::Edit => {
                         if self.edit_scroll.touch(touch, t) {
                             return Ok(true);
+                        }
+                        if self.edit_scroll.contains(touch) {
+                            if let Some(edit) = &mut self.info_edit {
+                                edit.touch(touch, rt);
+                                if edit.is_active() {
+                                    return Ok(true);
+                                }
+                            }
                         }
                     }
                     SideContent::Leaderboard => {
@@ -1589,12 +1667,52 @@ impl Scene for SongScene {
     }
 
     fn update(&mut self, tm: &mut TimeManager) -> Result<()> {
+        #[cfg(not(target_arch = "wasm32"))]
+        if let Some((id, file)) = take_file() {
+            if id == "render" {
+                if let Some(path) = self.local_path.clone() {
+                    self.render_path = Some(file);
+                    let _ = path;
+                }
+            } else {
+                phire::scene::return_file(id, file);
+            }
+        }
+        if let (Some(path), Some(local_path)) = (self.render_path.take(), self.local_path.clone()) {
+            let (resolution, fps, crf) = self.render_config.take().unwrap_or(((1280, 720), 60, 24));
+            if std::mem::take(&mut self.replay_export) {
+                self.next_scene = Some(NextScene::Overlay(Box::new(RenderScene::new_replay(local_path, Some(path), resolution, fps, crf))));
+            } else {
+                self.next_scene = Some(NextScene::Overlay(Box::new(RenderScene::new(local_path, path, resolution, fps, crf))));
+            }
+        }
+        if let Some(local_path) = self.local_path.clone() {
+            if self.replay_preview.swap(false, Ordering::SeqCst) {
+                self.next_scene = Some(NextScene::Overlay(Box::new(RenderScene::new_replay(local_path, None, (0, 0), 60, 24))));
+            } else if self.replay_export_request.swap(false, Ordering::SeqCst) {
+                self.replay_export = true;
+                self.render_config_dialog.show();
+            }
+        }
+        self.render_config_dialog.update();
+        if let Some(result) = self.render_config_dialog.result.take() {
+            if let Some(config) = result {
+                self.render_config = Some(config);
+                request_save_file("render", &format!("Phire-{}.mp4", safe_filename(self.info.name.clone())));
+            }
+        }
+        UI_AUDIO.with(|it| it.borrow_mut().recover_if_needed())?;
         let t = tm.now() as f32;
         self.menu.update(t);
         self.illu.settle(t);
         let rt = tm.real_time() as f32;
         self.tags.update(rt);
         self.rate_dialog.update(rt);
+        if !self.side_enter_time.is_infinite() && matches!(self.side_content, SideContent::Edit) {
+            if let Some(edit) = &mut self.info_edit {
+                edit.update();
+            }
+        }
         if self.tags.confirmed.take() == Some(true) {
             let mut tags = self.tags.tags.tags().to_vec();
             tags.push(self.tags.division.to_owned());
@@ -1747,6 +1865,24 @@ impl Scene for SongScene {
                 "unlock" => {
                     self.launch(GameMode::Normal, true)?;
                 }
+                "render" => {
+                    self.replay_export = false;
+                    self.render_config_dialog.show();
+                }
+                "replay" => {
+                    let preview_flag = Arc::clone(&self.replay_preview);
+                    let export_flag = Arc::clone(&self.replay_export_request);
+                    Dialog::plain(tl!("replay"), tl!("replay-select"))
+                        .buttons(vec![ttl!("cancel").into_owned(), tl!("replay-preview").into_owned(), tl!("replay-export").into_owned()])
+                        .listener(move |id| {
+                            if id == 1 {
+                                preview_flag.store(true, Ordering::SeqCst);
+                            } else if id == 2 {
+                                export_flag.store(true, Ordering::SeqCst);
+                            }
+                        })
+                        .show();
+                }
                 "review-approve" => {
                     let id = self.info.id.unwrap();
                     self.review_task = Some(Task::new(async move {
@@ -1767,7 +1903,8 @@ impl Scene for SongScene {
                     }));
                 }
                 "review-deny" => {
-                    request_input("deny-reason", "", tl!("review-denied"));
+                    self.review_input_action = Some("deny-reason");
+                    self.review_input.input.activate("");
                 }
                 "review-del" => {
                     confirm_delete(self.chart_should_delete.clone());
@@ -1805,10 +1942,12 @@ impl Scene for SongScene {
                     }));
                 }
                 "stabilize-comment" => {
-                    request_input("stabilize-comment", "", tl!("stabilize-commented"));
+                    self.review_input_action = Some("stabilize-comment");
+                    self.review_input.input.activate("");
                 }
                 "stabilize-deny" => {
-                    request_input("stabilize-deny-reason", "", tl!("stabilize-denied"));
+                    self.review_input_action = Some("stabilize-deny-reason");
+                    self.review_input.input.activate("");
                 }
                 _ => {}
             }
@@ -1980,9 +2119,10 @@ impl Scene for SongScene {
                 self.ldb_task = None;
             }
         }
-        if let Some((id, text)) = take_input() {
-            match id.as_str() {
-                "deny-reason" => {
+        self.review_input.update();
+        if let Some(text) = self.review_input.confirm() {
+            match self.review_input_action.take() {
+                Some("deny-reason") => {
                     let id = self.info.id.unwrap();
                     self.review_task = Some(Task::new(async move {
                         recv_raw(Client::post(
@@ -1996,7 +2136,7 @@ impl Scene for SongScene {
                         Ok(tl!("review-denied").into_owned())
                     }));
                 }
-                "stabilize-comment" => {
+                Some("stabilize-comment") => {
                     let id = self.info.id.unwrap();
                     self.review_task = Some(Task::new(async move {
                         recv_raw(Client::post(
@@ -2009,7 +2149,7 @@ impl Scene for SongScene {
                         Ok(tl!("stabilize-commented").into())
                     }));
                 }
-                "stabilize-deny-reason" => {
+                Some("stabilize-deny-reason") => {
                     let id = self.info.id.unwrap();
                     self.review_task = Some(Task::new(async move {
                         let resp: StableR = recv_raw(Client::post(
@@ -2030,8 +2170,10 @@ impl Scene for SongScene {
                         .into())
                     }));
                 }
-                _ => return_input(id, text),
+                _ => {}
             }
+        } else if self.review_input_action.is_some() && !self.review_input.is_active() {
+            self.review_input_action = None;
         }
         if let Some(task) = &mut self.review_task {
             if let Some(res) = task.take() {
@@ -2308,6 +2450,21 @@ impl Scene for SongScene {
         let rt = tm.real_time() as f32;
         self.tags.render(ui, rt);
         self.rate_dialog.render(ui, rt);
+        self.render_config_dialog.render(ui, rt);
+
+        if let Some(action) = self.review_input_action {
+            let title = match action {
+                "stabilize-comment" => tl!("stabilize-comment"),
+                "stabilize-deny-reason" => tl!("stabilize-deny"),
+                _ => tl!("review-deny"),
+            };
+            ui.fill_rect(ui.screen_rect(), semi_black(0.7));
+            let wr = Ui::dialog_rect();
+            ui.fill_path(&wr.rounded(0.02), Color { a: 1., ..ui.background() });
+            let r = ui.text(title.clone()).pos(wr.x + 0.04, wr.y + 0.033).size(0.7).color(WHITE).draw();
+            let input_r = Rect::new(wr.x + 0.04, r.bottom() + 0.04, wr.w - 0.08, (wr.bottom() - r.bottom() - 0.08).max(0.1));
+            self.review_input.render(ui, input_r, t, WHITE, &title, "");
+        }
 
         self.sf.render(ui, t);
 
@@ -2317,7 +2474,7 @@ impl Scene for SongScene {
     fn next_scene(&mut self, tm: &mut TimeManager) -> NextScene {
         if let Some(scene) = self.next_scene.take().or_else(|| self.sf.next_scene(tm.now() as _)) {
             if let Some(music) = &mut self.preview {
-                let _ = music.pause();
+                let _ = music.fade_out(0.5);
             }
             scene
         } else {

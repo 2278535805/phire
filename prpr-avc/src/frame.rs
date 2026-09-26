@@ -18,11 +18,27 @@ impl AVFrame {
         }
     }
 
+    pub fn set_pts(&mut self, pts: i64) {
+        unsafe { self.0.as_mut().pts = pts }
+    }
+
+    pub fn set_external_video_buffer(&mut self, format: &VideoStreamFormat, data: *mut u8, stride: i32) {
+        unsafe {
+            let this = self.0.as_mut();
+            this.width = format.width;
+            this.height = format.height;
+            this.format = format.pix_fmt.0;
+            this.data = [std::ptr::null_mut(); 8];
+            this.data[0] = data;
+            this.linesize = [0; 8];
+            this.linesize[0] = stride;
+        }
+    }
+
     pub fn set_audio_format(&mut self, format: &crate::AudioStreamFormat) {
         unsafe {
             let this = self.0.as_mut();
-            this.channels = format.channels;
-            this.channel_layout = format.channel_layout;
+            this.ch_layout = format.channel_layout;
             this.format = format.sample_fmt;
             this.sample_rate = format.sample_rate;
         }
@@ -44,6 +60,10 @@ impl AVFrame {
 
     pub fn get_buffer(&mut self) -> Result<()> {
         unsafe { handle(ffi::av_frame_get_buffer(self.0 .0, 0)) }
+    }
+
+    pub fn make_writable(&mut self) -> Result<()> {
+        unsafe { handle(ffi::av_frame_make_writable(self.0 .0)) }
     }
 
     pub fn raw_data(&self) -> &[*const u8; 8] {
@@ -95,6 +115,10 @@ impl AVFrame {
 
     pub fn line_size(&self) -> i32 {
         unsafe { self.0.as_ref().linesize[0] }
+    }
+
+    pub fn unref(&mut self) {
+        unsafe { ffi::av_frame_unref(self.0.as_mut()) }
     }
 }
 

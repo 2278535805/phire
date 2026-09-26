@@ -23,12 +23,17 @@ impl SwsContext {
         }
     }
 
-    pub fn scale(&mut self, src: &AVFrame, dst: &mut AVFrame) {
+    pub fn scale(&mut self, src: &AVFrame, dst: &mut AVFrame) -> Result<()> {
         unsafe {
             let src = src.0.as_ref();
             let dst = dst.0.as_mut();
-            ffi::sws_scale(self.0 .0, src.data.as_ptr() as _, src.linesize.as_ptr(), 0, src.height, dst.data.as_ptr(), dst.linesize.as_ptr());
+            let result =
+                ffi::sws_scale(self.0 .0, src.data.as_ptr() as _, src.linesize.as_ptr(), 0, src.height, dst.data.as_ptr(), dst.linesize.as_ptr());
+            if result != src.height {
+                return Err(Error::Unhandled(result, None));
+            }
         }
+        Ok(())
     }
 }
 
