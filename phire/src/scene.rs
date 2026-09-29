@@ -4,7 +4,7 @@ mod ending;
 pub use ending::{EndingScene, RecordUpdateState, LAST_RESULT};
 
 pub mod game;
-pub use game::{GameMode, GameScene, SimpleRecord};
+pub use game::{GameMode, GameScene, SimpleRecord, LAST_REPLAY};
 
 mod loading;
 pub use loading::{BasicPlayer, LoadingScene, UpdateFn, UploadFn};
@@ -129,7 +129,13 @@ pub fn request_password(id: impl Into<String>, text: &str, title: impl Into<Stri
     let title = title.into();
     request_input_full(id, text, true, title.as_str(), "");
 }
-pub fn request_input_full(id: impl Into<String>, #[allow(unused_variables)] text: &str, #[allow(unused_variables)] is_password: bool, #[allow(unused_variables)] title: &str, #[allow(unused_variables)] hint: &str) {
+pub fn request_input_full(
+    id: impl Into<String>,
+    #[allow(unused_variables)] text: &str,
+    #[allow(unused_variables)] is_password: bool,
+    #[allow(unused_variables)] title: &str,
+    #[allow(unused_variables)] hint: &str,
+) {
     *INPUT_TEXT.lock().unwrap() = (Some(id.into()), None);
     cfg_if! {
         if #[cfg(target_os = "android")] {
@@ -297,6 +303,39 @@ pub fn request_file(id: impl Into<String>) {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
+pub fn request_save_file(id: impl Into<String>, name: &str) {
+    *CHOSEN_FILE.lock().unwrap() = (Some(id.into()), None);
+    cfg_if! {
+        if #[cfg(target_os = "android")] {
+            unsafe {
+                let env = miniquad::native::attach_jni_env();
+                let ctx = ndk_context::android_context().context();
+                let class = (**env).GetObjectClass.unwrap()(env, ctx);
+                let method = (**env).GetMethodID.unwrap()(env, class, b"saveFile\0".as_ptr() as _, b"(Ljava/lang/String;)V\0".as_ptr() as _);
+                let name = std::ffi::CString::new(name).unwrap();
+                let jname = (**env).NewStringUTF.unwrap()(env, name.as_ptr());
+                (**env).CallVoidMethod.unwrap()(env, ctx, method, jname);
+            }
+        } else {
+            CHOSEN_FILE.lock().unwrap().1 = rfd::FileDialog::new().set_file_name(name).save_file().map(|it| it.display().to_string());
+        }
+    }
+}
+
+#[cfg(target_os = "android")]
+pub fn finish_save_file(path: &str) {
+    unsafe {
+        let env = miniquad::native::attach_jni_env();
+        let ctx = ndk_context::android_context().context();
+        let class = (**env).GetObjectClass.unwrap()(env, ctx);
+        let method = (**env).GetMethodID.unwrap()(env, class, b"finishSaveFile\0".as_ptr() as _, b"(Ljava/lang/String;)V\0".as_ptr() as _);
+        let path = std::ffi::CString::new(path).unwrap();
+        let jpath = (**env).NewStringUTF.unwrap()(env, path.as_ptr());
+        (**env).CallVoidMethod.unwrap()(env, ctx, method, jpath);
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
 pub fn take_file() -> Option<(String, String)> {
     let mut w = CHOSEN_FILE.lock().unwrap();
     w.0.clone().zip(std::mem::take(&mut w.1))
@@ -317,10 +356,10 @@ pub trait Scene {
     fn resume(&mut self, _tm: &mut TimeManager) -> Result<()> {
         Ok(())
     }
-    fn foucus_pause(&mut self, _tm: &mut TimeManager) -> Result<()> {
+    fn focus_pause(&mut self, _tm: &mut TimeManager) -> Result<()> {
         Ok(())
     }
-    fn foucus_resume(&mut self, _tm: &mut TimeManager) -> Result<()> {
+    fn focus_resume(&mut self, _tm: &mut TimeManager) -> Result<()> {
         Ok(())
     }
     fn on_result(&mut self, _tm: &mut TimeManager, _result: Box<dyn Any>) -> Result<()> {
@@ -439,12 +478,11 @@ impl Main {
             }
         }
         Judge::on_new_frame();
-        let mut touches = Judge::get_touches(1.0, false);
+        let mut touches = Judge::get_touches(1.0, 1.0);
         touches.iter_mut().for_each(f);
         if !touches.is_empty() {
             let now = self.tm.now();
             let delta = (now - self.last_update_time) / touches.len() as f64;
-            let start_time = self.tm.start_time;
             let mut last_err = None;
             DIALOG.with(|it| -> Result<()> {
                 let mut index = 1;
@@ -460,7 +498,6 @@ impl Main {
                         false
                     } else {
                         drop(guard);
-                        self.tm.seek_to(t);
                         match self.scenes.last_mut().unwrap().touch(&mut self.tm, touch) {
                             Ok(val) => !val,
                             Err(err) => {
@@ -476,7 +513,6 @@ impl Main {
             if let Some(err) = last_err {
                 return Err(err);
             }
-            self.tm.start_time = start_time;
         }
         self.touches = Some(touches);
         self.last_update_time = self.tm.now();
@@ -523,17 +559,17 @@ impl Main {
         self.scenes.last_mut().unwrap().pause(&mut self.tm)
     }
 
-    pub fn foucus_pause(&mut self) -> Result<()> {
-        self.scenes.last_mut().unwrap().foucus_pause(&mut self.tm)
-    }
-
     pub fn resume(&mut self) -> Result<()> {
         self.paused = false;
         self.scenes.last_mut().unwrap().resume(&mut self.tm)
     }
 
-    pub fn foucus_resume(&mut self) -> Result<()> {
-        self.scenes.last_mut().unwrap().foucus_resume(&mut self.tm)
+    pub fn focus_pause(&mut self) -> Result<()> {
+        self.scenes.last_mut().unwrap().focus_pause(&mut self.tm)
+    }
+
+    pub fn focus_resume(&mut self) -> Result<()> {
+        self.scenes.last_mut().unwrap().focus_resume(&mut self.tm)
     }
 
     pub fn paused(&self) -> bool {

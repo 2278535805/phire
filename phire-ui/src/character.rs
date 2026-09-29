@@ -313,7 +313,10 @@ pub fn switch_character(character_id: &str, form_id: &str) {
         data.character_id = character_id.to_owned();
         data.character_form_id = form_id.to_owned();
         let form = character.current_form();
-        data.config.health_mode = form.health_mode.clone();
+        #[cfg(feature = "play")]
+        {
+            data.config.health_mode = form.health_mode.clone();
+        }
         if data.erosion_enabled || form.erosion.as_ref().map_or(false, |it| it.force) {
             data.revealed_forms.insert((character_id.to_owned(), form_id.to_owned()));
         }

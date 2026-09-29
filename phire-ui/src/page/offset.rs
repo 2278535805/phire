@@ -6,14 +6,20 @@ use anyhow::{Context, Result};
 use macroquad::prelude::*;
 use phire::{
     core::ResourcePack,
-    ext::{create_audio_manger, get_latency, push_frame_time, screen_aspect, semi_black, RectExt},
+    ext::{create_audio_manger, get_audio_latency, get_frame_latency, push_frame_time, screen_aspect, semi_black, RectExt},
     time::TimeManager,
     ui::{Slider, Ui},
 };
 use sasa::{AudioClip, AudioManager, Music, MusicParams, PlaySfxParams, Sfx};
-use std::collections::VecDeque;
+use std::{collections::VecDeque, matches};
+
+pub enum OffsetMode {
+    Audio,
+    Judge,
+}
 
 pub struct OffsetPage {
+    mode: OffsetMode,
     audio: AudioManager,
     cali: Music,
     cali_hit: Sfx,
@@ -33,7 +39,7 @@ pub struct OffsetPage {
 impl OffsetPage {
     const FADE_TIME: f64 = 0.8;
 
-    pub async fn new() -> Result<Self> {
+    pub async fn new(mode: OffsetMode) -> Result<Self> {
         let config = &get_data().config;
         let mut audio = create_audio_manger(&get_data().config)?;
         let cali = audio.create_music(
@@ -46,8 +52,7 @@ impl OffsetPage {
         )?;
         let cali_hit = audio.create_sfx(AudioClip::new(load_file("cali_hit.ogg").await?)?, None)?;
 
-        let mut tm = TimeManager::new(1., true);
-        tm.force = 3e-2;
+        let tm = TimeManager::new(1., true);
 
         let respack = ResourcePack::from_path(config.res_pack_path.as_ref())
             .await
@@ -56,6 +61,7 @@ impl OffsetPage {
         let frame_times: VecDeque<f64> = VecDeque::new();
         let latency_record: VecDeque<f64> = VecDeque::new();
         Ok(Self {
+            mode,
             audio,
             cali,
             cali_hit,
@@ -90,7 +96,9 @@ impl Page for OffsetPage {
 
     fn enter(&mut self, _s: &mut SharedState) -> Result<()> {
         self.cali.seek_to(0.)?;
-        self.cali.play()?;
+        if matches!(self.mode, OffsetMode::Audio) {
+            self.cali.play()?;
+        }
         self.tm.reset();
         Ok(())
     }
@@ -98,22 +106,35 @@ impl Page for OffsetPage {
     fn pause(&mut self) -> Result<()> {
         save_data()?;
         self.tm.pause();
-        self.cali.pause()?;
+        if matches!(self.mode, OffsetMode::Audio) {
+            self.cali.pause()?;
+        }
         Ok(())
     }
 
     fn resume(&mut self) -> Result<()> {
         self.tm.resume();
-        self.cali.play()?;
+        if matches!(self.mode, OffsetMode::Audio) {
+            self.cali.play()?;
+        }
         Ok(())
     }
 
     fn touch(&mut self, touch: &Touch, s: &mut SharedState) -> Result<bool> {
         let t = s.t;
         let config = &mut get_data_mut().config;
-        let mut offset = config.offset as f32 * 1000.;
+        let mut offset = 
+            if matches!(self.mode, OffsetMode::Audio) {
+                config.audio_offset
+            } else {
+                config.judge_offset
+            } as f32 * 1000.;
         if self.slider.touch(touch, t, &mut offset).is_some() {
-            config.offset = offset as f64 / 1000.;
+            if matches!(self.mode, OffsetMode::Audio) {
+                config.audio_offset = offset as f64 / 1000.
+            } else {
+                config.judge_offset = offset as f64 / 1000.
+            };
             return Ok(true);
         }
         let x = touch.position.x;
@@ -125,7 +146,8 @@ impl Page for OffsetPage {
     }
 
     fn update(&mut self, _s: &mut SharedState) -> Result<()> {
-        if !self.cali.paused() {
+        self.audio.recover_if_needed()?;
+        if matches!(self.mode, OffsetMode::Audio) && !self.cali.paused() {
             let pos = self.cali.position() as f64;
             let now = self.tm.now();
             if now > 2. {
@@ -137,13 +159,21 @@ impl Page for OffsetPage {
                 self.tm.update(pos);
             }
         }
+        
+        if matches!(self.mode, OffsetMode::Judge) {
+            let now = self.tm.now();
+            if now > 2. {
+                self.tm.seek_to(now - 2.);
+                self.tm.dont_wait();
+            }
+        }
 
-        let config = &mut get_data_mut().config;
         if let Some(key) = get_last_key_pressed() {
+            let config = &mut get_data_mut().config;
             if key == KeyCode::Left {
-                config.offset -= 0.005;
+                config.audio_offset -= 0.005;
             } else if key == KeyCode::Right {
-                config.offset += 0.005;
+                config.audio_offset += 0.005;
             } else {
                 self.touched = true;
             };
@@ -165,15 +195,42 @@ impl Page for OffsetPage {
             let hw = 0.3 * aspect * 1.7777777;
             let hh = 0.0075;
             ui.fill_rect(Rect::new(0.0 - hh / 2., ct.y - aspect * 0.4 - hw / 2., hh, hw), c);
+            let x = ((self.tm.now() - 1.) as f32 * 2.0) - hh / 2.;
+            let color = if x < 0. {
+                RED.with_alpha(c.a)
+            } else {
+                BLUE.with_alpha(c.a)
+            };
+            ui.fill_rect(Rect::new(x, ct.y - aspect * 0.4 - hw / 2., hh, hw), color);
 
             let ot = t;
-
-            let mut t = self.tm.now() - config.offset;
+            let display_offset = if matches!(self.mode, OffsetMode::Audio) { config.audio_offset } else { config.judge_offset };
+            let offset = if matches!(self.mode, OffsetMode::Audio) { config.audio_offset + config.judge_offset } else { config.judge_offset };
+            let mut t = self.tm.now() - offset;
 
             if config.auto_tweak_offset {
-                let latency = get_latency(&self.audio, &self.frame_times);
+                let audio_latency = get_audio_latency(&self.audio);
+                let frame_latency = get_frame_latency(&self.frame_times);
+                let latency = if matches!(self.mode, OffsetMode::Audio) {
+                    audio_latency
+                } else {
+                    frame_latency
+                };
                 t -= latency;
                 ui.text(format!("{} {:.0}ms", tl!("estimated"), latency * 1000.))
+                    .pos(0.0, ct.y + aspect * 0.5)
+                    .anchor(0.5, 1.)
+                    .size(0.5)
+                    .color(Color::new(1., 1., 1., 0.8 * c.a))
+                    .draw();
+                ui.text(format!("{} {:.0}ms", tl!("total"), (config.audio_offset + config.judge_offset + audio_latency + frame_latency) * 1000.))
+                    .pos(0.0, ct.y + aspect * 0.6)
+                    .anchor(0.5, 1.)
+                    .size(0.5)
+                    .color(Color::new(1., 1., 1., 0.8 * c.a))
+                    .draw();
+            } else {
+                ui.text(format!("{} {:.0}ms", tl!("total"), (config.audio_offset + config.judge_offset) * 1000.))
                     .pos(0.0, ct.y + aspect * 0.5)
                     .anchor(0.5, 1.)
                     .size(0.5)
@@ -197,11 +254,9 @@ impl Page for OffsetPage {
                     }
                 }
                 self.touched = false;
-                self.cali_hit
-                    .play(PlaySfxParams {
-                        amplifier: config.volume_sfx,
-                    })
-                    .unwrap();
+                if matches!(self.mode, OffsetMode::Audio) {
+                    self.cali_hit.play(PlaySfxParams { amplifier: config.volume_sfx }).unwrap();
+                }
             }
 
             if let Some((latency, time)) = self.touch {
@@ -215,7 +270,12 @@ impl Page for OffsetPage {
                         ..self.color
                     };
                     if latency.abs() <= 0.700 {
-                        ui.fill_rect(Rect::new(calculate_pos(latency as f32) - hh / 2., ct.y - aspect * 0.4 - hw / 2., hh, hw), c);
+                        if matches!(self.mode, OffsetMode::Audio) {
+                            ui.fill_rect(Rect::new(calculate_pos(latency as f32) - hh / 2., ct.y - aspect * 0.4 - hw / 2., hh, hw), c);
+                        } else if matches!(self.mode, OffsetMode::Judge) {
+                            let x = (latency as f32 * 2.0) - hh / 2.;
+                            ui.fill_rect(Rect::new(x, ct.y - aspect * 0.4 - hw / 2., hh, hw), c);
+                        }
                     }
 
                     ui.text(format!("{} {:.0}ms", tl!("now"), latency * 1000.))
@@ -239,9 +299,9 @@ impl Page for OffsetPage {
                 .color(Color::new(1., 1., 1., 0.8 * c.a))
                 .draw();
 
-            let offset = config.offset as f32 * 1000.;
+            let display_offset = display_offset as f32 * 1000.;
             self.slider
-                .render(ui, Rect::new(-0.08, ct.y + aspect * 0.1 - 0.2 / 2., 0.45, 0.2), ot, c, offset, format!("{offset:.0}ms"));
+                .render(ui, Rect::new(-0.08, ct.y + aspect * 0.1 - 0.2 / 2., 0.45, 0.2), ot, c, display_offset, format!("{display_offset:.0}ms"));
 
             if config.auto_tweak_offset {
                 push_frame_time(&mut self.frame_times, self.tm.real_time());

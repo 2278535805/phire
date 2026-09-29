@@ -12,7 +12,7 @@ default = ["play"]
 closed = ["phire/closed"]
 chat = []
 aa = []
-play = []
+play = ["phire/play"]
 
 [dependencies]
 anyhow = { workspace = true }
@@ -32,10 +32,10 @@ md5 = { workspace = true }
 nalgebra = { workspace = true }
 once_cell = { workspace = true }
 pollster = { workspace = true }
-phire = { workspace = true }
+phire = { workspace = true, features = ["log", "video"] }
 rand = { workspace = true }
 regex = { workspace = true }
-reqwest = { workspace = true }
+reqwest = { workspace = true, features = ["json", "stream", "gzip", "charset", "http2", "system-proxy", "native-tls", "query"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_yaml = { workspace = true }
@@ -61,7 +61,10 @@ ndk-context = { workspace = true }
 sasa = { workspace = true, default-features = false, features = ["oboe"] }
 openssl = { workspace = true }
 
-[target.'cfg(not(target_os = "android"))'.dependencies]
+[target.'cfg(target_os = "windows")'.dependencies]
+sasa = { workspace = true, default-features = false, features = ["wasapi"]  }
+
+[target.'cfg(not(any(target_os = "android", target_os = "windows")))'.dependencies]
 sasa = { workspace = true, default-features = false, features = ["cpal"]  }
 
 [target.'cfg(target_os = "ios")'.dependencies]

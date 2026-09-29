@@ -10,8 +10,7 @@ use anyhow::{Context, Result};
 use macroquad::prelude::*;
 use phire::{
     ext::{poll_future, semi_black, semi_white, LocalTask, RectExt},
-    scene::{request_input, return_input, take_input},
-    ui::{LoadingParams, DRectButton, RectButton, Scroll, Slider, Ui},
+    ui::{DRectButton, InlineInputBtn, LoadingParams, Scroll, Slider, Ui},
 };
 use std::borrow::Cow;
 
@@ -38,7 +37,7 @@ pub struct PlayConfigurationPage {
     scroll: Scroll,
     config_btns: Vec<DRectButton>,
     add_btn: DRectButton,
-    title_btn: RectButton,
+    title_input: InlineInputBtn,
     perfect_slider: Slider,
     good_slider: Slider,
     delete_btn: DRectButton,
@@ -54,7 +53,7 @@ impl PlayConfigurationPage {
             scroll: Scroll::new(),
             config_btns: (0..get_data().play_configs.len()).map(|_| DRectButton::new()).collect(),
             add_btn: DRectButton::new(),
-            title_btn: RectButton::new(),
+            title_input: InlineInputBtn::new().set_centered().set_no_background_btn(),
             perfect_slider: Slider::new(0.005..0.150, 0.001),
             good_slider: Slider::new(0.010..0.300, 0.001),
             delete_btn: DRectButton::new(),
@@ -78,6 +77,10 @@ impl Page for PlayConfigurationPage {
 
     fn touch(&mut self, touch: &Touch, s: &mut SharedState) -> Result<bool> {
         let t = s.t;
+        self.title_input.touch(touch);
+        if self.title_input.is_active() {
+            return Ok(true);
+        }
         if self.scroll.touch(touch, t) {
             return Ok(true);
         }
@@ -101,11 +104,8 @@ impl Page for PlayConfigurationPage {
             self.config_btns.push(DRectButton::new());
             return Ok(true);
         }
-        if self.title_btn.touch(touch) {
-            let name = get_data().active_play_config().map(|it| it.name.clone()).unwrap_or_default();
-            request_input("play-config-rename", &name, tl!("rename"));
-            return Ok(true);
-        }
+        let name = get_data().active_play_config().map(|it| it.name.clone()).unwrap_or_default();
+        self.title_input.activate(touch, t, &name);
         if self.delete_btn.touch(touch, t) {
             let data = get_data_mut();
             let index = data.active_play_config.unwrap_or(0);
@@ -165,21 +165,15 @@ impl Page for PlayConfigurationPage {
 
     fn update(&mut self, s: &mut SharedState) -> Result<()> {
         self.scroll.update(s.t);
-        if let Some(config) = get_data_mut().active_play_config_mut() {
-            config.bad_judgment = bad_judgment(config.good_judgment);
-        }
-        if let Some((id, text)) = take_input() {
-            if id == "play-config-rename" {
-                let data = get_data_mut();
-                if let Some(config) = data.active_play_config_mut() {
-                    if !text.trim().is_empty() {
-                        config.name = text;
-                    }
+        self.title_input.update();
+        if let Some(text) = self.title_input.confirm() {
+            let data = get_data_mut();
+            if let Some(config) = data.active_play_config_mut() {
+                if !text.trim().is_empty() {
+                    config.name = text;
                 }
-                save_data()?;
-            } else {
-                return_input(id, text);
             }
+            save_data()?;
         }
         if let Some(res) = self.sync_task.as_mut().and_then(|task| poll_future(task.as_mut())) {
             self.sync_task = None;
@@ -241,14 +235,7 @@ impl Page for PlayConfigurationPage {
                             format!("{} - {}", it.name, tag)
                         });
                         let r = Rect::new(cx + cw * 0.15, (ITEM_HEIGHT - 0.1) / 2., cw * 0.7, 0.1);
-                        self.title_btn.set(ui, r);
-                        ui.text(name.unwrap_or_default())
-                            .pos(cx + cw / 2., ITEM_HEIGHT / 2.)
-                            .anchor(0.5, 0.5)
-                            .no_baseline()
-                            .size(0.65)
-                            .color(c)
-                            .draw();
+                        self.title_input.render(ui, r, t, c, &tl!("rename"), &name.unwrap_or_default());
                         ui.dy(ITEM_HEIGHT);
                         h += ITEM_HEIGHT;
                     }

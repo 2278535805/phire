@@ -74,7 +74,7 @@ impl UnlockScene {
         };
 
         let (_, background) = LoadingScene::load_background(&mut fs, &config, &info.illustration).await?;
-        let loading_scene = Box::new(LoadingScene::new(None, mode, info, &config, fs, player, upload_fn, update_fn).await?);
+        let loading_scene = Box::new(LoadingScene::new(None, mode, info, &config, fs, player, upload_fn, update_fn, None).await?);
 
         Ok(UnlockScene {
             loading_scene,

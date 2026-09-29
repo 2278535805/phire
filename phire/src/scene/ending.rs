@@ -4,11 +4,11 @@ use super::{draw_background, game::{SimpleRecord, GameScene}, loading::UploadFn,
 use crate::{
     config::Config,
     ext::{
-        create_audio_manger, draw_illustration, draw_parallelogram, draw_parallelogram_ex, draw_text_aligned, draw_text_aligned_opt_width, SafeTexture, ScaleType,
+        draw_illustration, draw_parallelogram, draw_parallelogram_ex, draw_text_aligned, draw_text_aligned_opt_width, SafeTexture, ScaleType,
         PARALLELOGRAM_SLOPE,
     },
     info::ChartInfo,
-    judge::{icon_index, PlayResult},
+    judge::{LIMIT_BAD, PlayResult, icon_index},
     scene::show_message,
     task::Task,
     time::TimeManager,
@@ -18,7 +18,7 @@ use anyhow::Result;
 use macroquad::prelude::*;
 use sasa::{AudioClip, AudioManager, Music, MusicParams};
 use serde::Deserialize;
-use std::{cell::RefCell, ops::DerefMut, sync::Mutex};
+use std::{cell::RefCell, ops::DerefMut, rc::Rc, sync::Mutex};
 
 #[derive(Deserialize)]
 pub struct RecordUpdateState {
@@ -36,7 +36,7 @@ pub struct EndingScene {
     icon_retry: SafeTexture,
     icon_proceed: SafeTexture,
     target: Option<RenderTarget>,
-    audio: AudioManager,
+    audio: Rc<RefCell<AudioManager>>,
     bgm: Music,
     bgm_already_played: bool,
 
@@ -75,6 +75,7 @@ impl EndingScene {
         result: PlayResult,
         challenge_texture: SafeTexture,
         config: &Config,
+        audio: Rc<RefCell<AudioManager>>,
         endings: [AudioClip; 8],
         upload_fn: Option<UploadFn>,
         player_rks: Option<f32>,
@@ -82,8 +83,7 @@ impl EndingScene {
         record: Option<SimpleRecord>,
     ) -> Result<Self> {
         let index = icon_index(result.score.round() as u32, result.num_of_notes == result.max_combo, result.track_complete);
-        let mut audio = create_audio_manger(config)?;
-        let bgm = audio.create_music(
+        let bgm = audio.borrow_mut().create_music(
             endings[index].clone(),
             MusicParams {
                 amplifier: config.volume_bgm,
@@ -187,8 +187,8 @@ impl Scene for EndingScene {
     }
 
     fn update(&mut self, tm: &mut TimeManager) -> Result<()> {
-        self.audio.recover_if_needed()?;
-        if !self.bgm_already_played && tm.now() >= EndingScene::BPM_WAIT_TIME - self.config.offset && self.target.is_none() && self.bgm.paused() {
+        self.audio.borrow_mut().recover_if_needed()?;
+        if !self.bgm_already_played && tm.now() >= EndingScene::BPM_WAIT_TIME - self.config.audio_offset && self.target.is_none() && self.bgm.paused() {
             self.bgm.play()?;
             self.bgm_already_played = true;
         }
@@ -348,7 +348,7 @@ impl Scene for EndingScene {
             } else {
                 String::new()
             };
-            let text = if self.autoplay {
+            let text = if self.autoplay || (self.result.std - LIMIT_BAD as f32).abs() <= 1e-3 {
                 format!("{text_autoplay} {spd}")
             } else if !self.rated {
                 format!("{full_screen_judge} {spd}")
