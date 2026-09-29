@@ -11,6 +11,7 @@ wasapi-mode-events = 事件
 wasapi-mode-polling = 轮询
 buffer-size = 缓冲区大小
 auto = 自动
+default = 默认
 audio-error = 音频设备不可用
 failed-exclusive = 无法启用独占模式
 failed-low-latency = 低延迟模式设置失败

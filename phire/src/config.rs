@@ -184,7 +184,7 @@ impl Default for Config {
             #[cfg(target_os = "windows")]
             audio_compatibility: true,
             #[cfg(target_os = "windows")]
-            audio_wasapi_mode: WasapiTiming::Polling,
+            audio_wasapi_mode: WasapiTiming::Events,
             challenge_color: ChallengeModeColor::Rainbow,
             challenge_rank: 3,
             chart_debug_line: 0.0,

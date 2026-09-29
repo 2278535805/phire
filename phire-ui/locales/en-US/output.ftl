@@ -11,6 +11,7 @@ wasapi-mode-events = Events
 wasapi-mode-polling = Polling
 buffer-size = Buffer Size
 auto = Auto
+default = Default
 audio-error = Audio device unavailable
 failed-exclusive = Failed to enable exclusive mode
 failed-low-latency = Failed to set low latency

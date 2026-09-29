@@ -350,9 +350,7 @@ impl Page for OutputPage {
                     },
                     #[cfg(target_os = "windows")]
                     Wasapi(info) => {
-                        self.base_buffer_size = (!(cfg!(target_os = "windows") && config.audio_compatibility))
-                            .then(|| info.sample_rate.zip(info.min_period_hns))
-                            .flatten()
+                        self.base_buffer_size = info.sample_rate.zip(info.min_period_hns)
                             .map(|(sample_rate, period_hns)| (period_hns as f64 / 10_000_000.0 * sample_rate as f64) as u32);
                     }
                     #[allow(unreachable_patterns)] _ => {}, // TODO: OHOS
@@ -383,7 +381,7 @@ impl Page for OutputPage {
             }
 
             let compat_row = cfg!(any(target_os = "android", target_os = "windows"));
-            let wasapi_row = cfg!(target_os = "windows") && !config.audio_compatibility;
+            let wasapi_row = cfg!(target_os = "windows");
             let buffer_row = self.base_buffer_size.is_some();
             let extra_rows = compat_row as u8 + wasapi_row as u8 + buffer_row as u8;
             let start = 0.30 + 0.05 * (compat_row as u8 + wasapi_row as u8) as f32;
@@ -423,7 +421,7 @@ impl Page for OutputPage {
                     .draw();
             }
             #[cfg(target_os = "windows")]
-            if !config.audio_compatibility {
+            {
                 y += 0.10 * scale;
                 let label = if matches!(config.audio_wasapi_mode, WasapiTiming::Events) { tl!("wasapi-mode-events") } else { tl!("wasapi-mode-polling") };
                 let rect = Rect::new(right_center - btn_w * 0.5, y, btn_w, btn_h);
@@ -438,7 +436,7 @@ impl Page for OutputPage {
             if self.base_buffer_size.is_some() {
                 y += 0.10 * scale;
                 let text = match config.audio_buffer_size {
-                    None => tl!("auto").to_string(),
+                    None => tl!("default").to_string(),
                     Some(n) => format!("{}", n),
                 };
                 let buf_rect = Rect::new(right_center - btn_w * 0.5, y, btn_w, btn_h);
@@ -573,7 +571,7 @@ impl Page for OutputPage {
                     #[cfg(target_os = "windows")]
                     Wasapi(info) => {
                         if let Some(buffer_size) = info.settings.buffer_size {
-                            if let Some(period_hns) = info.actual_period_hns {
+                            if let Some(period_hns) = info.period_hns {
                                 if let Some(sample_rate) = info.sample_rate {
                                     let buffer_size_hns = sasa::backend::wasapi::calculate_period_100ns(buffer_size as i64, sample_rate as i64);
                                     if buffer_size_hns != period_hns as i64 {
