@@ -23,7 +23,6 @@ use anyhow::{Context, Result};
 #[cfg(target_env = "ohos")]
 use napi_derive_ohos::napi;
 
-use anyhow::Result;
 use data::Data;
 use macroquad::prelude::*;
 use phire::{
