@@ -23,6 +23,8 @@ item-dhint-sub = Nuty, które dotykają linii jednocześnie będą podświetlane
 item-opt = Agresywna optymalizacja
 item-opt-sub = Popraw wydajność, może to spowodować niestabilność
 item-note-size = Rozmiar nut
+item-play-config = Ustawienia oceny
+item-play-config-sub = Dostosuj okna oceny Perfect / Good / Bad
 
 load-cali-failed = Nie załadowano plików audio
 

@@ -1,0 +1,20 @@
+label = 判定設定
+
+perfect = Perfect 判定
+perfect-sub = Perfect 判定の時間ウィンドウ
+good = Good 判定
+good-sub = Good 判定の時間ウィンドウ
+bad = Bad 判定
+bad-sub = Bad 判定の時間ウィンドウ
+rks-factor = RKS 係数
+rks-factor-sub = 判定が緩いほど RKS 係数は下がります
+reset = リセット
+save = 保存
+delete = 削除
+delete-failed = 設定の削除に失敗しました
+rename = 名前を変更
+add-config = 追加
+new-config = 設定
+cloud-tag = クラウド
+local-tag = ローカル
+sync-failed = 設定の同期に失敗しました

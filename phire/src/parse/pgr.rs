@@ -8,7 +8,7 @@ use crate::{
     ext::NotNanExt,
     judge::{HitSound, JudgeStatus},
 };
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use rustc_hash::FxHashMap;
 use serde::Deserialize;
 use std::{cell::RefCell};
@@ -81,12 +81,16 @@ macro_rules! validate_events {
                 true
             }
         });
-        /*
-        for i in 0..($pgr.len() - 1) {
-            if $pgr[i].end_time != $pgr[i + 1].start_time {
-                ptl!(bail "event-not-contiguous");
-            }
-        }*/
+        // for i in 0..$pgr.len() {
+        //     if $pgr[i].start_time == $pgr[i].end_time {
+        //         bail!("event {} start time {} equals end time {}", i, $pgr[i].start_time, $pgr[i].end_time);
+        //     }
+        // }
+        // for i in 0..($pgr.len() - 1) {
+        //     if $pgr[i].end_time != $pgr[i + 1].start_time {
+        //         ptl!(bail "event-not-contiguous");
+        //     }
+        // }
         // if $pgr.last().unwrap().end_time <= 900000000.0 {
         // bail!("End time is not great enough ({})", $pgr.last().unwrap().end_time);
         // }
@@ -122,7 +126,7 @@ fn parse_float_events(r: f64, mut pgr: Vec<PgrEvent>) -> Result<AnimFloat> {
     let mut kfs = Vec::<Keyframe<f32>>::new();
     for e in pgr {
         if !kfs.last().is_some_and(|it| it.value == e.start) {
-            kfs.push(Keyframe::new((e.start_time * r).max(0.), e.start, 2));
+            kfs.push(Keyframe::new(e.start_time * r, e.start, 2));
         }
         kfs.push(Keyframe::new(e.end_time * r, e.end, 2));
     }
@@ -135,7 +139,7 @@ fn parse_move_events(r: f64, mut pgr: Vec<PgrEvent>) -> Result<AnimVector> {
     let mut kf1 = Vec::<Keyframe<f32>>::new();
     let mut kf2 = Vec::<Keyframe<f32>>::new();
     for e in pgr {
-        let st = (e.start_time * r).max(0.);
+        let st = e.start_time * r;
         let en = e.end_time * r;
         if !kf1.last().is_some_and(|it| it.value == e.start) {
             kf1.push(Keyframe::new(st, e.start, 2));
@@ -162,7 +166,7 @@ fn parse_move_events_fv1(r: f64, mut pgr: Vec<PgrEvent>) -> Result<AnimVector> {
     let mut kf1 = Vec::<Keyframe<f32>>::new();
     let mut kf2 = Vec::<Keyframe<f32>>::new();
     for e in pgr {
-        let st = (e.start_time * r).max(0.);
+        let st = e.start_time * r;
         let en = e.end_time * r;
         if !kf1.last().is_some_and(|it| it.value == e.start) {
             let start = (e.start - e.start % 1000.) / 1000.;

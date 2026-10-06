@@ -100,6 +100,29 @@ pub struct LocalChart {
     pub played_unlock: bool,
 }
 
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlayConfig {
+    #[serde(default)]
+    pub id: Option<String>,
+    pub name: String,
+    pub perfect_judgment: f64,
+    pub good_judgment: f64,
+    pub bad_judgment: f64,
+}
+
+impl Default for PlayConfig {
+    fn default() -> Self {
+        Self {
+            id: None,
+            name: "default".to_owned(),
+            perfect_judgment: 0.08,
+            good_judgment: 0.16,
+            bad_judgment: 0.22,
+        }
+    }
+}
+
 #[derive(Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Data {
@@ -117,6 +140,8 @@ pub struct Data {
     pub character_form_id: String,
     pub erosion_enabled: bool,
     pub revealed_forms: HashSet<(String, String)>,
+    pub play_configs: Vec<PlayConfig>,
+    pub active_play_config: Option<usize>,
 }
 
 impl Data {
@@ -178,7 +203,31 @@ impl Data {
             }
         }
         self.config.init();
+        if self.play_configs.is_empty() {
+            self.play_configs.push(PlayConfig::default());
+        }
+        if let Some(index) = self.active_play_config {
+            if index >= self.play_configs.len() {
+                self.active_play_config = Some(0);
+            }
+        } else {
+            self.active_play_config = Some(0);
+        }
+        if let Some(pc) = self.active_play_config() {
+            let (perfect, good, bad) = (pc.perfect_judgment, pc.good_judgment, pc.bad_judgment);
+            self.config.perfect_judgment = perfect;
+            self.config.good_judgment = good;
+            self.config.bad_judgment = bad;
+        }
         Ok(())
+    }
+
+    pub fn active_play_config(&self) -> Option<&PlayConfig> {
+        self.active_play_config.and_then(|i| self.play_configs.get(i))
+    }
+
+    pub fn active_play_config_mut(&mut self) -> Option<&mut PlayConfig> {
+        self.active_play_config.and_then(|i| self.play_configs.get_mut(i))
     }
 
     pub fn find_chart_by_path(&self, local_path: &str) -> Option<usize> {

@@ -154,7 +154,13 @@ impl<'a, 's, 'ui> DrawText<'a, 's, 'ui> {
         }
         let bound = painter!(|p: &mut TextPainter| p.brush.glyph_bounds(&section).unwrap_or_default());
         let mut height = bound.height();
-        height += text.chars().take_while(|it| *it == '\n').count() as f32 * painter!(|p: &mut TextPainter| p.line_gap(scale)) * 3.;
+        let leading = text.chars().take_while(|c| *c == '\n').count();
+        let trailing = text.chars().rev().take_while(|c| *c == '\n').count();
+        if leading + trailing >= text.chars().count() {
+            height += leading as f32 * painter!(|p: &mut TextPainter| p.line_gap(scale)) * 3.;
+        } else {
+            height += (leading + trailing) as f32 * painter!(|p: &mut TextPainter| p.line_gap(scale)) * 3.;
+        }
         if self.baseline {
             height += painter!(|p: &mut TextPainter| p.brush.fonts()[0].as_scaled(scale).descent());
         }
@@ -305,29 +311,23 @@ impl TextPainter {
         let mut flushed = false;
         loop {
             match self.brush.process_queued(
-                |rect, tex_data| unsafe {
+                |rect, tex_data| {
                     if !flushed {
-                        get_internal_gl().flush();
+                        unsafe { get_internal_gl() }.flush();
                         flushed = true;
                     }
-                    use miniquad::gl::*;
-                    let miniquad::RawId::OpenGl(raw_id) = get_internal_gl().quad_context.texture_raw_id(self.cache_texture.raw_miniquad_id());
-                    glBindTexture(GL_TEXTURE_2D, raw_id);
                     self.data_buffer.clear();
                     self.data_buffer.reserve(tex_data.len() * 4);
                     for alpha in tex_data {
                         self.data_buffer.extend_from_slice(&[255, 255, 255, *alpha]);
                     }
-                    glTexSubImage2D(
-                        GL_TEXTURE_2D,
-                        0,
+                    unsafe { get_internal_gl() }.quad_context.texture_update_part(
+                        self.cache_texture.raw_miniquad_id(),
                         rect.min[0] as _,
                         rect.min[1] as _,
                         rect.width() as _,
                         rect.height() as _,
-                        GL_RGBA,
-                        GL_UNSIGNED_BYTE,
-                        self.data_buffer.as_ptr() as _,
+                        &self.data_buffer,
                     );
                 },
                 |vertex| {

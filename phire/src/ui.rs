@@ -20,7 +20,7 @@ mod text;
 pub use text::{DrawText, TextPainter};
 
 mod input;
-pub use input::{InlineInputBox};
+pub use input::{InlineInputBox, InlineInputBtn};
 
 pub use glyph_brush::ab_glyph::FontArc;
 
@@ -41,7 +41,7 @@ use lyon::{
 use macroquad::prelude::*;
 use miniquad::PassAction;
 use sasa::{AudioManager, PlaySfxParams, Sfx};
-use std::{borrow::Cow, cell::RefCell, collections::HashMap, ops::Range};
+use std::{borrow::Cow, cell::RefCell, collections::HashMap, mem::ManuallyDrop, ops::Range};
 
 #[derive(Default, Clone, Copy)]
 pub struct Gravity(u8);
@@ -193,6 +193,7 @@ pub struct DRectButton {
     pub config: ShadowConfig,
     delta: f32,
     play_sound: bool,
+    render_background: bool,
 }
 impl Default for DRectButton {
     fn default() -> Self {
@@ -210,6 +211,7 @@ impl DRectButton {
             config: ShadowConfig::default(),
             delta: -0.004,
             play_sound: true,
+            render_background: true,
         }
     }
 
@@ -253,7 +255,9 @@ impl DRectButton {
         let oh = r.h;
         let (r, path) = self.build(ui, t, r);
         let ct = r.center();
-        ui.fill_path(&path, if chosen { semi_white(alpha) } else { semi_black(alpha * 0.4) });
+        if self.render_background {
+            ui.fill_path(&path, if chosen { semi_white(alpha) } else { semi_black(alpha * 0.4) });
+        }
         ui.text(text)
             .pos(ct.x, ct.y)
             .anchor(0.5, 0.5)
@@ -315,6 +319,12 @@ impl DRectButton {
     }
 
     #[inline]
+    pub fn no_background(mut self) -> Self {
+        self.render_background = false;
+        self
+    }
+
+    #[inline]
     pub fn with_radius(mut self, radius: f32) -> Self {
         self.config.radius = radius;
         self
@@ -339,6 +349,9 @@ impl DRectButton {
     }
 
     pub fn progress(&mut self, t: f32) -> f32 {
+        if t < 0.0 {
+            return 1.0;
+        }
         if self.start_time.as_ref().is_some_and(|it| t > *it + Self::TIME) {
             self.start_time = None;
         }
@@ -365,6 +378,10 @@ impl DRectButton {
             button_hit();
         }
         res
+    }
+
+    pub fn touching(&self) -> bool {
+        self.inner.touching()
     }
 }
 
@@ -599,13 +616,13 @@ impl<'a> Ui<'a> {
 
     pub fn ensure_touches(&mut self) -> &mut Vec<Touch> {
         if self.touches.is_none() {
-            self.touches = Some(Judge::get_touches(1.0, false));
+            self.touches = Some(Judge::get_touches(1.0, 1.0));
         }
         self.touches.as_mut().unwrap()
     }
 
-    pub(crate) fn set_touches(&mut self, touches: Vec<Touch>) {
-        self.touches = Some(touches);
+    pub(crate) fn set_touches(&mut self, touches: Option<Vec<Touch>>) {
+        self.touches = touches;
     }
 
     pub fn builder<T: IntoShading>(&self, shading: T) -> VertexBuilder<T::Target> {
@@ -1198,9 +1215,17 @@ fn build_audio() -> AudioManager {
             performance_mode: PerformanceMode::None,
             sharing_mode: SharingMode::Shared,
             usage: Usage::Media,
+            mmap: false,
             ..Default::default()
         }))
-        .unwrap()
+    }
+    #[cfg(target_os = "windows")]
+    {
+        use sasa::backend::wasapi::*;
+        AudioManager::new(WasapiBackend::new(WasapiSettings {
+            stream_category: StreamCategory::Media,
+            ..Default::default()
+        }))
     }
     #[cfg(target_env = "ohos")]
     {
@@ -1208,17 +1233,15 @@ fn build_audio() -> AudioManager {
         AudioManager::new(OhosBackend::new(OhosSettings::default()))
         .unwrap()
     }
-    #[cfg(not(any(target_os = "android", target_env = "ohos")))]
+    #[cfg(not(any(target_os = "android", target_os = "windows", target_env = "ohos")))]
     {
         use sasa::backend::cpal::*;
         AudioManager::new(CpalBackend::new(CpalSettings::default()))
-        .unwrap()
-        //.expect("Failed to play sound")
     }
 }
 
 thread_local! {
-    pub static UI_AUDIO: RefCell<AudioManager> = RefCell::new(build_audio());
+    pub static UI_AUDIO: ManuallyDrop<RefCell<AudioManager>> = ManuallyDrop::new(RefCell::new(build_audio()));
     pub static UI_BTN_HITSOUND_LARGE: RefCell<Option<Sfx>> = const { RefCell::new(None) };
     pub static UI_BTN_HITSOUND: RefCell<Option<Sfx>> = const { RefCell::new(None) };
     pub static UI_SWITCH_SOUND: RefCell<Option<Sfx>> = const { RefCell::new(None) };
