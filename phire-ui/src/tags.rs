@@ -77,7 +77,7 @@ impl Tags {
             }
         }
         if self.add.touch(touch, t) {
-            self.add_input.activate("", false, false);
+            self.add_input.activate("");
             return true;
         }
         false
@@ -111,11 +111,13 @@ impl Tags {
             draw(btn, tag);
         }
         if self.add_input.is_active() {
-            let w = mw - x;
-            if w > 0.08 {
-                let r = Rect::new(x, h, w, row_height).feather(-pad);
-                self.add_input.render(ui, r, alpha, &tl!("edit"));
+            let bw = ui.text("+").size(sz).measure().w.clamp(0.08, tmw) + (margin + pad) * 2.;
+            if x + bw > mw {
+                x = 0.;
+                h += row_height;
             }
+            let r = Rect::new(x, h, mw - x, row_height).feather(-pad);
+            self.add_input.render(ui, r, alpha, &tl!("edit"));
         } else {
             draw(&mut self.add, "+");
         }

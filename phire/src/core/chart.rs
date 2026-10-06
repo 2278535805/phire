@@ -104,17 +104,14 @@ impl Chart {
     }
 
     pub fn reset(&mut self) {
-        self.lines
-            .iter_mut()
-            .flat_map(|it| it.notes.iter_mut())
-            .for_each(|note| {
+        self.lines.iter_mut().for_each(|line| {
+            line.cache.reset();
+            line.notes.iter_mut().for_each(|note| {
                 note.judge = JudgeStatus::NotJudged;
                 note.protected = false;
                 note.object.set_time(0.0);
             });
-        for line in &mut self.lines {
-            line.cache.reset(&mut line.notes);
-        }
+        });
     }
 
     pub fn update(&mut self, res: &mut Resource) {
@@ -170,6 +167,7 @@ impl Chart {
                 self.lines[*id].render(ui, res, &self.lines, &mut guard, &self.settings, *id);
             }
             drop(guard);
+            res.last_note_count = res.note_buffer.borrow().count();
             res.note_buffer.borrow_mut().draw_all();
             if res.config.aggressive_note {
                 res.note_pos_map.clear();

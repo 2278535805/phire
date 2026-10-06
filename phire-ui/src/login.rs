@@ -1,7 +1,7 @@
 phire::tl_file!("login");
 
 use crate::{
-    client::{Client, LoginParams, User, UserManager},
+    client::{download_play_configurations_with_owner, Client, LoginParams, User, UserManager},
     get_data_mut,
     page::Fader,
     save_data,
@@ -78,13 +78,13 @@ impl Login {
             input_email: DRectButton::new().with_delta(-0.002),
             input_email_box: InlineInputBox::new(),
             input_pwd: DRectButton::new().with_delta(-0.002),
-            input_pwd_box: InlineInputBox::new(),
+            input_pwd_box: InlineInputBox::new().set_password(),
             input_reg_email: DRectButton::new().with_delta(-0.002),
             input_reg_email_box: InlineInputBox::new(),
             input_reg_name: DRectButton::new().with_delta(-0.002),
             input_reg_name_box: InlineInputBox::new(),
             input_reg_pwd: DRectButton::new().with_delta(-0.002),
-            input_reg_pwd_box: InlineInputBox::new(),
+            input_reg_pwd_box: InlineInputBox::new().set_password(),
 
             btn_to_reg: DRectButton::new(),
             btn_to_login: DRectButton::new(),
@@ -178,23 +178,23 @@ impl Login {
                 return true;
             }
             if self.input_email.touch(touch, t) {
-                self.input_email_box.activate(&self.t_email, false, false);
+                self.input_email_box.activate(&self.t_email);
                 return true;
             }
             if self.input_pwd.touch(touch, t) {
-                self.input_pwd_box.activate(&self.t_pwd, false, true);
+                self.input_pwd_box.activate(&self.t_pwd);
                 return true;
             }
             if self.input_reg_email.touch(touch, t) {
-                self.input_reg_email_box.activate(&self.t_reg_email, false, false);
+                self.input_reg_email_box.activate(&self.t_reg_email);
                 return true;
             }
             if self.input_reg_name.touch(touch, t) {
-                self.input_reg_name_box.activate(&self.t_reg_name,false, false);
+                self.input_reg_name_box.activate(&self.t_reg_name);
                 return true;
             }
             if self.input_reg_pwd.touch(touch, t) {
-                self.input_reg_pwd_box.activate(&self.t_reg_pwd, false, true);
+                self.input_reg_pwd_box.activate(&self.t_reg_pwd);
                 return true;
             }
             if self.btn_to_reg.touch(touch, t) || self.btn_to_login.touch(touch, t) {
@@ -216,7 +216,9 @@ impl Login {
                         password: &pwd,
                     })
                     .await?;
-                    Ok(Some(Client::get_me().await?))
+                    let me = Client::get_me().await?;
+                    download_play_configurations_with_owner(me.id).await?;
+                    Ok(Some(me))
                 });
                 return true;
             }

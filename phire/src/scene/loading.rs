@@ -5,7 +5,7 @@ use crate::{
     ext::{draw_illustration, draw_parallelogram, draw_text_aligned, draw_text_aligned_opt, draw_text_aligned_opt_width, poll_future, LocalTask, SafeTexture, BLACK_TEXTURE},
     fs::FileSystem,
     info::{ChartFormat, ChartInfo},
-    judge::Judge,
+    judge::{Judge, ReplayData},
     task::Task,
     time::TimeManager,
     ui::Ui,
@@ -21,7 +21,11 @@ const BEFORE_TIME: f64 = 1.;
 const TRANSITION_TIME: f64 = 1.4;
 const WAIT_TIME: f64 = 0.;
 
-pub type UploadFn = Arc<dyn Fn(Vec<u8>) -> Task<Result<RecordUpdateState>>>;
+#[derive(Clone)]
+pub struct UploadFn {
+    pub refresh: Arc<dyn Fn() -> Task<()> + Send + Sync>,
+    pub upload: Arc<dyn Fn(Vec<u8>) -> Task<Result<RecordUpdateState>>>,
+}
 pub type UpdateFn = Box<dyn FnMut(f64, &mut Resource, &mut Judge)>;
 
 pub struct BasicPlayer {
@@ -81,6 +85,7 @@ impl LoadingScene {
         player: Option<BasicPlayer>,
         upload_fn: Option<UploadFn>,
         update_fn: Option<UpdateFn>,
+        replay: Option<ReplayData>,
     ) -> Result<Self> {
         let background = match Self::load_background(&mut fs, config, &info.illustration).await {
             Ok((ill, bg)) => Some((ill, bg)),
@@ -101,7 +106,7 @@ impl LoadingScene {
 
             info.tip = Some(tips.choose(&mut rng()).unwrap().to_owned());
         }
-        let future = Box::pin(GameScene::new(preload_chart, mode, info.clone(), config.clone(), fs, player, background.clone(), illustration.clone(), upload_fn, update_fn));
+        let future = Box::pin(GameScene::new(preload_chart, mode, info.clone(), config.clone(), fs, player, background.clone(), illustration.clone(), upload_fn, update_fn, replay));
         let charter = Regex::new(r"\[!:[0-9]+:([^:]*)\]").unwrap().replace_all(&info.charter, "$1").to_string();
 
         Ok(Self {
@@ -147,6 +152,16 @@ impl Scene for LoadingScene {
         Ok(())
     }
 
+    fn pause(&mut self, tm: &mut TimeManager) -> Result<()> {
+        tm.pause();
+        Ok(())
+    }
+
+    fn resume(&mut self, tm: &mut TimeManager) -> Result<()> {
+        tm.resume();
+        Ok(())
+    }
+
     fn render(&mut self, tm: &mut TimeManager, ui: &mut Ui) -> Result<()> {
         let cam = ui.camera();
         let asp = cam.zoom.y;
@@ -157,6 +172,7 @@ impl Scene for LoadingScene {
         set_camera(&Camera2D {
             zoom: vec2(1., asp),
             render_target: self.target.clone(),
+            viewport: cam.viewport,
             ..Default::default()
         });
         if self.config.render_bg {
