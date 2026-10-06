@@ -966,10 +966,14 @@ impl GameScene {
                 }
                 match clicked {
                     Some(-1) => {
+                        #[cfg(target_env = "ohos")]
+                        miniquad::native::set_interceptor_state(false);
                         self.should_exit = true;
                     }
                     Some(0) => {
                         reset!(self, res, tm);
+                        #[cfg(target_env = "ohos")]
+                        miniquad::native::set_interceptor_state(true);
                         self.pause_rewind = PauseRewind {
                             time: Some(tm.now()),
                             duration: Some(0.1),
@@ -1260,6 +1264,8 @@ impl Scene for GameScene {
     fn enter(&mut self, tm: &mut TimeManager, target: Option<RenderTarget>) -> Result<()> {
         #[cfg(target_arch = "wasm32")]
         on_game_start();
+        #[cfg(target_env = "ohos")]
+        miniquad::native::set_interceptor_state(true);
         self.music = Self::new_music(&mut self.res)?;
         self.res.camera.render_target = target;
         tm.speed = self.res.config.speed as _;
@@ -1283,6 +1289,8 @@ impl Scene for GameScene {
     fn pause(&mut self, tm: &mut TimeManager) -> Result<()> {
         self.res.audio.borrow_mut().close()?;
         if !tm.paused() {
+            #[cfg(target_env = "ohos")]
+            miniquad::native::set_interceptor_state(false);
             self.pause_rewind = PauseRewind {
                 time: None,
                 duration: None,
@@ -1297,6 +1305,8 @@ impl Scene for GameScene {
     fn resume(&mut self, tm: &mut TimeManager) -> Result<()> {
         self.res.audio.borrow_mut().start()?;
         if tm.paused() && !matches!(self.state, State::Playing) {
+            #[cfg(target_env = "ohos")]
+            miniquad::native::set_interceptor_state(true);
             tm.resume();
         }
         Ok(())
@@ -1304,6 +1314,8 @@ impl Scene for GameScene {
 
     fn focus_pause(&mut self, tm: &mut TimeManager) -> Result<()> {
         if !self.res.config.autoplay() && !tm.paused() {
+            #[cfg(target_env = "ohos")]
+            miniquad::native::set_interceptor_state(false);
             self.pause_rewind = PauseRewind {
                 time: None,
                 duration: None,
@@ -1317,6 +1329,8 @@ impl Scene for GameScene {
 
     fn focus_resume(&mut self, tm: &mut TimeManager) -> Result<()> {
         if tm.paused() && !matches!(self.state, State::Playing) {
+            #[cfg(target_env = "ohos")]
+            miniquad::native::set_interceptor_state(true);
             tm.resume();
         }
         Ok(())
@@ -1333,6 +1347,8 @@ impl Scene for GameScene {
             reset!(self, self.res, tm);
             self.state = state;
             tm.seek_to(self.exercise_range.start);
+            #[cfg(target_env = "ohos")]
+            miniquad::native::set_interceptor_state(false);
             tm.pause();
             self.music.fade_out(0.3)?;
         }
@@ -1379,6 +1395,8 @@ impl Scene for GameScene {
                 #[cfg(feature = "play")]
                 let is_ending = is_ending || self.res.health.state.track_failed;
                 if is_ending {
+                    #[cfg(target_env = "ohos")]
+                    miniquad::native::set_interceptor_state(false);
                     self.music.pause()?;
                     self.state = State::Ending;
                 }
@@ -1558,6 +1576,8 @@ impl Scene for GameScene {
                     self.music.seek_to(now)?;
                     self.music.fade_in(0.5)?;
                     tm.seek_to(now);
+                    #[cfg(target_env = "ohos")]
+                    miniquad::native::set_interceptor_state(true);
                     tm.resume();
                     self.pause_rewind = PauseRewind {
                         time: Some(now),
@@ -1575,6 +1595,8 @@ impl Scene for GameScene {
                     duration: None,
                     dim: false
                 };
+                #[cfg(target_env = "ohos")]
+                miniquad::native::set_interceptor_state(false);
                 tm.pause();
             }
         }
@@ -1599,6 +1621,8 @@ impl Scene for GameScene {
                 res.disable_hit_fx = true;
             }
             if is_key_pressed(KeyCode::Q) {
+                #[cfg(target_env = "ohos")]
+                miniquad::native::set_interceptor_state(false);
                 self.should_exit = true;
             }
         }

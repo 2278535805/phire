@@ -64,8 +64,13 @@ openssl = { workspace = true }
 [target.'cfg(target_os = "windows")'.dependencies]
 sasa = { workspace = true, default-features = false, features = ["wasapi"]  }
 
-[target.'cfg(not(any(target_os = "android", target_os = "windows")))'.dependencies]
-sasa = { workspace = true, default-features = false, features = ["cpal"]  }
+[target.'cfg(target_env = "ohos")'.dependencies]
+sasa = { workspace = true, default-features = false, features = ["ohos"] }
+napi-derive-ohos = { workspace = true }
+napi-ohos = { workspace = true }
+
+[target.'cfg(not(any(target_os = "android", target_os = "windows", target_env = "ohos")))'.dependencies]
+sasa = { workspace = true, default-features = false, features = ["cpal"] }
 
 [target.'cfg(target_os = "ios")'.dependencies]
 objc = { workspace = true }

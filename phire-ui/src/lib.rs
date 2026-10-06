@@ -20,6 +20,10 @@ mod tags;
 mod uml;
 
 use anyhow::{Context, Result};
+#[cfg(target_env = "ohos")]
+use napi_derive_ohos::napi;
+
+use anyhow::Result;
 use data::Data;
 use macroquad::prelude::*;
 use phire::{
@@ -38,12 +42,12 @@ use std::collections::VecDeque;
 use std::sync::{mpsc, Mutex};
 use tracing::{error, info};
 
-#[cfg(any(target_os = "android", target_os = "ios"))]
-use phire::gyro::{GYRO, GyroData};
-#[cfg(any(target_os = "android", target_os = "ios"))]
-use std::time::Duration;
-#[cfg(any(target_os = "android", target_os = "ios"))]
+#[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
 use nalgebra::Vector3;
+#[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
+use phire::gyro::{GyroData, GYRO};
+#[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
+use std::time::Duration;
 
 static ACTIVITY_LIFECYCLE: Mutex<Option<mpsc::Sender<bool>>> = Mutex::new(None);
 static ACTIVITY_FOCUS: Mutex<Option<mpsc::Sender<bool>>> = Mutex::new(None);
@@ -160,6 +164,13 @@ async fn the_main() -> Result<()> {
         let path = first.as_str().to_owned();
         *DATA_PATH.lock().unwrap() = Some(path);
         *CACHE_DIR.lock().unwrap() = Some("Caches".to_owned());
+    }
+
+    #[cfg(target_env = "ohos")]
+    {
+        *DATA_PATH.lock().unwrap() = Some("/data/storage/el2/base".to_owned());
+        *CACHE_DIR.lock().unwrap() = Some("/data/storage/el2/base/cache".to_owned());
+        phire::core::DPI_VALUE.store(250, std::sync::atomic::Ordering::Relaxed);
     }
 
     let dir = dir::root()?;
@@ -591,5 +602,65 @@ pub unsafe extern "system" fn update_gravity(
 ) {
     if let mut gyro_data = GYRO.lock().unwrap() {
         gyro_data.update_gravity(Vector3::new(roll, pitch, yaw));
+    }
+}
+
+#[cfg(target_env = "ohos")]
+#[napi]
+pub fn set_input_text(text: String) {
+    use phire::scene::INPUT_TEXT;
+    INPUT_TEXT.lock().unwrap().1 = Some(text);
+}
+
+#[cfg(target_env = "ohos")]
+#[napi]
+pub fn set_chosen_file(file: String) {
+    use phire::scene::CHOSEN_FILE;
+    CHOSEN_FILE.lock().unwrap().1 = Some(file);
+}
+
+#[cfg(target_env = "ohos")]
+#[napi]
+pub fn mark_auto_import() {
+    use phire::scene::CHOSEN_FILE;
+    CHOSEN_FILE.lock().unwrap().0 = Some("_import_auto".to_owned());
+}
+
+#[cfg(target_env = "ohos")]
+#[napi]
+pub fn update_gravity(x: f64, y: f64, z: f64) {
+    GYRO.lock().unwrap().update_gravity(Vector3::new(x as f32, y as f32, z as f32));
+}
+
+#[cfg(target_env = "ohos")]
+#[napi]
+pub fn update_gyroscope(x: f64, y: f64, z: f64, timestamp: i64) {
+    GYRO.lock().unwrap().update_gyroscope(GyroData {
+        angular_velocity: Vector3::new(x as f32, y as f32, z as f32),
+        timestamp: Duration::from_nanos(timestamp as u64),
+    });
+}
+
+#[cfg(target_env = "ohos")]
+#[napi]
+pub fn on_foreground() {
+    if let Some(tx) = ACTIVITY_LIFECYCLE.lock().unwrap().as_mut() {
+        let _ = tx.send(false);
+    }
+}
+
+#[cfg(target_env = "ohos")]
+#[napi]
+pub fn on_background() {
+    if let Some(tx) = ACTIVITY_LIFECYCLE.lock().unwrap().as_mut() {
+        let _ = tx.send(true);
+    }
+}
+
+#[cfg(target_env = "ohos")]
+#[napi]
+pub fn set_window_focus(has_focus: bool) {
+    if let Some(tx) = ACTIVITY_FOUCUS.lock().unwrap().as_mut() {
+        let _ = tx.send(!has_focus);
     }
 }

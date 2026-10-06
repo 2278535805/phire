@@ -1227,7 +1227,13 @@ fn build_audio() -> AudioManager {
             ..Default::default()
         }))
     }
-    #[cfg(not(any(target_os = "android", target_os = "windows")))]
+    #[cfg(target_env = "ohos")]
+    {
+        use sasa::backend::ohos::*;
+        AudioManager::new(OhosBackend::new(OhosSettings::default()))
+        .unwrap()
+    }
+    #[cfg(not(any(target_os = "android", target_os = "windows", target_env = "ohos")))]
     {
         use sasa::backend::cpal::*;
         AudioManager::new(CpalBackend::new(CpalSettings::default()))
