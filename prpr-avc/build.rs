@@ -5,7 +5,7 @@ use std::{
 };
 
 const BASE_URL: &str = "https://github.com/2278535805/prpr-avc-ffmpeg/releases/download";
-const EXPECTED_LIBS: &[&str] = &["libx264.a", "libavcodec.a", "libavformat.a", "libavutil.a", "libswresample.a", "libswscale.a"];
+const FFMPEG_LIBS: &[&str] = &["libavcodec.a", "libavformat.a", "libavutil.a", "libswresample.a", "libswscale.a"];
 
 fn main() {
     if let Err(err) = run() {
@@ -22,29 +22,34 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let target = env::var("TARGET")?;
+    let is_msvc = env::var("CARGO_CFG_TARGET_ENV").map_or(false, |env| env == "msvc");
     let libs_dir = env::var_os("PRPR_AVC_LIBS")
         .map(PathBuf::from)
         .unwrap_or_else(|| manifest_dir.join("static-lib"));
     let target_dir = libs_dir.join(&target);
 
+    let x264_lib = if is_msvc { "libx264.lib" } else { "libx264.a" };
+    let expected_libs = std::iter::once(x264_lib).chain(FFMPEG_LIBS.iter().copied()).collect::<Vec<_>>();
+
     println!("cargo:rerun-if-changed={}", version_file.display());
     println!("cargo:rerun-if-env-changed=PRPR_AVC_LIBS");
 
-    ensure_static_lib(&libs_dir, &target, &version)?;
+    ensure_static_lib(&libs_dir, &target, &version, &expected_libs)?;
 
     println!("cargo:rustc-link-search={}", target_dir.display());
-    println!("cargo:rustc-link-lib=static=x264");
-    println!("cargo:rustc-link-lib=z");
+    println!("cargo:rustc-link-lib=static={}", if is_msvc { "libx264" } else { "x264" });
     if env::var("CARGO_CFG_WINDOWS").is_ok() {
         println!("cargo:rustc-link-lib=bcrypt");
+    } else {
+        println!("cargo:rustc-link-lib=z");
     }
     println!("cargo:rerun-if-changed={}", target_dir.display());
     Ok(())
 }
 
-fn ensure_static_lib(libs_dir: &Path, target: &str, version: &str) -> Result<(), Box<dyn std::error::Error>> {
+fn ensure_static_lib(libs_dir: &Path, target: &str, version: &str, expected_libs: &[&str]) -> Result<(), Box<dyn std::error::Error>> {
     let target_dir = libs_dir.join(target);
-    if cache_is_valid(&target_dir, version) {
+    if cache_is_valid(&target_dir, version, expected_libs) {
         return Ok(());
     }
 
@@ -54,21 +59,21 @@ fn ensure_static_lib(libs_dir: &Path, target: &str, version: &str) -> Result<(),
     println!("cargo:warning=[prpr-avc] Downloading FFmpeg static libraries for {target} ({version})");
 
     download_and_extract(&url, &target_dir)?;
-    validate_libs(&target_dir)?;
+    validate_libs(&target_dir, expected_libs)?;
     fs::write(target_dir.join(".version"), format!("{version}\n"))?;
 
     Ok(())
 }
 
-fn cache_is_valid(path: &Path, version: &str) -> bool {
+fn cache_is_valid(path: &Path, version: &str, expected_libs: &[&str]) -> bool {
     let Ok(actual_version) = fs::read_to_string(path.join(".version")) else {
         return false;
     };
-    actual_version.trim() == version && EXPECTED_LIBS.iter().all(|name| path.join(name).is_file())
+    actual_version.trim() == version && expected_libs.iter().all(|name| path.join(name).is_file())
 }
 
-fn validate_libs(path: &Path) -> io::Result<()> {
-    for name in EXPECTED_LIBS {
+fn validate_libs(path: &Path, expected_libs: &[&str]) -> io::Result<()> {
+    for name in expected_libs {
         if !path.join(name).is_file() {
             return Err(io::Error::new(io::ErrorKind::InvalidData, format!("downloaded archive is missing {name}")));
         }
