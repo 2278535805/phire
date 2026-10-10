@@ -835,7 +835,7 @@ impl GameScene {
                 Rect::new(lf, y, w, dh),
                 Color::new(0.6, 0.6, 0.6, c.a),
             );
-            draw_text_aligned_opt_width(ui, &format!("{:.0}", &res.health.state.now_health), lf + w * 0.5, y + dh - 0.01, (0.5, 1.), 0.4 * scale_ratio, semi_white(0.8 * c.a), 0.9 * aspect_ratio);
+            draw_text_aligned_opt_width(ui, &format!("{:.0}", res.health.state.now_health), lf + w * 0.5, y + dh - 0.01, (0.5, 1.), 0.4 * scale_ratio, semi_white(0.8 * c.a), 0.9 * aspect_ratio);
         }
         if res.config.render_ui_name {
             self.chart.with_element(ui, res, UIElement::Name, Some((lf, bt)), Some((lf, bt)), |ui, color| {
@@ -1357,7 +1357,7 @@ impl Scene for GameScene {
         }
         let time = match self.state {
             State::Starting => {
-                let refresh_done = self.refresh_task.as_ref().map_or(true, |t| t.ok());
+                let refresh_done = self.refresh_task.as_ref().is_none_or(|t| t.ok());
                 if (time >= Self::BEFORE_DURATION || !self.res.config.enter_animation) && refresh_done {
                     self.res.alpha = 1.;
                     self.state = State::BeforeMusic;
@@ -1687,10 +1687,10 @@ impl Scene for GameScene {
             {
                 if fps > 0 {
                     res.best_fps = res.best_fps.max(fps);
-                    if now_fps_5 as f64 / res.best_fps as f64 <= 0.3 || now_fps_2 as f64 / res.best_fps as f64 <= 0.2 {
+                    if now_fps_5 / res.best_fps as f64 <= 0.3 || now_fps_2 / res.best_fps as f64 <= 0.2 {
                         res.dynamic_resolution_ratio = min;
                         res.last_adjustment = now;
-                    } else if now_fps_5 as f64 / res.best_fps as f64 <= 0.7 && now - res.last_adjustment > 0.05 {
+                    } else if now_fps_5 / res.best_fps as f64 <= 0.7 && now - res.last_adjustment > 0.05 {
                         res.dynamic_resolution_ratio = (res.dynamic_resolution_ratio - 0.1).max(min);
                         res.last_adjustment = now;
                     } else if fps as f64 / res.best_fps as f64 >= 0.9 && now - res.last_adjustment > 0.4 && res.dynamic_resolution_ratio < 1.0 {

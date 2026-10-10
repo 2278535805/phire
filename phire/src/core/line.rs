@@ -101,8 +101,8 @@ struct NoteGroup {
 impl NoteGroup {
     fn new(start: usize, end: usize) -> Self {
         Self {
-            start: start,
-            end: end,
+            start,
+            end,
             cursor: start,
         }
     }
@@ -173,7 +173,7 @@ impl JudgeLineCache {
 fn advance_note_groups(groups: &mut [NoteGroup], notes: &[Note], time: f64) {
     for group in groups {
         while group.cursor < group.end {
-            let note = &notes[group.cursor as usize];
+            let note = &notes[group.cursor];
             let removable = match note.kind {
                 NoteKind::Hold { end_time, .. } => matches!(note.judge, JudgeStatus::Judged) && time > end_time,
                 _ => matches!(note.judge, JudgeStatus::Judged),

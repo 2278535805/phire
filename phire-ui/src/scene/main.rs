@@ -1,4 +1,4 @@
-use super::{import_chart, itl, L10N_LOCAL};
+use super::{import_chart, L10N_LOCAL};
 use crate::{
     charts_view::NEED_UPDATE,
     data::LocalChart,
@@ -204,7 +204,7 @@ impl Scene for MainScene {
         if let Some(bgm) = &mut self.bgm {
             bgm.pause()?;
         }
-        let _ = UI_AUDIO.with(|it| it.borrow_mut().close())?;
+        UI_AUDIO.with(|it| it.borrow_mut().close())?;
         tm.pause();
         self.state.update(tm);
         self.pages.last_mut().unwrap().pause()?;
@@ -256,7 +256,7 @@ impl Scene for MainScene {
         }
 
         if get_data().config.mp_enabled {
-            if MP_PANEL.with(|it| it.borrow_mut().as_mut().map_or(false, |it| it.touch(tm, touch))) {
+            if MP_PANEL.with(|it| it.borrow_mut().as_mut().is_some_and(|it| it.touch(tm, touch))) {
                 return Ok(true);
             }
             if self.mp_btn.touch(touch) && !self.mp_moved {
@@ -436,7 +436,7 @@ impl Scene for MainScene {
             }
         }
 
-        if self.mp_save_pos_at.map_or(false, |it| it < Instant::now()) {
+        if self.mp_save_pos_at.is_some_and(|it| it < Instant::now()) {
             std::fs::write(position_file()?, format!("{},{}", self.mp_btn_pos.x, self.mp_btn_pos.y))?;
             self.mp_save_pos_at = None;
         }

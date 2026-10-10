@@ -221,7 +221,7 @@ impl TagsDialog {
         }
         if self.show {
             let input_active = self.tags.add_input.is_active()
-                || self.unwanted.as_ref().map_or(false, |u| u.add_input.is_active());
+                || self.unwanted.as_ref().is_some_and(|u| u.add_input.is_active());
             if input_active {
                 if self.tags.touch(touch, t) {
                     return true;

@@ -14,7 +14,7 @@ use phire::{
     ui::{DRectButton, InlineInputBox, Ui},
 };
 use phire::ext::{semi_black, RectExt};
-use phire::judge::{ReplayData, ReplayHit};
+use phire::judge::ReplayHit;
 use std::{cell::RefCell, path::PathBuf, rc::Rc, time::Instant};
 use sasa::{AudioClip, Frame};
 

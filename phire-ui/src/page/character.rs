@@ -93,7 +93,7 @@ impl Page for CharacterPage {
         }
         for (i, btn) in self.btns.iter_mut().enumerate() {
             if btn.touch(touch) {
-                let is_single_form = self.characters.get(i).map_or(false, |c| c.form_count() <= 1);
+                let is_single_form = self.characters.get(i).is_some_and(|c| c.form_count() <= 1);
                 if is_single_form {
                     let raw_idx = self.characters.get(i).and_then(|c| {
                         if c.form_count() != 1 { return None; }
@@ -124,7 +124,7 @@ impl Page for CharacterPage {
                 continue;
             }
             let raw_indices = character.visible_forms_indices();
-            for (fi, &raw_idx) in raw_indices.iter().enumerate() {
+            for (_fi, &raw_idx) in raw_indices.iter().enumerate() {
                 if vi < self.form_btns.len() && self.form_btns[vi].touch(touch) {
                     if let Some(character) = self.characters.get_mut(i) {
                         character.selected_form = raw_idx;
@@ -164,7 +164,7 @@ impl Page for CharacterPage {
         let character = character.as_ref().unwrap();
         let active_id = character.id.clone();
         let has_erosion = character.current_form().erosion.is_some();
-        let force_erosion = character.current_form().erosion.as_ref().map_or(false, |e| e.force);
+        let force_erosion = character.current_form().erosion.as_ref().is_some_and(|e| e.force);
         let erosion_on = has_erosion && get_data().erosion_enabled;
 
         s.render_fader(ui, |ui, c| {
@@ -200,7 +200,7 @@ impl Page for CharacterPage {
                 self.info_btn.set(ui, info_r);
 
                 let illus_fmt = format!("Illustrator: {}", form.illustrator);
-                let has_intro = character.current_form().erosion.as_ref().map_or(false, |e| e.has_intro());
+                let has_intro = character.current_form().erosion.as_ref().is_some_and(|e| e.has_intro());
 
                 if erosion_on {
                     let alpha = c.a * 0.6;
@@ -325,7 +325,7 @@ impl Page for CharacterPage {
 
                     if is_expanded && has_forms {
                         let raw_indices = character.visible_forms_indices();
-                        for (vi, &raw_idx) in raw_indices.iter().enumerate() {
+                        for (_vi, &raw_idx) in raw_indices.iter().enumerate() {
                             let form = &character.forms[raw_idx];
                             let fr = Rect::new(list_x + 0.03, y, list_w - 0.03, FORM_ITEM_HEIGHT);
                             let form_is_active = is_active && raw_idx == character.selected_form;

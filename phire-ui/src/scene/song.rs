@@ -506,7 +506,7 @@ impl SongScene {
             show_error(anyhow!(tl!("no-chart-for-download")));
             return Ok(());
         };
-        if entity.file.as_deref().map_or(true, |s| s.is_empty()) {
+        if entity.file.as_deref().is_none_or(|s| s.is_empty()) {
             show_error(anyhow!(tl!("no-chart-for-download")));
             return Ok(());
         }
@@ -594,8 +594,7 @@ impl SongScene {
                     let mut idx = 0usize;
 
                     *status.lock().unwrap() = tl!("dl-status-chart");
-                    let chart_ext = chart_file_url
-                        .rsplitn(2, '.')
+                    let chart_ext = chart_file_url.rsplit('.')
                         .next()
                         .unwrap_or("json");
                     let mut chart_bytes = Vec::new();
@@ -829,25 +828,25 @@ impl SongScene {
             .uploader
             .as_ref()
             .and_then(|u| u.id.parse::<i32>().ok())
-            .map_or(false, |uploader_id| get_data().me.as_ref().map_or(false, |me| me.id == uploader_id));
+            .is_some_and(|uploader_id| get_data().me.as_ref().is_some_and(|me| me.id == uploader_id));
         if self.info.id.is_some() && perms & Permission::Review as i64 != 0 {
-            if self.entity.as_ref().map_or(false, |_it| true) {
+            if self.entity.as_ref().is_some_and(|_it| true) {
                 self.menu_options.push("review-approve");
                 self.menu_options.push("review-deny");
             }
             self.menu_options.push("review-edit-tags");
         }
-        if self.info.id.is_some() && is_uploader && self.entity.as_ref().map_or(false, |it| it.is_locked || it.is_hidden) {
+        if self.info.id.is_some() && is_uploader && self.entity.as_ref().is_some_and(|it| it.is_locked || it.is_hidden) {
             self.menu_options.push("stabilize");
         }
-        if self.info.id.is_some() && self.entity.as_ref().map_or(false, |_it| false) && perms & Permission::StabilizeChart as i64 != 0 {
+        if self.info.id.is_some() && self.entity.as_ref().is_some_and(|_it| false) && perms & Permission::StabilizeChart as i64 != 0 {
             self.menu_options.push("stabilize-approve");
             self.menu_options.push("stabilize-approve-ranked");
             self.menu_options.push("stabilize-comment");
             self.menu_options.push("stabilize-deny");
         }
         if self.info.id.is_some()
-            && self.entity.as_ref().map_or(false, |it| {
+            && self.entity.as_ref().is_some_and(|it| {
                 if !it.is_locked && !it.is_hidden {
                     perms & Permission::DeleteStable as i64 != 0
                 } else {
@@ -944,7 +943,7 @@ impl SongScene {
                                     hash_map::Entry::Occupied(val) => *val.get(),
                                     hash_map::Entry::Vacant(place) => *place.insert(len.try_into().ok()?),
                                 };
-                                if matches!(it.phase, TouchPhase::Moved) && touch_last_update.get(&id).map_or(false, |it| *it + 1. / 20. >= t) {
+                                if matches!(it.phase, TouchPhase::Moved) && touch_last_update.get(&id).is_some_and(|it| *it + 1. / 20. >= t) {
                                     return None;
                                 }
                                 touch_last_update.insert(id, t);
@@ -983,7 +982,7 @@ impl SongScene {
                                 }
                             },
                         }));
-                        if judges.len() > 10 || judges.front().map_or(false, |it| it.time + 0.6 < t) {
+                        if judges.len() > 10 || judges.front().is_some_and(|it| it.time + 0.6 < t) {
                             let judges = Arc::new(judges.drain(..).collect());
                             client.blocking_send(ClientCommand::Judges { judges }).unwrap();
                         }

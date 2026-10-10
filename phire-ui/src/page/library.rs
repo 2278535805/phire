@@ -11,7 +11,7 @@ use crate::{
     scene::{ChartOrder, ORDERS},
     tags::TagsDialog,
 };
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use macroquad::prelude::*;
 use phire::{
     ext::{semi_black, RectExt, SafeTexture, ScaleType},

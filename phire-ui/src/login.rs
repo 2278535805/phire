@@ -232,16 +232,16 @@ impl Login {
             self.show = !done;
         }
         if self.input_email_box.is_active() {
-            let _ = self.input_email_box.update();
+            self.input_email_box.update();
         }
         if self.input_pwd_box.is_active() {
             self.input_pwd_box.update();
         }
         if self.input_reg_email_box.is_active() {
-            let _ = self.input_reg_email_box.update();
+            self.input_reg_email_box.update();
         }
         if self.input_reg_name_box.is_active() {
-            let _ = self.input_reg_name_box.update();
+            self.input_reg_name_box.update();
         }
         if self.input_reg_pwd_box.is_active() {
             self.input_reg_pwd_box.update();

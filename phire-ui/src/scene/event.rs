@@ -423,7 +423,7 @@ impl Scene for EventScene {
             let ct = r.center();
             if let Some(status) = &self.status {
                 let bc = ui.background();
-                let mut draw = |text, bc| {
+                let mut draw = |text, _bc| {
                     let oh = r.h;
                     self.btn_join.render_shadow(ui, r, t, 1.0, |_| semi_white(0.3));
                     {

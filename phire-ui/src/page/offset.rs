@@ -148,7 +148,7 @@ impl Page for OffsetPage {
     fn update(&mut self, _s: &mut SharedState) -> Result<()> {
         self.audio.recover_if_needed()?;
         if matches!(self.mode, OffsetMode::Audio) && !self.cali.paused() {
-            let pos = self.cali.position() as f64;
+            let pos = self.cali.position();
             let now = self.tm.now();
             if now > 2. {
                 self.tm.seek_to(now - 2.);

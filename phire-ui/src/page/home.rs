@@ -223,7 +223,7 @@ impl Page for HomePage {
                 self.board_task = Some(Task::new(async move { Ok(None) }));
             } else {
                 let mut index = rng().random_range(0..(charts.len() - last_index.is_some() as usize));
-                if last_index.map_or(false, |it| it <= index) {
+                if last_index.is_some_and(|it| it <= index) {
                     index += 1;
                 }
                 let path = charts[index].local_path.clone();
@@ -245,7 +245,7 @@ impl Page for HomePage {
                     Ok(image) => {
                         if let Some(image) = image {
                             let tex: SafeTexture = image.into();
-                            self.board_tex_last = std::mem::replace(&mut self.board_tex, Some(tex));
+                            self.board_tex_last = self.board_tex.replace(tex);
                             self.board_dir = random();
                         }
                     }
@@ -271,8 +271,8 @@ impl Page for HomePage {
 
     fn render(&mut self, ui: &mut Ui, s: &mut SharedState) -> Result<()> {
         let t = s.t;
-        let rt = s.rt;
-        let pad = 0.04;
+        let _rt = s.rt;
+        let _pad = 0.04;
 
         let offset = s.gyro_offset;
 

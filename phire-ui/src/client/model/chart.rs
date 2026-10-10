@@ -1,4 +1,4 @@
-use super::{Object, Ptr, User};
+use super::{Object, Ptr};
 use crate::data::BriefChartInfo;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};

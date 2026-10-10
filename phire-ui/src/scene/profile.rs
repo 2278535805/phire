@@ -278,7 +278,7 @@ impl Scene for ProfileScene {
             confirm_delete(Arc::clone(&self.should_delete));
             return Ok(true);
         }
-        if get_data().me.as_ref().map_or(false, |it| it.id == self.id) && self.avatar_btn.touch(touch) {
+        if get_data().me.as_ref().is_some_and(|it| it.id == self.id) && self.avatar_btn.touch(touch) {
             request_file("avatar");
             return Ok(true);
         }
@@ -372,7 +372,7 @@ impl Scene for ProfileScene {
                 .size(0.4)
                 .color(semi_white(0.6))
                 .draw();
-            if get_data().me.as_ref().map_or(false, |it| it.id == self.id) {
+            if get_data().me.as_ref().is_some_and(|it| it.id == self.id) {
                 let hw = 0.2;
                 let mut r = Rect::new(r.center().x - hw, r.bottom() + 0.02, hw * 2., 0.1);
                 self.btn_logout.render_text(ui, r, t, 1., tl!("logout"), 0.6, false);
@@ -397,7 +397,7 @@ impl Scene for ProfileScene {
                         let h = 0.2;
                         let pad = 0.02;
                         let mut iter = items.iter_mut();
-                        for i in 0..((n + 1) / 2) {
+                        for i in 0..n.div_ceil(2) {
                             for j in 0..(n - i * 2).min(2) {
                                 let Some(item) = iter.next() else { unreachable!() };
                                 f.render(ui, t, |ui, c| {
@@ -431,7 +431,7 @@ impl Scene for ProfileScene {
                                 });
                             }
                         }
-                        (r.w, r.y + ui.top + h * ((n + 1) / 2) as f32 + 0.04)
+                        (r.w, r.y + ui.top + h * n.div_ceil(2) as f32 + 0.04)
                     })
                 });
             });

@@ -1,5 +1,5 @@
 use crate::{
-    config::Config, core::{BadNote, Chart, NOTE_WIDTH_RATIO_BASE, Note, NoteKind, Point, Resource, Vector}, ext::{NotNanExt, get_frame_latency, get_viewport},
+    core::{BadNote, Chart, NOTE_WIDTH_RATIO_BASE, Note, NoteKind, Point, Resource, Vector}, ext::{NotNanExt, get_frame_latency, get_viewport},
 };
 use anyhow::Result;
 use macroquad::prelude::{
@@ -717,7 +717,7 @@ impl Judge {
             fn to_local(Vec2 { x, y }: Vec2) -> Point {
                 Point::new(x / screen_width() * 2. - 1., y / screen_height() * 2. - 1.)
             }
-            let delta = ((t / spd - self.last_time)) / (events.len() + 1) as f64;
+            let delta = (t / spd - self.last_time) / (events.len() + 1) as f64;
             let mut t = self.last_time;
             for Touch {
                 id,
@@ -1415,12 +1415,12 @@ impl Judge {
                         let color = if let Some(color) = note.hit_fx_color.now_opt() {
                             color
                         } else {
-                            if matches!(note.kind, NoteKind::Click { .. }) { fx_color } else { res.res_pack.info.fx_perfect() }
+                            if matches!(note.kind, NoteKind::Click) { fx_color } else { res.res_pack.info.fx_perfect() }
                         };
                         res.with_model(line.now_transform(res, &chart.lines) * note_transform, |res| {
-                            res.emit_at_origin(note.rotation(&line), color)
+                            res.emit_at_origin(note.rotation(line), color)
                         });
-                        if !(matches!(note.kind, NoteKind::Click { .. }) && res.config.all_bad) {
+                        if !(matches!(note.kind, NoteKind::Click) && res.config.all_bad) {
                             note.hitsound.play(res)
                         }
                     }

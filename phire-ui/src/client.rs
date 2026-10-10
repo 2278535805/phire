@@ -212,7 +212,7 @@ impl Client {
             queries: Vec::new(),
             page: None,
             suffix: "",
-            _phantom: PhantomData::default(),
+            _phantom: PhantomData,
         }
     }
 

@@ -704,8 +704,8 @@ impl Uml {
         }
     }
 
-    fn push(&self, ui: &mut Ui, layer: StackLayer) {}
-    fn pop(&self, ui: &mut Ui) {}
+    fn push(&self, _ui: &mut Ui, _layer: StackLayer) {}
+    fn pop(&self, _ui: &mut Ui) {}
 
     pub(crate) fn get_var(&self, id: &str) -> Result<&Var> {
         self.var_map.get(id).ok_or_else(|| anyhow!("variable not found: {id}"))

@@ -132,7 +132,7 @@ impl<T: Object + 'static> Ptr<T> {
     pub fn new(id: impl Into<String>) -> Self {
         Self {
             id: id.into(),
-            _marker: PhantomData::default(),
+            _marker: PhantomData,
         }
     }
 

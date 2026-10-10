@@ -51,7 +51,7 @@ impl ResPackItem {
     }
 
     fn load(&mut self) {
-        if self.load_task.is_some() {}
+        self.load_task.is_some();
         if let Some(loaded) = self.loaded.take() {
             self.load_task = Some(Box::pin(async move { Ok(loaded) }));
         } else {
@@ -265,7 +265,7 @@ impl Page for ResPackPage {
                     let r2 = Rect::new(r.x, r.y - h * factor, width, h);
                     let r2 = ui.rect_to_global(r2);
                     draw_texture_ex(
-                        &*style.hold,
+                        &style.hold,
                         r2.x,
                         r2.y,
                         c,
@@ -280,7 +280,7 @@ impl Page for ResPackPage {
                     let r2 = Rect::new(r.x, r.bottom() - h * (1. - factor), width, h);
                     let r2 = ui.rect_to_global(r2);
                     draw_texture_ex(
-                        &*style.hold,
+                        &style.hold,
                         r2.x,
                         r2.y,
                         c,
@@ -294,9 +294,9 @@ impl Page for ResPackPage {
                     let r2 = ui.rect_to_global(r);
                     draw_texture_ex(
                         if res_pack.info.hold_repeat {
-                            &**style.hold_body.as_ref().unwrap()
+                            style.hold_body.as_ref().unwrap()
                         } else {
-                            &*style.hold
+                            &style.hold
                         },
                         r2.x,
                         r2.y,
@@ -337,13 +337,13 @@ impl Page for ResPackPage {
                 let cx = r.x + 0.43;
                 let line = 0.12;
                 let p = (t - inter * rnd) / 0.9;
-                let mut line_color = if irnd % 2 == 0 {
+                let mut line_color = if irnd.is_multiple_of(2) {
                     res_pack.info.line_perfect()
                 } else {
                     res_pack.info.line_good()
                 };
                 line_color.a *= c.a;
-                let mut fx_color = if irnd % 2 == 0 {
+                let mut fx_color = if irnd.is_multiple_of(2) {
                     res_pack.info.fx_perfect()
                 } else {
                     res_pack.info.fx_good()

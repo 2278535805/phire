@@ -317,7 +317,7 @@ pub fn switch_character(character_id: &str, form_id: &str) {
         {
             data.config.health_mode = form.health_mode.clone();
         }
-        if data.erosion_enabled || form.erosion.as_ref().map_or(false, |it| it.force) {
+        if data.erosion_enabled || form.erosion.as_ref().is_some_and(|it| it.force) {
             data.revealed_forms.insert((character_id.to_owned(), form_id.to_owned()));
         }
         let _ = crate::save_data();

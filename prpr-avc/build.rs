@@ -22,7 +22,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let target = env::var("TARGET")?;
-    let is_msvc = env::var("CARGO_CFG_TARGET_ENV").map_or(false, |env| env == "msvc");
+    let is_msvc = env::var("CARGO_CFG_TARGET_ENV").is_ok_and(|env| env == "msvc");
     let libs_dir = env::var_os("PRPR_AVC_LIBS")
         .map(PathBuf::from)
         .unwrap_or_else(|| manifest_dir.join("static-lib"));

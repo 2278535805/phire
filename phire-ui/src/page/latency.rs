@@ -696,7 +696,7 @@ impl LatencyPage {
             let edge_pos = self.viz_start_pos.saturating_add(edge as u64);
             let trigger_pos = self.trigger_pos.unwrap_or(self.viz_start_pos);
             let time_ms = (edge_pos as i128 - trigger_pos as i128) as f64 / self.viz_sr as f64 * 1000.0;
-            let is_top = if k % 2 == 0 { true } else { false };
+            let is_top = k % 2 == 0;
             let lx = if ex >= wf_x + wf_w {
                 wf_x + wf_w
             } else {

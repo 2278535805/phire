@@ -6,7 +6,7 @@ use crate::{get_data_mut, save_data};
 use anyhow::Result;
 use macroquad::prelude::*;
 use phire::{
-    ext::{create_audio_manger, get_audio_latency, get_frame_latency, push_frame_time, screen_aspect, semi_black},
+    ext::{create_audio_manger, get_audio_latency, get_frame_latency, push_frame_time, semi_black},
     scene::show_message,
     time::TimeManager,
     ui::{DRectButton, Ui},
@@ -595,7 +595,7 @@ impl Page for OutputPage {
                     for (i, s) in warn_str.iter().enumerate() {
                         warn_str_merge.push_str(s);
                         if i > 0 && (i + 1) % 2 == 0 {
-                            warn_str_merge.push_str("\n");
+                            warn_str_merge.push('\n');
                         } else {
                             warn_str_merge.push_str("  ");
                         }

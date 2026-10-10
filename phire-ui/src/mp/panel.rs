@@ -1,4 +1,3 @@
-use super::mtl;
 use crate::{
     client::{Chart, Ptr, UserManager},
     dir, get_data,
@@ -261,7 +260,7 @@ impl MPPanel {
 impl MPPanel {
     #[inline]
     pub fn in_room(&self) -> bool {
-        self.client.as_ref().map_or(false, |it| it.blocking_room_id().is_some())
+        self.client.as_ref().is_some_and(|it| it.blocking_room_id().is_some())
     }
 
     #[inline]
@@ -440,7 +439,7 @@ impl MPPanel {
         }
         self.msg_scroll.update(t);
         if self.chat_input.is_active() {
-            let _ = self.chat_input.update();
+            self.chat_input.update();
         }
         if self.room_id_input.is_active() {
             self.room_id_input.update()
@@ -802,7 +801,7 @@ impl MPPanel {
             ui.abs_scope(|ui| {
                 let users: Vec<_> = client.blocking_state().unwrap().users.values().cloned().collect();
                 let n = users.len();
-                let rn = (n + 1) / 2;
+                let rn = n.div_ceil(2);
                 ui.fill_rect(ui.screen_rect(), semi_black(p * 0.4));
 
                 let mut iter = users.into_iter();

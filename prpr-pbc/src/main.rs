@@ -94,7 +94,7 @@ fn main() -> Result<()> {
 
     let output = BufWriter::new(File::create(output)?);
     let mut w = BinaryWriter::new(output);
-    w.write(&mut chart)?;
+    w.write(&chart)?;
 
     Ok(())
 }

@@ -8,7 +8,7 @@ use crate::{
     ext::NotNanExt,
     judge::{HitSound, JudgeStatus},
 };
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 use rustc_hash::FxHashMap;
 use serde::Deserialize;
 use std::{cell::RefCell};

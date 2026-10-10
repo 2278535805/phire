@@ -1039,7 +1039,7 @@ impl OtherList {
                 Some(HealthType::ComboHeal{ .. }) => "comboHeal",
                 Some(HealthType::SpeedBased{ .. }) => "speedBased",
             };
-            self.health_mode_input.render(ui, rrr, t, c, &tl!("item-health-mode"), &text);
+            self.health_mode_input.render(ui, rrr, t, c, &tl!("item-health-mode"), text);
         }
 
         (w, h)

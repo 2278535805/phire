@@ -42,9 +42,9 @@ use std::{
 use uuid::Uuid;
 
 thread_local! {
-    pub static TEX_BACKGROUND: RefCell<Option<SafeTexture>> = RefCell::new(None);
-    pub static TEX_BACKGROUND_BLUR: RefCell<Option<SafeTexture>> = RefCell::new(None);
-    pub static TEX_ICON_BACK: RefCell<Option<SafeTexture>> = RefCell::new(None);
+    pub static TEX_BACKGROUND: RefCell<Option<SafeTexture>> = const { RefCell::new(None) };
+    pub static TEX_BACKGROUND_BLUR: RefCell<Option<SafeTexture>> = const { RefCell::new(None) };
+    pub static TEX_ICON_BACK: RefCell<Option<SafeTexture>> = const { RefCell::new(None) };
 }
 
 pub fn fs_from_path(path: &str) -> Result<Box<dyn FileSystem + Send + Sync + 'static>> {
@@ -95,7 +95,7 @@ pub async fn import_chart(path: String) -> Result<LocalChart> {
     let dir = dir::custom_charts()?;
     let dir = Path::new(&dir);
     let mut id = Uuid::new_v4();
-    while dir.join(&id.to_string()).exists() {
+    while dir.join(id.to_string()).exists() {
         id = Uuid::new_v4();
     }
     let dir = dir.join(id.to_string());
