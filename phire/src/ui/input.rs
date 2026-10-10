@@ -10,7 +10,7 @@ use macroquad::{
     miniquad::window::{clipboard_get, clipboard_set},
 };
 
-const CONTEXT_MENU_MENU_W: f32 = 0.12;
+const CONTEXT_MENU_MENU_W: f32 = 0.20;
 const CONTEXT_MENU_ITEM_Y: f32 = 0.04;
 
 pub struct InlineInputBtn {
