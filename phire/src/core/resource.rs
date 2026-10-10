@@ -726,7 +726,7 @@ impl Resource {
                 .take_while(|&&t| (t - now).abs() < duration * 0.1)
                 .count();
 
-            if queue.len() < 10 || recent_count < 2 {
+            if queue.len() < 20 || recent_count < 5 {
                 queue.push_back(now);
             } else {
                 return;
